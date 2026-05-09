@@ -461,11 +461,77 @@ is a Ruby/YJIT limitation in `Thread::SizedQueue`, not something
 fixable from OMQ.
 
 
+## Combined header+body write for short frames
+
+Each ZMTP frame on the unencrypted path issued two `@io.write`
+calls: one for the 2-byte header, one for the body.  `io-stream`'s
+`Writable#write` acquires a `Thread::Mutex` on every call --
+approximately 72 ns uncontended on Ruby 4.0.3 + YJIT.  For small
+messages the mutex overhead outweighed the actual I/O work.
+
+The fix: short frames (body <= 255 bytes, the ZMTP short-frame
+boundary) now build header + body into a reusable `@frame_buf`
+and issue a single `@io.write`.  Long frames keep the existing
+two-write path to avoid copying large payloads into an
+intermediary buffer.
+
+Micro-benchmarks confirmed the crossover at roughly 2 KiB:
+
+| Body size | Two writes | Combined (reusable) | Δ |
+|---|---|---|---|
+| 8 B | 342 ns | 163 ns | 2.1× |
+| 32 B | 344 ns | 166 ns | 2.1× |
+| 128 B | 343 ns | 171 ns | 2.0× |
+| 512 B | 347 ns | 183 ns | 1.9× |
+| 2 KiB | 372 ns | 370 ns | 1.0× |
+| 8 KiB | 514 ns | 737 ns | 0.7× |
+
+End-to-end PUSH/PULL TCP, single peer:
+
+| Size | Before | After | Δ |
+|---|---|---|---|
+| 8 B | 524k msg/s | 563k msg/s | +7.5 % |
+| 32 B | 493k msg/s | 516k msg/s | +4.8 % |
+| 128 B | 477k msg/s | 512k msg/s | +7.3 % |
+| 512 B | 392k msg/s | 416k msg/s | +6.3 % |
+| 2 KiB+ | unchanged | unchanged | — |
+
+The gap between 2× micro and 7 % end-to-end prompted a full
+pipeline profiling session.  Component breakdown for 8 B messages
+over TCP (1795 ns/msg total):
+
+| Component | Cost | Share |
+|---|---|---|
+| `Writable#send` prep | 125 ns | 7 % |
+| `io.write` (write path) | 186 ns | 10 % |
+| `Mutex#synchronize` (ZMTP) | 73 ns | 4 % |
+| `defer_cancel` | 37 ns | 2 % |
+| Queue enq+deq | 306 ns | 17 % |
+| `task.yield` / batch | 2 ns | 0.1 % |
+| **Receive path** | **~1066 ns** | **59 %** |
+
+`task.yield` costs 559 ns per call but fires once per 256-message
+batch -- effectively free per message.  Raising the batch cap would
+not help.
+
+The receive path dominates because `Frame.read_from` calls
+`io.peek` and `io.read_exactly` per frame, each acquiring
+`io-stream`'s internal read mutex.  This is the same per-call
+mutex pattern that the write-side fix addressed, but on the read
+side it accounts for 59 % of total pipeline cost.  Fixing it
+requires changes to `io-stream`'s read path or a batch-read codec
+that parses multiple frames from a single buffer -- neither is
+feasible without upstream cooperation.
+
+
 ## Where the ceiling is
 
 Every candidate optimisation from the original roadmap has been
-investigated. Recv-side batching, YJIT profiling, and io_uring
+investigated.  Recv-side batching, YJIT profiling, and io_uring
 (already active via `liburing-dev`) either showed no measurable
-gain or hit upstream limitations. The current numbers appear to
-be near the ceiling of what cooperative fibers over
-`Thread::SizedQueue` can deliver at the Ruby level.
+gain or hit upstream limitations.  The remaining bottleneck is
+`io-stream`'s per-call mutex overhead on the read path, which
+accounts for roughly 60 % of the small-message TCP pipeline.
+Further gains require either upstream changes to `io-stream` or
+a custom batch-read codec that bypasses per-frame mutex
+acquisition.
