@@ -40,6 +40,8 @@ if options[:update_readme]
   README_PATH = File.join(__dir__, "README.md")
   TRANSPORTS  = %w[inproc ipc tcp].freeze
   SIZE_LABELS = {
+    8       => "8 B",
+    32      => "32 B",
     128     => "128 B",
     512     => "512 B",
     2048    => "2 KiB",

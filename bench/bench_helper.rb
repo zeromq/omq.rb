@@ -23,7 +23,7 @@ Console.logger = Console::Logger.new(Console::Output::Null.new)
 
 module BenchHelper
   # ×4 geometric sweep from 128 B to 512 KiB.
-  SIZES = (ENV["OMQ_BENCH_SIZES"] || "128,512,2048,8192,32768,131072,524288").split(",").map(&:to_i).freeze
+  SIZES = (ENV["OMQ_BENCH_SIZES"] || "8,32,128,512,2048,8192,32768,131072,524288").split(",").map(&:to_i).freeze
 
   # Each cell runs ROUNDS timed rounds and reports the fastest one.
   # Transient jitter (GC, scheduler preemption, YJIT tier-up, kernel
