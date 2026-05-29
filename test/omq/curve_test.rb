@@ -335,6 +335,54 @@ describe "CURVE encryption (socket-level)" do
           rep&.close
         end
       end
+
+      it "PUB/SUB with SUBSCRIBE command frame (RbNaCl server, Nuckle client)" do
+        server_pub, server_sec = generate_keypair(RbNaCl)
+        client_pub, client_sec = generate_keypair(Nuckle)
+
+        Async do
+          pub = OMQ::PUB.new
+          pub.mechanism = curve_server(server_pub, server_sec, crypto: RbNaCl)
+          port = pub.bind("tcp://127.0.0.1:0").port
+
+          sub = OMQ::SUB.new
+          sub.mechanism = curve_client(client_pub, client_sec, server_key: server_pub, crypto: Nuckle)
+          sub.connect("tcp://127.0.0.1:#{port}")
+          sub.subscribe("news")
+          pub.subscriber_joined.wait
+
+          pub << "news: encrypted cross-backend"
+          msg = sub.receive
+          assert_equal ["news: encrypted cross-backend"], msg
+        ensure
+          sub&.close
+          pub&.close
+        end
+      end
+
+      it "PUB/SUB with SUBSCRIBE command frame (Nuckle server, RbNaCl client)" do
+        server_pub, server_sec = generate_keypair(Nuckle)
+        client_pub, client_sec = generate_keypair(RbNaCl)
+
+        Async do
+          pub = OMQ::PUB.new
+          pub.mechanism = curve_server(server_pub, server_sec, crypto: Nuckle)
+          port = pub.bind("tcp://127.0.0.1:0").port
+
+          sub = OMQ::SUB.new
+          sub.mechanism = curve_client(client_pub, client_sec, server_key: server_pub, crypto: RbNaCl)
+          sub.connect("tcp://127.0.0.1:#{port}")
+          sub.subscribe("news")
+          pub.subscriber_joined.wait
+
+          pub << "news: encrypted cross-backend"
+          msg = sub.receive
+          assert_equal ["news: encrypted cross-backend"], msg
+        ensure
+          sub&.close
+          pub&.close
+        end
+      end
     end
   end
 end
