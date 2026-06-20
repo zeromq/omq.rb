@@ -320,6 +320,9 @@ module OMQ
       when :ffi
         require "omq/ffi" unless defined?(FFI::Engine)
         FFI::Engine.new(socket_type, @options)
+      when :rust
+        require "omq/rust" unless defined?(Rust::Engine)
+        Rust::Engine.new(socket_type, @options)
       else
         raise ArgumentError, "unknown backend: #{backend}"
       end
