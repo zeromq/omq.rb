@@ -23,8 +23,8 @@ describe "send_timeout" do
   it "does not raise when send completes within send_timeout" do
     Async do
       push = OMQ::PUSH.new(nil, send_timeout: 1)
-      pull = OMQ::PULL.bind("inproc://timeout-send-ok")
-      push.connect("inproc://timeout-send-ok")
+      pull = OMQ::PULL.bind("ruby://timeout-send-ok")
+      push.connect("ruby://timeout-send-ok")
 
       push.send("hello")
       msg = pull.receive
@@ -43,9 +43,9 @@ describe "recv_timeout" do
   it "raises IO::TimeoutError when recv blocks longer than recv_timeout" do
     Async do
       pull = OMQ::PULL.new(nil, recv_timeout: 0.02)
-      pull.bind("inproc://timeout-recv")
+      pull.bind("ruby://timeout-recv")
 
-      push = OMQ::PUSH.connect("inproc://timeout-recv")
+      push = OMQ::PUSH.connect("ruby://timeout-recv")
 
       # Don't send anything — recv should time out
       assert_raises IO::TimeoutError do
@@ -60,9 +60,9 @@ describe "recv_timeout" do
   it "does not raise when message arrives within recv_timeout" do
     Async do
       pull = OMQ::PULL.new(nil, recv_timeout: 2)
-      pull.bind("inproc://timeout-recv-ok")
+      pull.bind("ruby://timeout-recv-ok")
 
-      push = OMQ::PUSH.connect("inproc://timeout-recv-ok")
+      push = OMQ::PUSH.connect("ruby://timeout-recv-ok")
 
       push.send("hello")
       msg = pull.receive
@@ -79,8 +79,8 @@ describe "recv_timeout on other socket types" do
 
   it "works on SUB" do
     Async do
-      pub = OMQ::PUB.bind("inproc://timeout-sub")
-      sub = OMQ::SUB.connect("inproc://timeout-sub", subscribe: "")
+      pub = OMQ::PUB.bind("ruby://timeout-sub")
+      sub = OMQ::SUB.connect("ruby://timeout-sub", subscribe: "")
       sub.recv_timeout = 0.02
 
       assert_raises(IO::TimeoutError) { sub.receive }
@@ -92,8 +92,8 @@ describe "recv_timeout on other socket types" do
 
   it "works on PAIR" do
     Async do
-      a = OMQ::PAIR.bind("inproc://timeout-pair")
-      b = OMQ::PAIR.connect("inproc://timeout-pair")
+      a = OMQ::PAIR.bind("ruby://timeout-pair")
+      b = OMQ::PAIR.connect("ruby://timeout-pair")
       b.recv_timeout = 0.02
 
       assert_raises(IO::TimeoutError) { b.receive }
@@ -105,7 +105,7 @@ describe "recv_timeout on other socket types" do
 
   it "works on REP" do
     Async do
-      rep = OMQ::REP.bind("inproc://timeout-rep")
+      rep = OMQ::REP.bind("ruby://timeout-rep")
       rep.recv_timeout = 0.02
 
       assert_raises(IO::TimeoutError) { rep.receive }
@@ -116,8 +116,8 @@ describe "recv_timeout on other socket types" do
 
   it "works on DEALER" do
     Async do
-      router = OMQ::ROUTER.bind("inproc://timeout-dealer")
-      dealer = OMQ::DEALER.connect("inproc://timeout-dealer")
+      router = OMQ::ROUTER.bind("ruby://timeout-dealer")
+      dealer = OMQ::DEALER.connect("ruby://timeout-dealer")
       dealer.recv_timeout = 0.02
 
       assert_raises(IO::TimeoutError) { dealer.receive }

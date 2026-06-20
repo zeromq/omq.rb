@@ -15,10 +15,10 @@ describe "mixed transports" do
   it "PUSH distributes across inproc and TCP peers" do
     Async do
       push = OMQ::PUSH.new
-      push.bind("inproc://mixed-push-#{object_id}")
+      push.bind("ruby://mixed-push-#{object_id}")
       tcp_port = push.bind("tcp://127.0.0.1:0").port
 
-      pull_inproc = OMQ::PULL.connect("inproc://mixed-push-#{object_id}")
+      pull_inproc = OMQ::PULL.connect("ruby://mixed-push-#{object_id}")
       push << "inproc-only"
       assert_equal ["inproc-only"], pull_inproc.receive
 
@@ -53,10 +53,10 @@ describe "mixed transports" do
   it "reverts to direct pipe after TCP peer disconnects" do
     Async do
       push = OMQ::PUSH.new
-      push.bind("inproc://mixed-revert-#{object_id}")
+      push.bind("ruby://mixed-revert-#{object_id}")
       tcp_port = push.bind("tcp://127.0.0.1:0").port
 
-      pull_inproc = OMQ::PULL.connect("inproc://mixed-revert-#{object_id}")
+      pull_inproc = OMQ::PULL.connect("ruby://mixed-revert-#{object_id}")
       pull_tcp    = OMQ::PULL.connect("tcp://127.0.0.1:#{tcp_port}")
       wait_connection_count(push, 2)
 

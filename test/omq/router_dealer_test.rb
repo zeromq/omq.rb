@@ -7,10 +7,10 @@ describe "DEALER/ROUTER over inproc" do
 
   it "routes messages by identity" do
     Async do
-      router = OMQ::ROUTER.bind("inproc://dealerrouter-1")
+      router = OMQ::ROUTER.bind("ruby://dealerrouter-1")
       dealer = OMQ::DEALER.new
       dealer.options.identity = "dealer-1"
-      dealer.connect("inproc://dealerrouter-1")
+      dealer.connect("ruby://dealerrouter-1")
 
       dealer.send("hello from dealer")
       msg = router.receive
@@ -31,10 +31,10 @@ describe "DEALER/ROUTER over inproc" do
 
   it "silently drops messages to unknown identity by default" do
     Async do
-      router = OMQ::ROUTER.bind("inproc://rm-1")
+      router = OMQ::ROUTER.bind("ruby://rm-1")
       dealer = OMQ::DEALER.new
       dealer.identity = "known"
-      dealer.connect("inproc://rm-1")
+      dealer.connect("ruby://rm-1")
 
       # Send to unknown identity — should not raise
       router.send(["unknown-peer", "", "hello"])
@@ -51,7 +51,7 @@ describe "DEALER/ROUTER over inproc" do
 
   it "raises SocketError synchronously with router_mandatory" do
     Async do
-      router = OMQ::ROUTER.bind("inproc://rm-2")
+      router = OMQ::ROUTER.bind("ruby://rm-2")
       router.router_mandatory = true
 
       assert_raises(SocketError) do
@@ -61,7 +61,7 @@ describe "DEALER/ROUTER over inproc" do
       # Router still works after the error
       dealer = OMQ::DEALER.new
       dealer.identity = "real"
-      dealer.connect("inproc://rm-2")
+      dealer.connect("ruby://rm-2")
 
       router.send_to("real", "works")
       msg = dealer.receive

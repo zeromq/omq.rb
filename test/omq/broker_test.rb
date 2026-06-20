@@ -9,8 +9,8 @@ describe "ROUTER/DEALER broker over inproc" do
   # a connected REQ client. All sockets are cleaned up after the block.
   #
   def with_broker(task, workers: 1, client_id: "client-1")
-    frontend = OMQ::ROUTER.bind("inproc://broker-fe-#{client_id}")
-    backend  = OMQ::DEALER.bind("inproc://broker-be-#{client_id}")
+    frontend = OMQ::ROUTER.bind("ruby://broker-fe-#{client_id}")
+    backend  = OMQ::DEALER.bind("ruby://broker-be-#{client_id}")
 
     task.async(transient: true) do
       loop { backend << frontend.receive }
@@ -22,7 +22,7 @@ describe "ROUTER/DEALER broker over inproc" do
 
     workers.times do
       task.async(transient: true) do
-        rep = OMQ::REP.connect("inproc://broker-be-#{client_id}")
+        rep = OMQ::REP.connect("ruby://broker-be-#{client_id}")
         loop { rep << rep.receive }
       ensure
         rep&.close
@@ -31,7 +31,7 @@ describe "ROUTER/DEALER broker over inproc" do
 
     req = OMQ::REQ.new
     req.identity = client_id
-    req.connect("inproc://broker-fe-#{client_id}")
+    req.connect("ruby://broker-fe-#{client_id}")
 
     yield req
   ensure

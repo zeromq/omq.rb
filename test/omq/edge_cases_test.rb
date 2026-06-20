@@ -8,10 +8,10 @@ describe "Edge cases" do
   describe "large identity" do
     it "DEALER with 255-byte identity connects to ROUTER" do
       Async do
-        router = OMQ::ROUTER.bind("inproc://edge-bigid")
+        router = OMQ::ROUTER.bind("ruby://edge-bigid")
         dealer = OMQ::DEALER.new
         dealer.identity = "x" * 255
-        dealer.connect("inproc://edge-bigid")
+        dealer.connect("ruby://edge-bigid")
 
         dealer.send("hello")
         msg = router.receive
@@ -27,11 +27,11 @@ describe "Edge cases" do
   describe "rapid connect/disconnect cycles" do
     it "survives 20 rapid cycles over inproc" do
       Async do
-        pull = OMQ::PULL.bind("inproc://edge-rapid")
+        pull = OMQ::PULL.bind("ruby://edge-rapid")
 
         20.times do |i|
           push = OMQ::PUSH.new.tap { |s| s.linger = 1 }
-          push.connect("inproc://edge-rapid")
+          push.connect("ruby://edge-rapid")
           push.send("msg-#{i}")
           Async::Task.current.yield
           push.close
@@ -97,10 +97,10 @@ describe "Edge cases" do
 
     it "raises on duplicate inproc bind" do
       Async do
-        rep1 = OMQ::REP.bind("inproc://edge-dupbind")
+        rep1 = OMQ::REP.bind("ruby://edge-dupbind")
 
         assert_raises(RuntimeError, ArgumentError) do
-          OMQ::REP.bind("inproc://edge-dupbind")
+          OMQ::REP.bind("ruby://edge-dupbind")
         end
       ensure
         rep1&.close

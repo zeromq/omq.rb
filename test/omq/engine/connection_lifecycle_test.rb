@@ -76,7 +76,7 @@ end
 describe OMQ::Engine::ConnectionLifecycle do
   let(:engine)   { FakeEngine.new }
   let(:pipe)     { FakeConn.new }
-  let(:lifecycle) { OMQ::Engine::ConnectionLifecycle.new(engine, endpoint: "inproc://x") }
+  let(:lifecycle) { OMQ::Engine::ConnectionLifecycle.new(engine, endpoint: "ruby://x") }
 
   describe "#ready_direct!" do
     it "runs the ordered ready sequence" do
@@ -94,7 +94,7 @@ describe OMQ::Engine::ConnectionLifecycle do
 
       # routing_added captures the order side effects fire — asserting both
       # happened isn't enough. Check the event was emitted before routing got the conn.
-      assert_equal [[:handshake_succeeded, "inproc://x"]], engine.events
+      assert_equal [[:handshake_succeeded, "ruby://x"]], engine.events
       assert_equal [pipe], engine.routing_added
     end
 
@@ -120,7 +120,7 @@ describe OMQ::Engine::ConnectionLifecycle do
       assert_equal [pipe], engine.routing_removed
       assert pipe.closed
       assert_equal [:handshake_succeeded, :disconnected], engine.events.map(&:first)
-      assert_equal ["inproc://x"], engine.reconnect_calls
+      assert_equal ["ruby://x"], engine.reconnect_calls
       assert_equal 1, engine.all_peers_gone_resolved
     end
 
@@ -185,7 +185,7 @@ describe OMQ::Engine::ConnectionLifecycle do
 
     it "lost! before any ready transition is a no-op after reaching :closed" do
       # Construct, immediately call lost! — valid :new → :closed transition
-      fresh = OMQ::Engine::ConnectionLifecycle.new(engine, endpoint: "inproc://y")
+      fresh = OMQ::Engine::ConnectionLifecycle.new(engine, endpoint: "ruby://y")
       fresh.lost!
 
       assert_equal :closed, fresh.state

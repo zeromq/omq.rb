@@ -8,10 +8,10 @@ describe OMQ::Socket do
   describe "#inspect" do
     it "includes class name and bound endpoints" do
       Async do
-        rep = OMQ::REP.bind("inproc://inspect-test")
+        rep = OMQ::REP.bind("ruby://inspect-test")
         s = rep.inspect
         assert_match(/OMQ::REP/, s)
-        assert_match(/inproc:\/\/inspect-test/, s)
+        assert_match(/ruby:\/\/inspect-test/, s)
       ensure
         rep&.close
       end
@@ -38,8 +38,8 @@ describe OMQ::Socket do
   describe "empty and binary messages" do
     it "handles empty string message" do
       Async do
-        pull = OMQ::PULL.bind("inproc://empty-msg")
-        push = OMQ::PUSH.connect("inproc://empty-msg")
+        pull = OMQ::PULL.bind("ruby://empty-msg")
+        push = OMQ::PUSH.connect("ruby://empty-msg")
 
         push.send("")
         msg = pull.receive
@@ -52,8 +52,8 @@ describe OMQ::Socket do
 
     it "handles binary data with all 256 byte values" do
       Async do
-        pull = OMQ::PULL.bind("inproc://binary-msg")
-        push = OMQ::PUSH.connect("inproc://binary-msg")
+        pull = OMQ::PULL.bind("ruby://binary-msg")
+        push = OMQ::PUSH.connect("ruby://binary-msg")
 
         binary = (0..255).map(&:chr).join.b
         push.send(binary)

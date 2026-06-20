@@ -6,16 +6,18 @@ require_relative "inproc/pipe"
 
 module OMQ
   module Transport
-    # In-process transport.
+    # Ruby in-process transport (ruby:// scheme).
     #
-    # Both peers are Ruby backend sockets in the same process (native
-    # ZMQ's inproc registry is separate and unreachable). Messages are
-    # transferred as Ruby arrays — no ZMTP framing, no byte
+    # Both peers are Ruby backend sockets in the same process. Messages
+    # are transferred as Ruby arrays — no ZMTP framing, no byte
     # serialization. Parts are already frozen by Writable#send, so the
     # receiver sees the same immutable contract as ZMTP transports.
     #
+    # The inproc:// scheme is reserved for native backends (FFI/libzmq,
+    # Rust/omq-tokio) which have their own in-process registries.
+    #
     module Inproc
-      Engine.transports["inproc"] = self
+      Engine.transports["ruby"] = self
 
 
       # Socket types that exchange commands (SUBSCRIBE/CANCEL) over inproc.
@@ -38,7 +40,7 @@ module OMQ
 
         # Creates a bound inproc listener.
         #
-        # @param endpoint [String] e.g. "inproc://my-endpoint"
+        # @param endpoint [String] e.g. "ruby://my-endpoint"
         # @param engine [Engine] the owning engine
         # @return [Listener]
         # @raise [ArgumentError] if endpoint is already bound
@@ -61,7 +63,7 @@ module OMQ
 
         # Connects to a bound inproc endpoint.
         #
-        # @param endpoint [String] e.g. "inproc://my-endpoint"
+        # @param endpoint [String] e.g. "ruby://my-endpoint"
         # @param engine [Engine] the connecting engine
         # @return [void]
         #

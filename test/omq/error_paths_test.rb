@@ -19,8 +19,8 @@ describe "Error paths" do
   describe "pump crash raises SocketDeadError" do
     it "surfaces on receive with the original error as cause" do
       Async do
-        rep = OMQ::REP.bind("inproc://err-pump-recv")
-        req = OMQ::REQ.connect("inproc://err-pump-recv")
+        rep = OMQ::REP.bind("ruby://err-pump-recv")
+        req = OMQ::REQ.connect("ruby://err-pump-recv")
 
         # Inject a crash into REQ's send pump
         conn = req.engine.connections.first.first
@@ -42,8 +42,8 @@ describe "Error paths" do
 
     it "bricks the socket — all subsequent calls raise" do
       Async do
-        rep = OMQ::REP.bind("inproc://err-pump-brick")
-        req = OMQ::REQ.connect("inproc://err-pump-brick")
+        rep = OMQ::REP.bind("ruby://err-pump-brick")
+        req = OMQ::REQ.connect("ruby://err-pump-brick")
 
         conn = req.engine.connections.first.first
         def conn.write_message(_parts) = raise("boom")
@@ -72,7 +72,7 @@ describe "Error paths" do
 
     it "is idempotent on PULL" do
       Async do
-        pull = OMQ::PULL.bind("inproc://err-dblclose")
+        pull = OMQ::PULL.bind("ruby://err-dblclose")
         pull.close
         pull.close
       end
@@ -80,7 +80,7 @@ describe "Error paths" do
 
     it "is idempotent on REP" do
       Async do
-        rep = OMQ::REP.bind("inproc://err-dblclose-rep")
+        rep = OMQ::REP.bind("ruby://err-dblclose-rep")
         rep.close
         rep.close
       end
@@ -88,7 +88,7 @@ describe "Error paths" do
 
     it "is idempotent on PAIR" do
       Async do
-        pair = OMQ::PAIR.bind("inproc://err-dblclose-pair")
+        pair = OMQ::PAIR.bind("ruby://err-dblclose-pair")
         pair.close
         pair.close
       end

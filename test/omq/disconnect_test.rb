@@ -7,20 +7,20 @@ describe "disconnect / unbind" do
 
   it "#disconnect closes only connections to that endpoint" do
     Async do
-      pull1 = OMQ::PULL.bind("inproc://ep1")
+      pull1 = OMQ::PULL.bind("ruby://ep1")
       pull1.read_timeout = 0.05
-      pull2 = OMQ::PULL.bind("inproc://ep2")
+      pull2 = OMQ::PULL.bind("ruby://ep2")
       pull2.read_timeout = 0.05
 
       push = OMQ::PUSH.new
-      push.connect("inproc://ep1")
-      push.connect("inproc://ep2")
+      push.connect("ruby://ep1")
+      push.connect("ruby://ep2")
 
       # Disconnect from ep1 — ep2 keeps working. PUSH uses work-stealing
       # rather than strict round-robin, so we can't assert which peer a
       # pre-disconnect message lands on; we only verify that after the
       # disconnect, the surviving endpoint still receives.
-      push.disconnect("inproc://ep1")
+      push.disconnect("ruby://ep1")
 
       10.times { |i| push.send("post-#{i}") }
       received = []
@@ -43,13 +43,13 @@ describe "disconnect / unbind" do
   it "#disconnect emits :disconnected on the monitor queue" do
     Async do
       events = []
-      pull   = OMQ::PULL.bind("inproc://ep-mon")
+      pull   = OMQ::PULL.bind("ruby://ep-mon")
       push   = OMQ::PUSH.new
       push.monitor { |e| events << e.type }
-      push.connect("inproc://ep-mon")
+      push.connect("ruby://ep-mon")
       wait_connected(push)
 
-      push.disconnect("inproc://ep-mon")
+      push.disconnect("ruby://ep-mon")
       sleep 0.01 # let monitor drain
 
       assert_includes events, :disconnected

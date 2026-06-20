@@ -8,8 +8,8 @@ describe "SCATTER/GATHER over inproc" do
 
   it "sends and receives messages" do
     Sync do
-      gather  = OMQ::GATHER.bind("inproc://sg-1")
-      scatter = OMQ::SCATTER.connect("inproc://sg-1")
+      gather  = OMQ::GATHER.bind("ruby://sg-1")
+      scatter = OMQ::SCATTER.connect("ruby://sg-1")
 
       scatter.send("hello")
       msg = gather.receive
@@ -22,12 +22,12 @@ describe "SCATTER/GATHER over inproc" do
 
   it "distributes across multiple GATHER peers" do
     Sync do
-      g1 = OMQ::GATHER.bind("inproc://sg-rr-1")
-      g2 = OMQ::GATHER.bind("inproc://sg-rr-2")
+      g1 = OMQ::GATHER.bind("ruby://sg-rr-1")
+      g2 = OMQ::GATHER.bind("ruby://sg-rr-2")
 
       scatter = OMQ::SCATTER.new
-      scatter.connect("inproc://sg-rr-1")
-      scatter.connect("inproc://sg-rr-2")
+      scatter.connect("ruby://sg-rr-1")
+      scatter.connect("ruby://sg-rr-2")
 
       n = 20
       n.times { |i| scatter.send("msg#{i}") }
@@ -57,8 +57,8 @@ describe "SCATTER/GATHER over inproc" do
 
   it "rejects multipart messages" do
     Sync do
-      gather  = OMQ::GATHER.bind("inproc://sg-mp")
-      scatter = OMQ::SCATTER.connect("inproc://sg-mp")
+      gather  = OMQ::GATHER.bind("ruby://sg-mp")
+      scatter = OMQ::SCATTER.connect("ruby://sg-mp")
 
       assert_raises(ArgumentError) { scatter.send(["part1", "part2"]) }
     ensure

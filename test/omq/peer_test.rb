@@ -8,8 +8,8 @@ describe "PEER over inproc" do
 
   it "routes messages by routing ID" do
     Sync do |task|
-      a = OMQ::PEER.bind("inproc://peer-1")
-      b = OMQ::PEER.connect("inproc://peer-1")
+      a = OMQ::PEER.bind("ruby://peer-1")
+      b = OMQ::PEER.connect("ruby://peer-1")
 
       # b sends to a. b only has one peer, so send_to needs b's
       # routing_id for that peer. But routing IDs are assigned by
@@ -38,8 +38,8 @@ describe "PEER over inproc" do
 
   it "rejects multipart messages via send" do
     Sync do
-      a = OMQ::PEER.bind("inproc://peer-mp")
-      b = OMQ::PEER.connect("inproc://peer-mp")
+      a = OMQ::PEER.bind("ruby://peer-mp")
+      b = OMQ::PEER.connect("ruby://peer-mp")
 
       assert_raises(ArgumentError) { b.send(["part1", "part2"]) }
     ensure

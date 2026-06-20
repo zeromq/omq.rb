@@ -7,8 +7,8 @@ describe "QueueReadable" do
 
   it "#dequeue returns the next message" do
     Async do
-      pull = OMQ::PULL.bind("inproc://qi-dequeue")
-      push = OMQ::PUSH.connect("inproc://qi-dequeue")
+      pull = OMQ::PULL.bind("ruby://qi-dequeue")
+      push = OMQ::PUSH.connect("ruby://qi-dequeue")
 
       push.send("hello")
       assert_equal ["hello"], pull.dequeue
@@ -20,8 +20,8 @@ describe "QueueReadable" do
 
   it "#pop is an alias for #dequeue" do
     Async do
-      pull = OMQ::PULL.bind("inproc://qi-pop")
-      push = OMQ::PUSH.connect("inproc://qi-pop")
+      pull = OMQ::PULL.bind("ruby://qi-pop")
+      push = OMQ::PUSH.connect("ruby://qi-pop")
 
       push.send("hello")
       assert_equal ["hello"], pull.pop
@@ -33,8 +33,8 @@ describe "QueueReadable" do
 
   it "#wait blocks indefinitely, ignoring read_timeout" do
     Async do
-      pull = OMQ::PULL.bind("inproc://qi-wait")
-      push = OMQ::PUSH.connect("inproc://qi-wait")
+      pull = OMQ::PULL.bind("ruby://qi-wait")
+      push = OMQ::PUSH.connect("ruby://qi-wait")
       pull.read_timeout = 0.05
 
       Async do |task|
@@ -51,7 +51,7 @@ describe "QueueReadable" do
 
   it "#dequeue accepts a timeout: kwarg" do
     Async do
-      pull = OMQ::PULL.bind("inproc://qi-dequeue-timeout")
+      pull = OMQ::PULL.bind("ruby://qi-dequeue-timeout")
 
       assert_raises(IO::TimeoutError) { pull.dequeue(timeout: 0.05) }
     ensure
@@ -61,8 +61,8 @@ describe "QueueReadable" do
 
   it "#each yields messages until socket is closed" do
     Async do
-      pull = OMQ::PULL.bind("inproc://qi-each")
-      push = OMQ::PUSH.connect("inproc://qi-each")
+      pull = OMQ::PULL.bind("ruby://qi-each")
+      push = OMQ::PUSH.connect("ruby://qi-each")
 
       push.send("a")
       push.send("b")
@@ -85,8 +85,8 @@ describe "QueueReadable" do
 
   it "#each returns gracefully when read_timeout expires" do
     Async do
-      pull = OMQ::PULL.bind("inproc://qi-each-timeout")
-      push = OMQ::PUSH.connect("inproc://qi-each-timeout")
+      pull = OMQ::PULL.bind("ruby://qi-each-timeout")
+      push = OMQ::PUSH.connect("ruby://qi-each-timeout")
       pull.read_timeout = 0.05
 
       push.send("a")
@@ -109,8 +109,8 @@ describe "QueueWritable" do
 
   it "#enqueue sends a message" do
     Async do
-      pull = OMQ::PULL.bind("inproc://qi-enqueue")
-      push = OMQ::PUSH.connect("inproc://qi-enqueue")
+      pull = OMQ::PULL.bind("ruby://qi-enqueue")
+      push = OMQ::PUSH.connect("ruby://qi-enqueue")
 
       push.enqueue("hello")
       assert_equal ["hello"], pull.receive
@@ -122,8 +122,8 @@ describe "QueueWritable" do
 
   it "#enqueue sends multiple messages" do
     Async do
-      pull = OMQ::PULL.bind("inproc://qi-enqueue-multi")
-      push = OMQ::PUSH.connect("inproc://qi-enqueue-multi")
+      pull = OMQ::PULL.bind("ruby://qi-enqueue-multi")
+      push = OMQ::PUSH.connect("ruby://qi-enqueue-multi")
 
       push.enqueue("a", "b", "c")
       assert_equal ["a"], pull.receive
@@ -137,8 +137,8 @@ describe "QueueWritable" do
 
   it "#push is an alias for #enqueue" do
     Async do
-      pull = OMQ::PULL.bind("inproc://qi-push")
-      push = OMQ::PUSH.connect("inproc://qi-push")
+      pull = OMQ::PULL.bind("ruby://qi-push")
+      push = OMQ::PUSH.connect("ruby://qi-push")
 
       push.push("hello")
       assert_equal ["hello"], pull.receive
@@ -150,8 +150,8 @@ describe "QueueWritable" do
 
   it "#enqueue returns self for chaining" do
     Async do
-      pull = OMQ::PULL.bind("inproc://qi-chain")
-      push = OMQ::PUSH.connect("inproc://qi-chain")
+      pull = OMQ::PULL.bind("ruby://qi-chain")
+      push = OMQ::PUSH.connect("ruby://qi-chain")
 
       assert_equal push, push.enqueue("hello")
     ensure
