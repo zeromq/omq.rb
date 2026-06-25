@@ -8,8 +8,8 @@ describe "CHANNEL over inproc" do
 
   it "bidirectional communication" do
     Sync do
-      a = OMQ::CHANNEL.bind("inproc://ch-1")
-      b = OMQ::CHANNEL.connect("inproc://ch-1")
+      a = OMQ::CHANNEL.bind("ruby://ch-1")
+      b = OMQ::CHANNEL.connect("ruby://ch-1")
 
       b.send("from b")
       assert_equal ["from b"], a.receive
@@ -24,8 +24,8 @@ describe "CHANNEL over inproc" do
 
   it "rejects multipart messages" do
     Sync do
-      a = OMQ::CHANNEL.bind("inproc://ch-mp")
-      b = OMQ::CHANNEL.connect("inproc://ch-mp")
+      a = OMQ::CHANNEL.bind("ruby://ch-mp")
+      b = OMQ::CHANNEL.connect("ruby://ch-mp")
 
       assert_raises(ArgumentError) { a.send(["part1", "part2"]) }
     ensure

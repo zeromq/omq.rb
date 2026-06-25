@@ -166,7 +166,7 @@ module OMQ
     end
 
 
-    # Spawns an inproc reconnect retry task under the socket's parent task.
+    # Spawns a ruby:// reconnect retry task under the socket's parent task.
     #
     # @param endpoint [String]
     # @yield [interval] the retry loop body
@@ -185,7 +185,7 @@ module OMQ
 
     # Binds to an endpoint.
     #
-    # @param endpoint [String] e.g. "tcp://127.0.0.1:5555", "inproc://foo"
+    # @param endpoint [String] e.g. "tcp://127.0.0.1:5555", "ruby://foo"
     # @return [URI::Generic] resolved endpoint URI (with auto-selected port for "tcp://host:0")
     # @raise [ArgumentError] on unsupported transport
     #
@@ -216,11 +216,11 @@ module OMQ
       capture_parent_task(parent: parent)
       validate_endpoint!(endpoint)
 
-      if endpoint.start_with?("inproc://")
-        # Inproc connect is synchronous and instant — no Dialer
+      if endpoint.start_with?("ruby://")
+        # Ruby in-process connect is synchronous and instant — no Dialer
         transport = transport_for(endpoint)
         transport.connect(endpoint, self, **opts)
-        @dialers[endpoint] = :inproc  # sentinel for reconnect intent
+        @dialers[endpoint] = :ruby  # sentinel for reconnect intent
       else
         transport = transport_for(endpoint)
         @dialers[endpoint] = transport.dialer(endpoint, self, **opts)
@@ -603,7 +603,7 @@ module OMQ
 
     # Looks up the transport module for an endpoint URI.
     #
-    # @param endpoint [String] endpoint URI (e.g. "tcp://...", "inproc://...")
+    # @param endpoint [String] endpoint URI (e.g. "tcp://...", "ruby://...")
     # @return [Module] the transport module
     # @raise [ArgumentError] if the scheme is not registered
     #

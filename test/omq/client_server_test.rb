@@ -8,10 +8,10 @@ describe "CLIENT/SERVER over inproc" do
 
   it "server receives and routes reply to correct client" do
     Sync do
-      server = OMQ::SERVER.bind("inproc://cs-1")
+      server = OMQ::SERVER.bind("ruby://cs-1")
 
-      client1 = OMQ::CLIENT.connect("inproc://cs-1")
-      client2 = OMQ::CLIENT.connect("inproc://cs-1")
+      client1 = OMQ::CLIENT.connect("ruby://cs-1")
+      client2 = OMQ::CLIENT.connect("ruby://cs-1")
 
       client1.send("from client1")
       msg = server.receive
@@ -30,8 +30,8 @@ describe "CLIENT/SERVER over inproc" do
 
   it "rejects multipart messages" do
     Sync do
-      server = OMQ::SERVER.bind("inproc://cs-mp")
-      client = OMQ::CLIENT.connect("inproc://cs-mp")
+      server = OMQ::SERVER.bind("ruby://cs-mp")
+      client = OMQ::CLIENT.connect("ruby://cs-mp")
 
       assert_raises(ArgumentError) { client.send(["part1", "part2"]) }
     ensure

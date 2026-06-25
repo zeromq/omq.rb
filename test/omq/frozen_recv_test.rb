@@ -19,7 +19,7 @@ describe "received parts are frozen" do
 
 
   [
-    ["inproc", -> { "inproc://frozen-#{SecureRandom.hex(4)}" }],
+    ["inproc", -> { "ruby://frozen-#{SecureRandom.hex(4)}" }],
     ["ipc",    -> { "ipc://#{Dir.tmpdir}/omq-frozen-#{SecureRandom.hex(4)}.sock" }],
     ["tcp",    -> { "tcp://127.0.0.1:0" }],
   ].each do |transport, ep_builder|
@@ -69,7 +69,7 @@ describe "received parts are frozen" do
   it "upgrades frozen non-BINARY parts to BINARY on inproc" do
     Async do
       pull = OMQ::PULL.new
-      uri  = pull.bind("inproc://frozen-nonbin-#{SecureRandom.hex(4)}").to_s
+      uri  = pull.bind("ruby://frozen-nonbin-#{SecureRandom.hex(4)}").to_s
       push = OMQ::PUSH.new
       push.connect(uri)
 
@@ -97,7 +97,7 @@ describe "received parts are frozen" do
   it "coerces String-like parts via #to_str" do
     Async do
       pull = OMQ::PULL.new
-      uri  = pull.bind("inproc://to_str-#{SecureRandom.hex(4)}").to_s
+      uri  = pull.bind("ruby://to_str-#{SecureRandom.hex(4)}").to_s
       push = OMQ::PUSH.new
       push.connect(uri)
 
@@ -128,7 +128,7 @@ describe "received parts are frozen" do
   it "raises on non-String-like parts (including nil)" do
     Async do
       pull = OMQ::PULL.new
-      uri  = pull.bind("inproc://bad-part-#{SecureRandom.hex(4)}").to_s
+      uri  = pull.bind("ruby://bad-part-#{SecureRandom.hex(4)}").to_s
       push = OMQ::PUSH.new
       push.connect(uri)
 
@@ -146,7 +146,7 @@ describe "received parts are frozen" do
   it "re-tags unfrozen non-BINARY parts in place via #send" do
     Async do
       pull = OMQ::PULL.new
-      uri  = pull.bind("inproc://unfrozen-nonbin-#{SecureRandom.hex(4)}").to_s
+      uri  = pull.bind("ruby://unfrozen-nonbin-#{SecureRandom.hex(4)}").to_s
       push = OMQ::PUSH.new
       push.connect(uri)
 

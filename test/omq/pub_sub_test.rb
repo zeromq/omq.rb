@@ -7,8 +7,8 @@ describe "PUB/SUB" do
 
   it "delivers messages matching subscription" do
     Async do
-      pub = OMQ::PUB.bind("inproc://pubsub-1")
-      sub = OMQ::SUB.connect("inproc://pubsub-1")
+      pub = OMQ::PUB.bind("ruby://pubsub-1")
+      sub = OMQ::SUB.connect("ruby://pubsub-1")
       sub.subscribe("topic.")
 
       # Give subscription time to propagate
@@ -25,12 +25,12 @@ describe "PUB/SUB" do
 
   it "SUB post-hoc connects to multiple PUBs and closes cleanly" do
     Sync do
-      pub1 = OMQ::PUB.bind("inproc://pubsub-multi-1")
-      pub2 = OMQ::PUB.bind("inproc://pubsub-multi-2")
+      pub1 = OMQ::PUB.bind("ruby://pubsub-multi-1")
+      pub2 = OMQ::PUB.bind("ruby://pubsub-multi-2")
 
       sub = OMQ::SUB.new
-      sub.connect("inproc://pubsub-multi-1")
-      sub.connect("inproc://pubsub-multi-2")
+      sub.connect("ruby://pubsub-multi-1")
+      sub.connect("ruby://pubsub-multi-2")
       sub.subscribe("")
 
       pub1.subscriber_joined.wait
@@ -50,9 +50,9 @@ describe "PUB/SUB" do
 
   it "fans out to multiple inproc subscribers" do
     Async do
-      pub = OMQ::PUB.bind("inproc://pubsub-fanout-inproc")
+      pub = OMQ::PUB.bind("ruby://pubsub-fanout-inproc")
 
-      subs = 3.times.map { OMQ::SUB.connect("inproc://pubsub-fanout-inproc", subscribe: "") }
+      subs = 3.times.map { OMQ::SUB.connect("ruby://pubsub-fanout-inproc", subscribe: "") }
 
       pub.send("broadcast", "payload")
 
@@ -150,9 +150,9 @@ describe "PUB/SUB" do
     Async do
       pub = OMQ::PUB.new.tap { |s| s.linger = 0 }
       pub.send_hwm = 5
-      pub.bind("inproc://pubsub-hwm")
+      pub.bind("ruby://pubsub-hwm")
 
-      sub = OMQ::SUB.connect("inproc://pubsub-hwm", subscribe: "")
+      sub = OMQ::SUB.connect("ruby://pubsub-hwm", subscribe: "")
 
       # Flood with 200 messages — must complete without blocking
       elapsed = Async::Clock.measure do
@@ -183,12 +183,12 @@ describe "PUB/SUB" do
     Async do
       pub = OMQ::PUB.new.tap { |s| s.linger = 0 }
       pub.send_hwm = 100
-      pub.bind("inproc://pubsub-drop-oldest")
+      pub.bind("ruby://pubsub-drop-oldest")
 
       sub = OMQ::SUB.new(nil, on_mute: :drop_oldest)
       sub.linger = 0
       sub.recv_hwm = 3
-      sub.connect("inproc://pubsub-drop-oldest")
+      sub.connect("ruby://pubsub-drop-oldest")
       sub.subscribe("")
 
       assert_equal :drop_oldest, sub.on_mute
@@ -202,11 +202,11 @@ describe "PUB/SUB" do
     Async do
       pub = OMQ::PUB.new.tap { |s| s.linger = 0 }
       pub.set_unbounded
-      pub.bind("inproc://pubsub-unbounded")
+      pub.bind("ruby://pubsub-unbounded")
 
       sub = OMQ::SUB.new.tap { |s| s.linger = 0 }
       sub.set_unbounded
-      sub.connect("inproc://pubsub-unbounded")
+      sub.connect("ruby://pubsub-unbounded")
       sub.subscribe("")
 
       Async::Task.current.yield
@@ -226,9 +226,9 @@ describe "XPUB/XSUB" do
 
   it "XPUB receives subscription notifications" do
     Async do
-      xpub = OMQ::XPUB.bind("inproc://xpub-sub-1")
+      xpub = OMQ::XPUB.bind("ruby://xpub-sub-1")
       sub  = OMQ::SUB.new.tap { |s| s.linger = 0 }
-      sub.connect("inproc://xpub-sub-1")
+      sub.connect("ruby://xpub-sub-1")
       sub.subscribe("weather.")
 
       msg = xpub.receive
@@ -242,8 +242,8 @@ describe "XPUB/XSUB" do
 
   it "XPUB delivers messages to matching subscribers" do
     Async do
-      xpub = OMQ::XPUB.bind("inproc://xpub-sub-2")
-      sub  = OMQ::SUB.connect("inproc://xpub-sub-2", subscribe: "news.")
+      xpub = OMQ::XPUB.bind("ruby://xpub-sub-2")
+      sub  = OMQ::SUB.connect("ruby://xpub-sub-2", subscribe: "news.")
 
       # Consume subscription notification
       xpub.receive
@@ -259,8 +259,8 @@ describe "XPUB/XSUB" do
 
   it "XSUB sends subscriptions as data frames" do
     Async do
-      pub  = OMQ::PUB.bind("inproc://pub-xsub-1")
-      xsub = OMQ::XSUB.connect("inproc://pub-xsub-1")
+      pub  = OMQ::PUB.bind("ruby://pub-xsub-1")
+      xsub = OMQ::XSUB.connect("ruby://pub-xsub-1")
 
       # Subscribe via XSUB data frame
       xsub.send("\x01stock.".b)
@@ -279,8 +279,8 @@ describe "XPUB/XSUB" do
 
   it "XSUB subscribes via subscribe: kwarg" do
     Async do
-      pub  = OMQ::PUB.bind("inproc://pub-xsub-2")
-      xsub = OMQ::XSUB.connect("inproc://pub-xsub-2", subscribe: "fx.")
+      pub  = OMQ::PUB.bind("ruby://pub-xsub-2")
+      xsub = OMQ::XSUB.connect("ruby://pub-xsub-2", subscribe: "fx.")
 
       Async::Task.current.yield
 
@@ -295,9 +295,9 @@ describe "XPUB/XSUB" do
 
   it "XPUB receives unsubscription notifications" do
     Async do
-      xpub = OMQ::XPUB.bind("inproc://xpub-unsub-1")
+      xpub = OMQ::XPUB.bind("ruby://xpub-unsub-1")
       sub  = OMQ::SUB.new.tap { |s| s.linger = 0 }
-      sub.connect("inproc://xpub-unsub-1")
+      sub.connect("ruby://xpub-unsub-1")
       sub.subscribe("topic.")
 
       # Consume subscribe notification

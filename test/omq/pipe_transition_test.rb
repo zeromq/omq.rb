@@ -15,13 +15,13 @@ describe "direct pipe transitions" do
   it "falls back to send pump when a second inproc peer connects" do
     Async do
       push = OMQ::PUSH.new
-      push.bind("inproc://dp-multi-#{object_id}")
+      push.bind("ruby://dp-multi-#{object_id}")
 
-      pull1 = OMQ::PULL.connect("inproc://dp-multi-#{object_id}")
+      pull1 = OMQ::PULL.connect("ruby://dp-multi-#{object_id}")
       push << "solo"
       assert_equal ["solo"], pull1.receive
 
-      pull2 = OMQ::PULL.connect("inproc://dp-multi-#{object_id}")
+      pull2 = OMQ::PULL.connect("ruby://dp-multi-#{object_id}")
       pull1.read_timeout = 0.02
       pull2.read_timeout = 0.02
       4.times { |i| push << "rr-#{i}" }
@@ -50,10 +50,10 @@ describe "direct pipe transitions" do
   it "re-enables direct pipe when second peer disconnects" do
     Async do
       push = OMQ::PUSH.new
-      push.bind("inproc://dp-reenable-#{object_id}")
+      push.bind("ruby://dp-reenable-#{object_id}")
 
-      pull1 = OMQ::PULL.connect("inproc://dp-reenable-#{object_id}")
-      pull2 = OMQ::PULL.connect("inproc://dp-reenable-#{object_id}")
+      pull1 = OMQ::PULL.connect("ruby://dp-reenable-#{object_id}")
+      pull2 = OMQ::PULL.connect("ruby://dp-reenable-#{object_id}")
 
       pull1.read_timeout = 0.02
       pull2.read_timeout = 0.02
@@ -88,8 +88,8 @@ describe "direct pipe transitions" do
 
   it "REQ/REP works over inproc with direct pipe bypass" do
     Async do
-      rep = OMQ::REP.bind("inproc://dp-reqrep-#{object_id}")
-      req = OMQ::REQ.connect("inproc://dp-reqrep-#{object_id}")
+      rep = OMQ::REP.bind("ruby://dp-reqrep-#{object_id}")
+      req = OMQ::REQ.connect("ruby://dp-reqrep-#{object_id}")
 
       req << "hello"
       assert_equal ["hello"], rep.receive
@@ -104,10 +104,10 @@ describe "direct pipe transitions" do
 
   it "DEALER/ROUTER works over inproc with direct pipe bypass" do
     Async do
-      router = OMQ::ROUTER.bind("inproc://dp-dealer-#{object_id}")
+      router = OMQ::ROUTER.bind("ruby://dp-dealer-#{object_id}")
       dealer = OMQ::DEALER.new
       dealer.identity = "test-dealer"
-      dealer.connect("inproc://dp-dealer-#{object_id}")
+      dealer.connect("ruby://dp-dealer-#{object_id}")
 
       dealer << "hello"
       msg = router.receive

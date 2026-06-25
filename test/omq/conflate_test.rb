@@ -8,9 +8,9 @@ describe "PUB conflate" do
   it "delivers only the latest message when conflate is enabled" do
     Async do
       pub = OMQ::PUB.new(nil, conflate: true)
-      pub.bind("inproc://conflate-pub")
+      pub.bind("ruby://conflate-pub")
 
-      sub = OMQ::SUB.connect("inproc://conflate-pub", subscribe: "")
+      sub = OMQ::SUB.connect("ruby://conflate-pub", subscribe: "")
 
       # Burst: many updates
       100.times { |i| pub.send("msg-#{i}") }
@@ -33,8 +33,8 @@ describe "PUB conflate" do
 
   it "delivers all messages when conflate is disabled" do
     Async do
-      pub = OMQ::PUB.bind("inproc://no-conflate-pub")
-      sub = OMQ::SUB.connect("inproc://no-conflate-pub", subscribe: "")
+      pub = OMQ::PUB.bind("ruby://no-conflate-pub")
+      sub = OMQ::SUB.connect("ruby://no-conflate-pub", subscribe: "")
 
       10.times { |i| pub.send("msg-#{i}") }
 
@@ -60,10 +60,10 @@ describe "RADIO conflate" do
   it "delivers only the latest message when conflate is enabled" do
     Async do
       radio = OMQ::RADIO.new(nil, conflate: true)
-      radio.bind("inproc://conflate-radio")
+      radio.bind("ruby://conflate-radio")
 
       dish = OMQ::DISH.new(nil, group: "sensor")
-      dish.connect("inproc://conflate-radio")
+      dish.connect("ruby://conflate-radio")
 
       100.times { |i| radio.publish("sensor", "value-#{i}") }
 

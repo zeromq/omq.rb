@@ -8,8 +8,8 @@ describe "PUSH/PULL over inproc" do
 
   it "sends and receives messages" do
     Async do
-      pull = OMQ::PULL.bind("inproc://pushpull-1")
-      push = OMQ::PUSH.connect("inproc://pushpull-1")
+      pull = OMQ::PULL.bind("ruby://pushpull-1")
+      push = OMQ::PUSH.connect("ruby://pushpull-1")
 
       push.send("hello")
       msg = pull.receive
@@ -142,14 +142,14 @@ describe "PUSH/PULL delivery guarantees" do
     Async do
       push = OMQ::PUSH.new.tap { |s| s.linger = 1 }
       push.reconnect_interval = RECONNECT_INTERVAL
-      push.connect("inproc://dg-inproc-cb")
+      push.connect("ruby://dg-inproc-cb")
 
       # Send while no peer is bound yet
       push.send("early-1")
       push.send("early-2")
 
       # Now bind
-      pull = OMQ::PULL.bind("inproc://dg-inproc-cb")
+      pull = OMQ::PULL.bind("ruby://dg-inproc-cb")
 
       # Give reconnect a moment
       wait_connected(push, pull)
@@ -173,8 +173,8 @@ describe "PUSH/PULL delivery guarantees" do
 
   it "delivers messages when inproc bind happens before connect" do
     Async do
-      pull = OMQ::PULL.bind("inproc://dg-inproc-bc")
-      push = OMQ::PUSH.connect("inproc://dg-inproc-bc")
+      pull = OMQ::PULL.bind("ruby://dg-inproc-bc")
+      push = OMQ::PUSH.connect("ruby://dg-inproc-bc")
 
       10.times { |i| push.send("msg-#{i}") }
 
@@ -305,8 +305,8 @@ describe "PUSH/PULL delivery guarantees" do
 
   it "delivers all messages in order with no drops" do
     Async do
-      pull = OMQ::PULL.bind("inproc://dg-order")
-      push = OMQ::PUSH.connect("inproc://dg-order")
+      pull = OMQ::PULL.bind("ruby://dg-order")
+      push = OMQ::PUSH.connect("ruby://dg-order")
 
       n = 100
       n.times { |i| push.send("seq-#{i}") }
@@ -372,11 +372,11 @@ describe "PUSH/PULL delivery guarantees" do
     Async do
       push = OMQ::PUSH.new.tap { |s| s.linger = 0 }
       push.set_unbounded
-      push.bind("inproc://pushpull-unbounded")
+      push.bind("ruby://pushpull-unbounded")
 
       pull = OMQ::PULL.new.tap { |s| s.linger = 0 }
       pull.set_unbounded
-      pull.connect("inproc://pushpull-unbounded")
+      pull.connect("ruby://pushpull-unbounded")
 
       push.send("hello")
       msg = pull.receive
@@ -392,12 +392,12 @@ describe "PUSH/PULL delivery guarantees" do
       push = OMQ::PUSH.new.tap { |s| s.linger = 0 }
       push.send_hwm = nil
       push.recv_hwm = nil
-      push.bind("inproc://pushpull-nil-hwm")
+      push.bind("ruby://pushpull-nil-hwm")
 
       pull = OMQ::PULL.new.tap { |s| s.linger = 0 }
       pull.send_hwm = nil
       pull.recv_hwm = nil
-      pull.connect("inproc://pushpull-nil-hwm")
+      pull.connect("ruby://pushpull-nil-hwm")
 
       push.send("hello")
       msg = pull.receive

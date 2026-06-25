@@ -8,8 +8,8 @@ describe "RADIO/DISH over inproc" do
 
   it "delivers messages to joined groups" do
     Sync do
-      radio = OMQ::RADIO.bind("inproc://rd-1")
-      dish  = OMQ::DISH.connect("inproc://rd-1")
+      radio = OMQ::RADIO.bind("ruby://rd-1")
+      dish  = OMQ::DISH.connect("ruby://rd-1")
       dish.join("weather")
 
       Async::Task.current.yield
@@ -25,8 +25,8 @@ describe "RADIO/DISH over inproc" do
 
   it "filters by exact group match" do
     Sync do
-      radio = OMQ::RADIO.bind("inproc://rd-2")
-      dish  = OMQ::DISH.connect("inproc://rd-2")
+      radio = OMQ::RADIO.bind("ruby://rd-2")
+      dish  = OMQ::DISH.connect("ruby://rd-2")
       dish.join("weather")
 
       Async::Task.current.yield
@@ -44,8 +44,8 @@ describe "RADIO/DISH over inproc" do
 
   it "supports send with group: kwarg" do
     Sync do
-      radio = OMQ::RADIO.bind("inproc://rd-3")
-      dish  = OMQ::DISH.connect("inproc://rd-3")
+      radio = OMQ::RADIO.bind("ruby://rd-3")
+      dish  = OMQ::DISH.connect("ruby://rd-3")
       dish.join("news")
 
       Async::Task.current.yield
@@ -61,8 +61,8 @@ describe "RADIO/DISH over inproc" do
 
   it "supports << with [group, body] array" do
     Sync do
-      radio = OMQ::RADIO.bind("inproc://rd-4")
-      dish  = OMQ::DISH.connect("inproc://rd-4")
+      radio = OMQ::RADIO.bind("ruby://rd-4")
+      dish  = OMQ::DISH.connect("ruby://rd-4")
       dish.join("alerts")
 
       Async::Task.current.yield
@@ -78,8 +78,8 @@ describe "RADIO/DISH over inproc" do
 
   it "stops delivering after leave" do
     Sync do
-      radio = OMQ::RADIO.bind("inproc://rd-5")
-      dish  = OMQ::DISH.connect("inproc://rd-5")
+      radio = OMQ::RADIO.bind("ruby://rd-5")
+      dish  = OMQ::DISH.connect("ruby://rd-5")
       dish.join("weather")
 
       Async::Task.current.yield
@@ -103,8 +103,8 @@ describe "RADIO/DISH over inproc" do
 
   it "supports group: kwarg in DISH constructor" do
     Sync do
-      radio = OMQ::RADIO.bind("inproc://rd-6")
-      dish  = OMQ::DISH.connect("inproc://rd-6", group: "data")
+      radio = OMQ::RADIO.bind("ruby://rd-6")
+      dish  = OMQ::DISH.connect("ruby://rd-6", group: "data")
 
       Async::Task.current.yield
 

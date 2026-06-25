@@ -53,8 +53,8 @@ describe "auto-close" do
     Async do
       push = OMQ::PUSH.new
       pull = OMQ::PULL.new
-      push.bind("inproc://auto-close-idempotent")
-      pull.connect("inproc://auto-close-idempotent")
+      push.bind("ruby://auto-close-idempotent")
+      pull.connect("ruby://auto-close-idempotent")
       push << "hello"
       pull.receive
 
@@ -69,8 +69,8 @@ describe "auto-close" do
     Async do
       push = OMQ::PUSH.new
       pull = OMQ::PULL.new
-      push.bind("inproc://auto-close-inproc")
-      pull.connect("inproc://auto-close-inproc")
+      push.bind("ruby://auto-close-inproc")
+      pull.connect("ruby://auto-close-inproc")
 
       10.times { |i| push << "msg-#{i}" }
       10.times { |i| assert_equal ["msg-#{i}"], pull.receive }

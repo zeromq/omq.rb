@@ -7,7 +7,7 @@ describe "Engine connection_wrapper" do
 
   it "wraps inproc connections via connection_ready" do
     Async do
-      pull = OMQ::PULL.bind("inproc://cw-inproc")
+      pull = OMQ::PULL.bind("ruby://cw-inproc")
 
       wrapped = []
       pull.engine.connection_wrapper = ->(conn) do
@@ -15,7 +15,7 @@ describe "Engine connection_wrapper" do
         conn
       end
 
-      push = OMQ::PUSH.connect("inproc://cw-inproc")
+      push = OMQ::PUSH.connect("ruby://cw-inproc")
       wait_connected(push)
 
       push << "hello"
@@ -113,11 +113,11 @@ describe "Engine connection_wrapper" do
 
   it "nil wrapper leaves connections unwrapped" do
     Async do
-      pull = OMQ::PULL.bind("inproc://cw-nil")
+      pull = OMQ::PULL.bind("ruby://cw-nil")
       # connection_wrapper defaults to nil
       assert_nil pull.engine.connection_wrapper
 
-      push = OMQ::PUSH.connect("inproc://cw-nil")
+      push = OMQ::PUSH.connect("ruby://cw-nil")
       wait_connected(push)
 
       push << "hello"

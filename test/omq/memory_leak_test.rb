@@ -22,8 +22,8 @@ describe "inproc memory leaks" do
     Async do
       push = OMQ::PUSH.new
       pull = OMQ::PULL.new
-      push.bind("inproc://leak-test")
-      pull.connect("inproc://leak-test")
+      push.bind("ruby://leak-test")
+      pull.connect("ruby://leak-test")
       push << "hello"
       pull.receive
 
@@ -45,8 +45,8 @@ describe "inproc memory leaks" do
     Async do
       push = OMQ::PUSH.new
       pull = OMQ::PULL.new
-      push.bind("inproc://leak-cycle")
-      pull.connect("inproc://leak-cycle")
+      push.bind("ruby://leak-cycle")
+      pull.connect("ruby://leak-cycle")
       push << "msg"
       pull.receive
 
@@ -65,7 +65,7 @@ describe "inproc memory leaks" do
   it "cleans up the inproc registry after unbind" do
     Async do
       10.times do |i|
-        ep = "inproc://leak-registry-#{i}"
+        ep = "ruby://leak-registry-#{i}"
         push = OMQ::PUSH.new
         push.bind(ep)
         push.close
@@ -81,8 +81,8 @@ describe "inproc memory leaks" do
     Async do
       push = OMQ::PUSH.new
       pull = OMQ::PULL.new
-      push.bind("inproc://leak-tasks")
-      pull.connect("inproc://leak-tasks")
+      push.bind("ruby://leak-tasks")
+      pull.connect("ruby://leak-tasks")
 
       1000.times { |i| push << "msg-#{i}" }
       1000.times { pull.receive }

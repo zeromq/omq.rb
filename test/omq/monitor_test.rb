@@ -77,8 +77,8 @@ describe "Socket#monitor" do
       pull   = OMQ::PULL.new.tap { |s| s.linger = 0 }
       pull.monitor { |e| events << e }
 
-      pull.bind("inproc://monitor-inproc")
-      push = OMQ::PUSH.connect("inproc://monitor-inproc")
+      pull.bind("ruby://monitor-inproc")
+      push = OMQ::PUSH.connect("ruby://monitor-inproc")
 
       push.send("hello")
       msg = Async::Task.current.with_timeout(2) { pull.receive }
@@ -221,8 +221,8 @@ describe "Socket#monitor" do
 
   it "works normally without monitor attached" do
     Async do
-      pull = OMQ::PULL.bind("inproc://monitor-none")
-      push = OMQ::PUSH.connect("inproc://monitor-none")
+      pull = OMQ::PULL.bind("ruby://monitor-none")
+      push = OMQ::PUSH.connect("ruby://monitor-none")
 
       push.send("hello")
       msg = Async::Task.current.with_timeout(2) { pull.receive }

@@ -7,8 +7,8 @@ describe "REQ/REP over inproc" do
 
   it "completes a request-reply cycle" do
     Async do
-      rep = OMQ::REP.bind("inproc://reqrep-1")
-      req = OMQ::REQ.connect("inproc://reqrep-1")
+      rep = OMQ::REP.bind("ruby://reqrep-1")
+      req = OMQ::REQ.connect("ruby://reqrep-1")
 
       req.send("request")
       request = rep.receive
@@ -25,8 +25,8 @@ describe "REQ/REP over inproc" do
 
   it "handles multi-frame request/reply" do
     Async do
-      rep = OMQ::REP.bind("inproc://reqrep-2")
-      req = OMQ::REQ.connect("inproc://reqrep-2")
+      rep = OMQ::REP.bind("ruby://reqrep-2")
+      req = OMQ::REQ.connect("ruby://reqrep-2")
 
       req.send(["part1", "part2"])
       request = rep.receive

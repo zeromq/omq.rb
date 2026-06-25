@@ -8,8 +8,8 @@ describe "Stress tests" do
   it "handles 10k messages through PUSH/PULL inproc" do
     n = 10_000
     Async do
-      pull = OMQ::PULL.bind("inproc://stress-pushpull")
-      push = OMQ::PUSH.connect("inproc://stress-pushpull")
+      pull = OMQ::PULL.bind("ruby://stress-pushpull")
+      push = OMQ::PUSH.connect("ruby://stress-pushpull")
 
       sender = Async do
         n.times { |i| push.send("msg-#{i}") }
@@ -61,12 +61,12 @@ describe "Stress tests" do
     n_msgs    = 100
 
     Async do
-      router = OMQ::ROUTER.bind("inproc://stress-router")
+      router = OMQ::ROUTER.bind("ruby://stress-router")
 
       dealers = n_dealers.times.map do |id|
         d = OMQ::DEALER.new
         d.identity = "dealer-#{id}"
-        d.connect("inproc://stress-router")
+        d.connect("ruby://stress-router")
         d
       end
 
@@ -103,10 +103,10 @@ describe "Stress tests" do
     n_msgs = 50
 
     Async do
-      pub = OMQ::PUB.bind("inproc://stress-pubsub")
+      pub = OMQ::PUB.bind("ruby://stress-pubsub")
 
       subs = n_subs.times.map do
-        OMQ::SUB.connect("inproc://stress-pubsub", subscribe: "")
+        OMQ::SUB.connect("ruby://stress-pubsub", subscribe: "")
       end
 
       # Wait for subscriptions to propagate

@@ -21,4 +21,5 @@ if ENV["OMQ_DEV"]
   gem "rbnacl", "~> 7.0"
   gem "chacha20blake3",         path: "../chacha20blake3"
   gem "omq-blake3zmq",          require: false, path: "../omq-blake3zmq"
+  gem "omq-backend-rust",       require: false, path: "../omq-backend-rust"
 end
