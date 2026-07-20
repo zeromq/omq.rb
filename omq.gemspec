@@ -13,7 +13,7 @@ Gem::Specification.new do |s|
                   "types) and TCP/IPC/inproc transports. Built on protocol-zmtp " \
                   "(ZMTP 3.1 wire protocol) and Async fibers. " \
                   "No native libraries required."
-  s.homepage = "https://github.com/zeromq/omq"
+  s.homepage = "https://github.com/zeromq/omq.rb"
   s.license  = "ISC"
 
   s.required_ruby_version = ">= 3.3"

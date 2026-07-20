@@ -1,0 +1,33 @@
+[package]
+name    = "omq_backend_rust"
+version = "0.1.0"
+edition = "2024"
+license = "ISC"
+authors = ["Patrik Wenger <paddor@gmail.com>"]
+publish = false
+
+[lib]
+name       = "omq_backend_rust"
+crate-type = ["cdylib"]
+
+[features]
+default = ["plain", "curve", "lz4"]
+plain   = ["omq-tokio/plain"]
+curve   = ["omq-tokio/curve"]
+lz4     = ["omq-tokio/lz4"]
+
+[dependencies]
+omq-proto = { version = "0.23.0", default-features = false }
+omq-tokio = { version = "0.19.1", default-features = false }
+tokio     = { version = "1.52.0", features = ["rt", "rt-multi-thread", "time", "sync", "io-util", "net"] }
+yring     = { version = "0.3.8", features = ["async"] }
+
+bytes   = "1.12.0"
+flume   = { version = "0.12", default-features = false, features = ["async"] }
+futures = { version = "0.3", default-features = false, features = ["std", "async-await"] }
+magnus  = "0.8"
+rb-sys  = "0.9"
+libc    = "0.2"
+
+[build-dependencies]
+rb-sys = "0.9"

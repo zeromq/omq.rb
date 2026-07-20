@@ -12,7 +12,7 @@ module OMQ
     # @param send_timeout [Numeric, nil] send timeout in seconds
     # @param on_mute [Symbol] mute strategy for slow subscribers
     # @param conflate [Boolean] keep only latest message per topic
-    # @param backend [Symbol, nil] :ruby (default) or :ffi
+    # @param backend [Symbol, nil] registered backend name (:ruby by default)
     #
     def initialize(endpoints = nil, linger: Float::INFINITY,
                    send_hwm: nil, send_timeout: nil,
@@ -43,7 +43,7 @@ module OMQ
     # @param subscribe [String, nil] subscription prefix; +nil+ (default)
     #   means no subscription — call {#subscribe} explicitly.
     # @param on_mute [Symbol] :block (default), :drop_newest, or :drop_oldest
-    # @param backend [Symbol, nil] :ruby (default) or :ffi
+    # @param backend [Symbol, nil] registered backend name (:ruby by default)
     #
     def initialize(endpoints = nil, recv_hwm: nil, recv_timeout: nil,
                    subscribe: nil, on_mute: :block, backend: nil, &block)
@@ -90,7 +90,7 @@ module OMQ
     # @param send_timeout [Numeric, nil] send timeout in seconds
     # @param recv_timeout [Numeric, nil] receive timeout in seconds
     # @param on_mute [Symbol] mute strategy for slow subscribers
-    # @param backend [Symbol, nil] :ruby (default) or :ffi
+    # @param backend [Symbol, nil] registered backend name (:ruby by default)
     #
     def initialize(endpoints = nil, linger: Float::INFINITY,
                    send_hwm: nil, recv_hwm: nil,
@@ -122,7 +122,7 @@ module OMQ
     # @param subscribe [String, nil] subscription prefix; +nil+ (default)
     #   means no subscription — send a subscribe frame explicitly.
     # @param on_mute [Symbol] mute strategy (:block, :drop_newest, :drop_oldest)
-    # @param backend [Symbol, nil] :ruby (default) or :ffi
+    # @param backend [Symbol, nil] registered backend name (:ruby by default)
     #
     def initialize(endpoints = nil, linger: Float::INFINITY,
                    send_hwm: nil, recv_hwm: nil,

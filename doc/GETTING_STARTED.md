@@ -5,7 +5,7 @@ the 30-minute version — half a CS lecture — that teaches you the same
 material, for the modern brain with a 12-second attention span. No
 philosophical digressions, no committee design talk. Just how ØMQ works,
 the patterns, and how to use them from Ruby with
-[OMQ](https://github.com/zeromq/omq).
+[OMQ](https://github.com/zeromq/omq.rb).
 
 Working examples live in [`examples/zguide/`](examples/zguide/) — each
 is a standalone Minitest file you can run directly.
@@ -1024,5 +1024,5 @@ Run any example: `ruby examples/zguide/03_pipeline.rb`
   in 20+ languages
 - [ZMTP 3.1 spec](https://rfc.zeromq.org/spec/23/) — wire protocol
 - [CurveZMQ spec](https://rfc.zeromq.org/spec/26/) — encryption
-- [OMQ source](https://github.com/zeromq/omq) — the pure Ruby
+- [OMQ source](https://github.com/zeromq/omq.rb) — the pure Ruby
   implementation used in all examples above

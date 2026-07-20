@@ -1,0 +1,13 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+gemspec
+
+ROOT     = File.expand_path("../..", __dir__)
+SIBLINGS = File.expand_path("../../..", __dir__)
+
+gem "omq",           path: ENV["OMQ_DEV"] ? ROOT : nil
+gem "protocol-zmtp", path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "protocol-zmtp") : nil
+gem "minitest"
+gem "rake"

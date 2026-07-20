@@ -1,0 +1,22 @@
+# frozen_string_literal: true
+
+require "bundler/gem_tasks"
+Bundler::GemHelper.tag_prefix = "omq-backend-rust-"
+
+require "rb_sys/extensiontask"
+require "minitest/test_task"
+
+GEMSPEC = Gem::Specification.load("omq-backend-rust.gemspec") ||
+          abort("Could not load omq-backend-rust.gemspec")
+
+RbSys::ExtensionTask.new("omq_backend_rust", GEMSPEC) do |ext|
+  ext.lib_dir = "lib/omq/rust"
+end
+
+Minitest::TestTask.create(:test) do |t|
+  t.libs      << "lib" << "test"
+  t.test_globs = ["test/test_*.rb"]
+end
+
+task build: :compile
+task default: [:compile, :test]

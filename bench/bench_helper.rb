@@ -56,9 +56,8 @@ module BenchHelper
   #   ipc    — Unix-domain sockets, no TCP stack
   #   tcp    — primary networked path
   #
-  # curve and blake3 are intentionally excluded from this suite.
-  # CURVE regressions are caught by protocol-zmtp tests; BLAKE3-ZMTP
-  # perf is tracked in the omq-rfc-blake3zmq repo.
+  # CURVE is intentionally excluded from this suite; protocol-zmtp tests
+  # catch regressions there. Blake3ZMQ is obsolete.
   TRANSPORTS = (ENV["OMQ_BENCH_TRANSPORTS"] || "inproc,ipc,tcp").split(",").freeze
 
   def run_id
