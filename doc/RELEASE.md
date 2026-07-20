@@ -4,6 +4,7 @@ Human runbook for release tags and RubyGems trusted publishers. CI does not
 read this file.
 
 Releases publish from GitHub Actions on prefixed tags.
+The release workflow runs the same Ruby 3.3/4.0 test matrix before publishing.
 
 | Gem | Tag prefix | Directory |
 |---|---|---|
