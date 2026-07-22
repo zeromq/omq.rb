@@ -15,4 +15,4 @@
 - `wss://` is plain TLS-then-WebSocket via an `OpenSSL::SSL::SSLContext`
   passed through `tls_context:` on the socket.
 - Release source is now the `zeromq/omq.rb` monorepo.
-- Requires `omq ~> 0.28` and `protocol-zmtp ~> 0.8`.
+- Requires `omq ~> 0.28` and `protocol-zmtp ~> 0.10`.

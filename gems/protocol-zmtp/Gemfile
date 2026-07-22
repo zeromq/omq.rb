@@ -1,0 +1,19 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+gemspec
+
+gem "minitest"
+gem "rake"
+gem "async"
+gem "io-stream"
+
+SIBLINGS = File.expand_path("../../..", __dir__)
+
+if ENV["OMQ_DEV"]
+  gem "nuckle", path: File.join(SIBLINGS, "nuckle")
+  gem "rbnacl", "~> 7.0"
+else
+  gem "nuckle"
+end

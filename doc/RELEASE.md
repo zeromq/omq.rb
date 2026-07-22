@@ -16,6 +16,7 @@ The release workflow runs the same Ruby 3.3/4.0 test matrix before publishing.
 | `omq-ractor` | `omq-ractor-v` | `gems/omq-ractor` |
 | `omq-websocket` | `omq-websocket-v` | `gems/omq-websocket` |
 | `omq-zstd` | `omq-zstd-v` | `gems/omq-zstd` |
+| `protocol-zmtp` | `protocol-zmtp-v` | `gems/protocol-zmtp` |
 
 Example: tag `omq-zstd-v0.4.2` publishes `gems/omq-zstd`.
 

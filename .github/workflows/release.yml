@@ -11,6 +11,7 @@ on:
       - 'omq-ractor-v*'
       - 'omq-websocket-v*'
       - 'omq-zstd-v*'
+      - 'protocol-zmtp-v*'
 
 permissions:
   contents: write
@@ -101,6 +102,12 @@ jobs:
               package="omq-zstd"
               dir="gems/omq-zstd"
               gemspec="$dir/omq-zstd.gemspec"
+              ruby="4.0"
+              ;;
+            protocol-zmtp-v*)
+              package="protocol-zmtp"
+              dir="gems/protocol-zmtp"
+              gemspec="$dir/protocol-zmtp.gemspec"
               ruby="4.0"
               ;;
             *)

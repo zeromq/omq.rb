@@ -7,8 +7,8 @@ Gem::Specification.new do |s|
   s.version     = OMQ::Zstd::VERSION
   s.authors     = ["Patrik Wenger"]
   s.email       = ["paddor@gmail.com"]
-  s.summary     = "Zstd+TCP transport for OMQ"
-  s.description = "Adds zstd+tcp:// endpoint support to OMQ with per-frame " \
+  s.summary     = "Experimental Zstd+TCP transport for OMQ"
+  s.description = "Experimental zstd+tcp:// endpoint support for OMQ with per-frame " \
                   "Zstd compression, bounded decompression, in-band " \
                   "dictionary shipping, and sender-side dictionary training."
   s.homepage    = "https://github.com/zeromq/omq.rb/tree/main/gems/omq-zstd"

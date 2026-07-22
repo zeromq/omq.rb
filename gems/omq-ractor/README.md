@@ -119,7 +119,7 @@ end
 ```
 
 Topic prefix matching works normally. The topic stays as a plain string
-frame; only the payload is serialized.
+frame. Only the payload is serialized.
 
 ### Worker pool
 
@@ -215,7 +215,7 @@ a Reactor.run round-trip per message.
 Setup handshake: the worker must call `omq.sockets` as its first
 action. This creates worker-owned input ports, sends them to the main
 Ractor, and returns SocketProxy objects. The main Ractor waits up to
-100ms; if the handshake doesn't complete, the Ractor is stopped and
+100ms. If the handshake doesn't complete, the Ractor is stopped and
 an error is raised.
 
 
