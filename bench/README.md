@@ -3,17 +3,17 @@
 Measured in a Linux VM on a 2018 Intel Mac Mini, Ruby 4.0.2 +YJIT. Each cell
 is the fastest of 3 timed rounds (~1 s each) after a calibration warmup, so
 transient scheduler/GC jitter is filtered out. Between-run variance on the same
-machine is ~5-15 % depending on transport; treat single-digit deltas across
+machine is ~5-15 % depending on transport. Treat single-digit deltas across
 runs as noise.
 
 ### Reading the numbers (\*)
 
-The same `String` payload is reused across every send — no per-message
+The same `String` payload is reused across every send. No per-message
 allocation. The primary metric is **msg/s** (raw send-path throughput,
 what the library can actually push through its queues and codec). The
-**MB/s\*** figures are nominal — they're `msg/s × msg_size`, which for
+**MB/s\*** figures are nominal. They are `msg/s × msg_size`, which for
 inproc overstates real memory bandwidth (inproc passes the `String` by
-reference through the engine queue — no bytes are copied). For IPC/TCP
+reference through the engine queue. No bytes are copied). For IPC/TCP
 the bytes really do traverse the kernel, so MB/s there is meaningful
 within kernel-buffer/loopback limits. Cross-impl comparison is fairer
 this way: Ruby's `String#dup` is copy-on-write while Crystal's
@@ -108,7 +108,8 @@ gem pristine io-event
 ```sh
 # Full suite (one run_id shared across patterns for cross-pattern comparison)
 RUN_ID=$(date +%Y-%m-%dT%H:%M:%S)
-for d in push_pull req_rep router_dealer pub_sub; do
+for d in push_pull req_rep router_dealer pub_sub
+do
   OMQ_BENCH_RUN_ID=$RUN_ID bundle exec ruby --yjit bench/$d/omq.rb
 done
 

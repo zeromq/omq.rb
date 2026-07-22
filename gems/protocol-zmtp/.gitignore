@@ -1,0 +1,5 @@
+/CLA*
+/.cla*
+/Gemfile.lock
+/pkg/
+/memory/

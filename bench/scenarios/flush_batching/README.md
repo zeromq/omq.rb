@@ -1,7 +1,7 @@
 # Flush Batching Benchmark
 
 Measures throughput under burst load where the send queue accumulates
-multiple messages before the pump drains them — exercising the batch
+multiple messages before the pump drains them. This exercises the batch
 write + single flush path.
 
 **Setup**: 1000-message bursts, 256 B payload, 20 rounds, median reported.
@@ -40,7 +40,7 @@ the pump can drain them.
 
 ### With YJIT
 
-With YJIT the pump is fast enough that messages rarely accumulate —
+With YJIT the pump is fast enough that messages rarely accumulate.
 batch sizes stay close to 1 in this benchmark. The improvement shows
 under heavier real-world load (multiple producers, slower consumers).
 
@@ -61,7 +61,7 @@ under heavier real-world load (multiple producers, slower consumers).
 ## Why
 
 Before batching, every `Connection#send_message` called `io.flush`
-immediately — one syscall per message per connection. For PUB with
+immediately. One syscall per message per connection. For PUB with
 N subscribers, one published message triggered N flushes.
 
 After batching, the send pump drains all queued messages first

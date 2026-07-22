@@ -9,6 +9,9 @@ Per-hop delivery guarantees for [OMQ](https://github.com/zeromq/omq.rb),
 inspired by MQTT QoS levels. Adds ACK-based at-least-once delivery using
 xxHash message identification.
 
+Experimental. Wire details and retry semantics may change before stable
+release. Use only when you can tolerate protocol churn.
+
 ```ruby
 require "omq"
 require "omq/qos"
@@ -25,12 +28,12 @@ push << "reliably delivered"
 | Level | Name            | Behavior                                      |
 |-------|-----------------|-----------------------------------------------|
 | 0     | Fire-and-forget | Default ZMQ behavior (no overhead)             |
-| 1     | At-least-once   | Receiver ACKs; sender retries on connection loss |
+| 1     | At-least-once   | Receiver ACKs, sender retries on connection loss |
 
 ## How it works
 
 `require "omq/qos"` prepends onto OMQ routing strategies. No
-monkey-patching of core send/receive paths — the prepends activate only
+monkey-patching of core send/receive paths. The prepends activate only
 when `qos >= 1`:
 
 - **Sender** (PUSH, SCATTER): tracks sent messages in a pending store
@@ -44,7 +47,7 @@ when `qos >= 1`:
   next REP.
 
 Fan-out patterns (PUB/SUB, XPUB/XSUB, RADIO/DISH) are deliberately out
-of scope — see the RFC for the rationale.
+of scope. See the RFC for the rationale.
 
 ### ACK protocol
 
@@ -69,7 +72,7 @@ unboundedly.
 
 `Socket#close` with `linger: 0` discards anything that hasn't yet been
 ACK'd. This is correct but worth calling out: with QoS 1, messages you
-sent just before closing — even successfully written on the wire — can
+sent just before closing, even successfully written on the wire, can
 still be lost if the ACKs hadn't come back yet. Set `linger` to a
 non-zero value (or `Float::INFINITY`) if you need the close to wait
 for outstanding ACKs.

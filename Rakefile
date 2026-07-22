@@ -35,12 +35,14 @@ gem_test_task "omq-qos"
 gem_test_task "omq-ractor", min_ruby: "4.0"
 gem_test_task "omq-websocket"
 gem_test_task "omq-zstd", min_ruby: "4.0"
+gem_test_task "protocol-zmtp"
 
 task "test:omq-backend-rust" do
   sh "bundle", "exec", "rake", "-C", "gems/omq-backend-rust"
 end
 
 task test: [
+  "test:protocol-zmtp",
   "test:omq",
   "test:omq-backend-libzmq",
   "test:omq-backend-rust",

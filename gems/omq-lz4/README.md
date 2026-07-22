@@ -4,15 +4,15 @@
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
 [![Ruby](https://img.shields.io/badge/Ruby-%3E%3D%204.0-CC342D?logo=ruby&logoColor=white)](https://www.ruby-lang.org)
 
-LZ4-compressed TCP transport for [OMQ](https://github.com/zeromq/omq.rb),
-complementary to [`omq-zstd`](../omq-zstd).
-Pick `lz4+tcp://` instead of `tcp://` or `zstd+tcp://` when you want
-cheap per-message compression with a small per-connection footprint.
+LZ4-compressed TCP transport for [OMQ](https://github.com/zeromq/omq.rb).
+Pick `lz4+tcp://` instead of `tcp://` when you want cheap per-message
+compression with a small per-connection footprint. `omq-lz4` is the
+preferred compressed TCP transport. `omq-zstd` is experimental.
 
 See [RFC.md](RFC.md) for the wire-format specification and
 [CHANGELOG.md](CHANGELOG.md) for release history.
 
-## When to pick `lz4+tcp://` over `zstd+tcp://`
+## Why `lz4+tcp://`
 
 LZ4 has no entropy stage (no Huffman, no FSE), ~16 KiB of encoder state
 per connection, and trades a **worse compression ratio** for
@@ -25,12 +25,14 @@ per connection, and trades a **worse compression ratio** for
 | Memory per connection | ~256 KiB | ~16 KiB + dict |
 | Ratio, 1 KiB JSON no dict | ~45% | ~65% |
 | Ratio, 1 KiB JSON with dict | ~20% | ~35% |
-| Auto-trained dictionaries | yes | no (user-supplied only) |
+| Auto-trained dictionaries | yes | yes |
 
 Pick `omq-lz4` for CPU- or memory-scarce deployments (edge gateways,
 IoT concentrators, high-fanout scenarios where per-connection state
-matters more than ratio). Pick `omq-zstd` for bandwidth-bound
-deployments where CPU is cheap.
+matters more than ratio). It is also the default choice for bandwidth
+bound deployments now that lz4rip supports dictionary training.
+`omq-zstd` remains useful for experiments where the tighter zstd ratio
+is worth extra transport complexity.
 
 ## Install
 
@@ -66,12 +68,17 @@ Both peers must use `lz4+tcp://`. A `tcp://` peer cannot talk to an
 
 Small messages don't compress well on their own. A shared dictionary
 gives 2-5x better ratios on payloads with a common prefix. Supply a
-user-trained dictionary (LZ4 has no auto-training; use `omq-zstd`
-for that):
+user-trained dictionary:
 
 ```ruby
 dict = File.binread("schema.dict")
 push.connect("lz4+tcp://127.0.0.1:5555", dict: dict)
+```
+
+Or let lz4rip train one from early traffic:
+
+```ruby
+push.connect("lz4+tcp://127.0.0.1:5555", auto_dict: true)
 ```
 
 The sender ships the dictionary to the receiver in-band, prefixed
@@ -100,7 +107,7 @@ The receiver bounds decompression by the socket's `max_message_size`
 attempting to send an over-budget message drops the connection.
 `OMQ::SocketDeadError` surfaces on the next `receive`.
 
-Independent of that, the dictionary itself is capped at 8 KiB; a
+Independent of that, the dictionary itself is capped at 8 KiB. A
 larger shipment drops the connection.
 
 ## Wire format
@@ -117,7 +124,7 @@ Every post-handshake ZMTP message part starts with a 4-byte sentinel:
 **Single-block** (`LZ4B`): `sentinel (4) || decompressed_size u64 LE (8) || LZ4 block bytes`.
 12-byte envelope. Raw LZ4 block format (no magic, no descriptor, no
 checksum). `decompressed_size` is required because LZ4 block format
-carries no length prefix; the receiver pre-sizes its output buffer.
+carries no length prefix. The receiver pre-sizes its output buffer.
 
 **Multi-block** (`LZ4M`): same header, followed by a sequence of
 `u32 LE compressed_block_len || LZ4 block bytes` pairs. Each block
@@ -214,10 +221,10 @@ Three regimes visible:
   tighter the ratio, the bigger the win: `zstd 3`'s 3% wire ratio
   translates to a **~17x throughput multiplier** over plain tcp.
 - **1 Gbit**: compressed transports shift from wire-saturated to
-  CPU-limited. `zstd -3` reaches ~75% of wire cap; `zstd 3` only
+  CPU-limited. `zstd -3` reaches ~75% of wire cap. `zstd 3` only
   29% (deep CPU-bound). Both beat plain tcp (which is pinned at
   the wire cap) by **6-8x**. `zstd 3`'s tighter wire no longer
-  helps; there's no wire saturation to trade CPU for.
+  helps. There is no wire saturation to trade CPU for.
 - **Unlimited loopback**: no wire cap. All three are
   CPU-limited. Plain tcp doesn't pay compression CPU, so **skip
   compression on loopback**.
@@ -234,7 +241,7 @@ Or use a `veth` pair in a network namespace so shaping doesn't
 touch your host's real loopback (see `tc-netem(8)`, `ip-netns(8)`).
 
 Full sweeps (8 sizes from 256 B to 512 KiB) for each regime live
-in `bench/head_to_head.rb` output. Run it yourself; the
+in `bench/head_to_head.rb` output. Run it yourself. The
 headline numbers above are stable across repeats but small sizes
 and very large sizes vary a bit run-to-run.
 
@@ -243,12 +250,13 @@ and very large sizes vary a bit run-to-run.
 - Pick **`lz4+tcp://`** for bandwidth-limited links (any real
   network, even 1 Gbit LAN). 6-9x throughput multiplier over
   plain `tcp`, minimal memory (~16 KiB/connection), modest CPU.
-  Ties or beats `zstd -3` at 1 Gbit; loses the ratio race to
+  Ties or beats `zstd -3` at 1 Gbit. Loses the ratio race to
   `zstd 3` at 100 Mbit and below.
 - Pick **`zstd+tcp://` (level >= 3)** when the wire is the
   precious resource (100 Mbit links or slower, WAN, or you're
   paying for egress). **~17x throughput multiplier at 100 Mbit**
-  for 128 KiB messages is hard to argue with.
+  for 128 KiB messages is hard to argue with. Treat this as
+  experimental in Ruby OMQ.
 - Pick **plain `tcp://`** when the link is *not* the bottleneck
   (localhost IPC, loopback, datacenter-fast inter-host
   connections where the bandwidth ceiling is above the CPU's

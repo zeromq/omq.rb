@@ -9,7 +9,7 @@ ZeroMQ-over-WebSocket transport for [OMQ](https://github.com/zeromq/omq.rb).
 Implements [ZeroMQ RFC 45](https://rfc.zeromq.org/spec/45/) (ZWS 2.0).
 
 Adds `ws://` and `wss://` schemes to OMQ. Both register at
-`require` time; no other OMQ code change required.
+`require` time. No other OMQ code change required.
 
 ## Install
 
@@ -47,7 +47,7 @@ pull.bind("wss://127.0.0.1:5556")
 
 ### Mechanism
 
-By default the client offers `ZWS2.0/NULL` then `ZWS2.0`; the server
+By default the client offers `ZWS2.0/NULL` then `ZWS2.0`. The server
 picks the first one it accepts. Override via:
 
 ```ruby
@@ -63,7 +63,7 @@ returns 404 for any other path.
 
 Per RFC 45, each ZeroMQ frame maps to one WebSocket binary message:
 a single FLAG byte (`0x00` final, `0x01` more, `0x02` command)
-followed by the frame body. No 64-byte ZMTP greeting; mechanism
+followed by the frame body. No 64-byte ZMTP greeting. Mechanism
 negotiation happens via `Sec-WebSocket-Protocol` during the HTTP
 upgrade. See `lib/omq/transport/websocket/codec.rb`.
 

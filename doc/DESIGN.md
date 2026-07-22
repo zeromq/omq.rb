@@ -1,6 +1,6 @@
 # OMQ Design
 
-Pure Ruby ZeroMQ built on [protocol-zmtp](https://github.com/paddor/protocol-zmtp)
+Pure Ruby ZeroMQ built on [protocol-zmtp](../gems/protocol-zmtp)
 (ZMTP 3.1 wire protocol) and the Async ecosystem.
 
 ## Why

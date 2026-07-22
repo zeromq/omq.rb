@@ -5,6 +5,8 @@
 ### Changed
 
 - Consolidated optional OMQ gems into this repository under `gems/`.
+- Consolidated `protocol-zmtp` into this repository under
+  `gems/protocol-zmtp`.
 - Moved the libzmq backend out of the `omq` gem and into
   `omq-backend-libzmq`. The old `require "omq/ffi"` and `backend: :ffi`
   names still work when the backend gem is installed.
@@ -12,6 +14,7 @@
   `omq-v0.28.0`, `omq-lz4-v0.3.1`, and
   `omq-backend-rust-v0.1.0`.
 - Removed `omq-blake3zmq` from the development dependency set.
+- Bumped the `protocol-zmtp` dependency requirement to `~> 0.10`.
 
 ## 0.28.0 — 2026-07-04
 
@@ -1354,7 +1357,7 @@ Combined effect of caller-owns-data + Reactor fast path on inproc:
 - **Protocol layer extracted into protocol-zmtp gem** — Codec (Frame,
   Greeting, Command), Connection, Mechanism::Null, Mechanism::Curve,
   ValidPeers, and Z85 now live in the
-  [protocol-zmtp](https://github.com/paddor/protocol-zmtp) gem. OMQ
+  [protocol-zmtp](gems/protocol-zmtp) gem. OMQ
   re-exports them under `OMQ::ZMTP::` for backwards compatibility.
   protocol-zmtp has zero runtime dependencies.
 - **Unified CURVE mechanism** — one implementation with a pluggable
@@ -1868,4 +1871,4 @@ Initial release. Pure Ruby implementation of ZMTP 3.1 (ZeroMQ) using Async.
 - Linger on close (drain send queue before closing)
 - `max_message_size` enforcement
 - Works inside Async reactors or standalone (shared IO thread)
-- Optional CURVE encryption via the [protocol-zmtp](https://github.com/paddor/protocol-zmtp) gem
+- Optional CURVE encryption via the [protocol-zmtp](gems/protocol-zmtp) gem
