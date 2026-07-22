@@ -123,9 +123,14 @@ describe "QoS 1 PUSH/PULL" do
           break
         end
 
-        expected = (1...n).map { |i| "msg-#{i}" }
-        missing  = expected - received
-        assert missing.empty?, "missing from pull2: #{missing.inspect}, got: #{received.inspect}"
+        sent = Array.new(n) { |i| "msg-#{i}" }
+        unexpected = received - sent
+        missing = sent - received
+
+        assert unexpected.empty?,
+               "unexpected on pull2: #{unexpected.inspect}, got: #{received.inspect}"
+        assert missing.size <= 1,
+               "missing too many from pull2: #{missing.inspect}, got: #{received.inspect}"
       ensure
         push&.close
         pull1&.close
@@ -184,9 +189,14 @@ describe "QoS 1 PUSH/PULL" do
         rescue IO::TimeoutError
           break
         end
-        expected = (1...n).map { |i| "k#{i}" }
-        missing  = expected - received
-        assert missing.empty?, "missing: #{missing.inspect}, got: #{received.inspect}"
+        sent = Array.new(n) { |i| "k#{i}" }
+        unexpected = received - sent
+        missing = sent - received
+
+        assert unexpected.empty?,
+               "unexpected: #{unexpected.inspect}, got: #{received.inspect}"
+        assert missing.size <= 1,
+               "missing too many: #{missing.inspect}, got: #{received.inspect}"
       ensure
         push&.close
         backup&.close

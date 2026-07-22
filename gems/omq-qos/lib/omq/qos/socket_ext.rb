@@ -143,7 +143,7 @@ module OMQ
         parts = message.is_a?(Array) ? message : [message]
         raise ArgumentError, "message has no parts" if parts.empty?
 
-        parts = parts.map { it.to_str } if parts.any? { !it.is_a?(String) }
+        parts = parts.map(&:to_str) if parts.any? { |part| !part.is_a?(String) }
         parts.each do |part|
           part.force_encoding(Encoding::BINARY) unless part.frozen? || part.encoding == Encoding::BINARY
           part.freeze

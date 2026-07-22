@@ -55,7 +55,7 @@ describe "QoS 2 peer pinning" do
         break
       end
 
-      assert promises.any? { !it.resolved? },
+      assert promises.any? { |promise| !promise.resolved? },
              "expected at least one Promise to remain pending (pinned to A)"
     ensure
       push&.close
