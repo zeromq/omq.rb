@@ -29,7 +29,7 @@ def gem_test_task(name, min_ruby: nil)
   end
 end
 
-gem_test_task "omq-backend-libzmq"
+gem_test_task "omq-backend-libzmq", min_ruby: "4.0"
 gem_test_task "omq-lz4", min_ruby: "4.0"
 gem_test_task "omq-qos"
 gem_test_task "omq-ractor", min_ruby: "4.0"

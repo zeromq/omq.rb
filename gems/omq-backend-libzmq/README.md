@@ -3,7 +3,7 @@
 [![CI](https://github.com/zeromq/omq.rb/actions/workflows/ci.yml/badge.svg)](https://github.com/zeromq/omq.rb/actions/workflows/ci.yml)
 [![Gem Version](https://img.shields.io/gem/v/omq-backend-libzmq?color=e9573f)](https://rubygems.org/gems/omq-backend-libzmq)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
-[![Ruby](https://img.shields.io/badge/Ruby-%3E%3D%203.3-CC342D?logo=ruby&logoColor=white)](https://www.ruby-lang.org)
+[![Ruby](https://img.shields.io/badge/Ruby-%3E%3D%204.0-CC342D?logo=ruby&logoColor=white)](https://www.ruby-lang.org)
 
 Use libzmq under the same OMQ socket API. Requires libzmq 4.x installed
 on the system.
@@ -40,6 +40,6 @@ req.connect("tcp://127.0.0.1:5555")
 
 ## Requirements
 
-- Ruby >= 3.3
+- Ruby >= 4.0
 - libzmq 4.x (`libzmq5` / `libzmq3-dev` on Debian/Ubuntu)
 - [omq](https://github.com/zeromq/omq.rb) >= 0.28

@@ -216,9 +216,10 @@ See the [omq-cli README](https://github.com/paddor/omq-cli) for full documentati
 
 ## Optional libzmq backend
 
-Install `omq-backend-libzmq` for a libzmq backend. Same socket API, but
-backed by libzmq instead of the pure Ruby ZMTP stack. Useful when you
-need libzmq-specific features or for verifying wire compatibility.
+Install `omq-backend-libzmq` for a Ruby 4.0+ libzmq backend. Same socket
+API, but backed by libzmq instead of the pure Ruby ZMTP stack. Useful
+when you need libzmq-specific features or for verifying wire
+compatibility.
 
 ```ruby
 require "omq/backend/libzmq"

@@ -9,7 +9,7 @@ Gem::Specification.new do |s|
   s.homepage = "https://github.com/zeromq/omq.rb/tree/main/gems/omq-backend-libzmq"
   s.license  = "ISC"
 
-  s.required_ruby_version = ">= 3.3"
+  s.required_ruby_version = ">= 4.0"
 
   s.files = Dir["lib/**/*.rb", "README.md", "LICENSE"]
 

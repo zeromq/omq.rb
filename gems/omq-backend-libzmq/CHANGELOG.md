@@ -7,6 +7,7 @@
 - Renamed the gem from `omq-ffi` to `omq-backend-libzmq`.
 - Added `require "omq/backend/libzmq"` and `backend: :libzmq`.
 - Kept `require "omq/ffi"` and `backend: :ffi` as compatibility aliases.
+- Raised the supported Ruby version to 4.0+.
 - Moved release source to the `zeromq/omq.rb` monorepo.
 
 ## 0.3.1 — 2026-04-18
