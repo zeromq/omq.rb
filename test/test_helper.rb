@@ -10,15 +10,6 @@ require "console"
 Console.logger = Console::Logger.new(Console::Output::Null.new)
 Warning[:experimental] = false
 
-# True if the `ffi` gem is installed AND system libzmq can be loaded.
-# Interop and FFI-backend test files skip themselves unless this is true.
-OMQ_FFI_AVAILABLE = begin
-  require "omq/ffi"
-  true
-rescue LoadError
-  false
-end
-
 # Fast reconnect interval for tests.
 # Production default is 0.1s — tests use 0.01s to cut dead time.
 RECONNECT_INTERVAL = 0.01

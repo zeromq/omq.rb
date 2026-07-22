@@ -1,5 +1,39 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Consolidated optional OMQ gems into this repository under `gems/`.
+- Moved the libzmq backend out of the `omq` gem and into
+  `omq-backend-libzmq`. The old `require "omq/ffi"` and `backend: :ffi`
+  names still work when the backend gem is installed.
+- Release CI now publishes packages from prefixed tags such as
+  `omq-v0.28.0`, `omq-lz4-v0.3.1`, and
+  `omq-backend-rust-v0.1.0`.
+- Removed `omq-blake3zmq` from the development dependency set.
+
+## 0.28.0 — 2026-07-04
+
+### Changed
+
+- **Ruby in-process transport renamed from `inproc://` to `ruby://`.**
+  The `inproc://` scheme is now reserved for native backends (FFI/libzmq,
+  Rust/omq-tokio) which maintain their own in-process registries.
+  All existing `inproc://` endpoints must be updated to `ruby://`.
+
+### Added
+
+- **`:rust` backend branch in `Socket#init_engine`.** Sockets can now be
+  created with `backend: :rust` to use the Rust/omq-tokio engine
+  (requires `omq-rust` and the native extension).
+- **Cross-backend benchmarks and chart generation.** New bench scripts
+  (`bench_pushpull.rb`, `bench_reqrep.rb`, `bench_pubsub.rb`,
+  `bench_peer.rb`) compare pure Ruby, FFI, and Rust backends.
+  `bench/chart_helper.rb` generates SVG comparison charts.
+- **Soak test.** `test/omq/soak_test.rb` exercises sustained throughput
+  across backends and patterns.
+
 ## 0.27.0 — 2026-04-20
 
 ### Added

@@ -314,22 +314,29 @@ module OMQ
       @options.recv_timeout = recv_timeout if recv_timeout
       @options.conflate     = conflate
       @options.on_mute      = on_mute      if on_mute
-      @engine = case backend
-      when nil, :ruby
-        Engine.new(socket_type, @options)
-      when :ffi
-        require "omq/ffi" unless defined?(FFI::Engine)
-        FFI::Engine.new(socket_type, @options)
-      when :rust
-        require "omq/rust" unless defined?(Rust::Engine)
-        Rust::Engine.new(socket_type, @options)
-      else
-        raise ArgumentError, "unknown backend: #{backend}"
-      end
+      backend_name = (backend || :ruby).to_sym
+      require_backend(backend_name) unless Backend.registered?(backend_name)
+
+      engine_class = Backend.fetch(backend_name)
+      raise ArgumentError, "unknown backend: #{backend}" unless engine_class
+
+      @engine = engine_class.new(socket_type, @options)
     end
 
 
     private
+
+
+    def require_backend(name)
+      path = case name
+             when :libzmq then "omq/backend/libzmq"
+             when :ffi then "omq/ffi"
+             when :rust then "omq/rust"
+             end
+      return unless path
+
+      require path
+    end
 
 
     # Sets the engine's parent task before the first bind or connect.

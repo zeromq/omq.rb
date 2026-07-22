@@ -20,16 +20,18 @@ OUTPUT     = File.join(REPO_ROOT, "doc", "charts", "pubsub", "backends_tcp.svg")
 COLORS = {
   "ruby" => "#eab308",
   "rust" => "#dc2626",
+  "libzmq" => "#7c3aed",
   "ffi"  => "#7c3aed",
 }
 
 LABELS = {
   "ruby" => "pure Ruby + YJIT",
   "rust" => "Rust (omq-tokio)",
+  "libzmq" => "libzmq",
   "ffi"  => "FFI (libzmq)",
 }
 
-SERIES_ORDER = ["ruby", "rust", "ffi"]
+SERIES_ORDER = ["ruby", "rust", "libzmq", "ffi"]
 
 
 def load_data

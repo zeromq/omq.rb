@@ -10,7 +10,7 @@ module OMQ
     # @param linger [Numeric] linger period in seconds (Float::INFINITY = wait forever, 0 = drop)
     # @param send_hwm [Integer, nil] send high water mark (nil uses default)
     # @param send_timeout [Numeric, nil] send timeout in seconds
-    # @param backend [Symbol, nil] :ruby (default) or :ffi
+    # @param backend [Symbol, nil] registered backend name (:ruby by default)
     #
     def initialize(endpoints = nil, linger: Float::INFINITY, send_hwm: nil, send_timeout: nil, backend: nil, &block)
       init_engine(:PUSH, send_hwm: send_hwm, send_timeout: send_timeout, backend: backend)
@@ -30,7 +30,7 @@ module OMQ
     # @param endpoints [String, nil] endpoint to bind/connect
     # @param recv_hwm [Integer, nil] receive high water mark (nil uses default)
     # @param recv_timeout [Numeric, nil] receive timeout in seconds
-    # @param backend [Symbol, nil] :ruby (default) or :ffi
+    # @param backend [Symbol, nil] registered backend name (:ruby by default)
     #
     def initialize(endpoints = nil, recv_hwm: nil, recv_timeout: nil, backend: nil, &block)
       init_engine(:PULL, recv_hwm: recv_hwm, recv_timeout: recv_timeout, backend: backend)

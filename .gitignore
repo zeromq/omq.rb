@@ -8,3 +8,9 @@
 *.gem
 /TODO
 /bench/results.jsonl
+/gems/*/Gemfile.lock
+/gems/*/pkg/
+/gems/*/tmp/
+/gems/*/target/
+/gems/*/Cargo.lock
+/gems/*/lib/**/*.so

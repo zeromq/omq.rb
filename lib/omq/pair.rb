@@ -13,7 +13,7 @@ module OMQ
     # @param recv_hwm [Integer, nil] receive high water mark (nil uses default)
     # @param send_timeout [Numeric, nil] send timeout in seconds
     # @param recv_timeout [Numeric, nil] receive timeout in seconds
-    # @param backend [Symbol, nil] :ruby (default) or :ffi
+    # @param backend [Symbol, nil] registered backend name (:ruby by default)
     #
     def initialize(endpoints = nil, linger: Float::INFINITY,
                    send_hwm: nil, recv_hwm: nil,

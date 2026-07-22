@@ -1,6 +1,6 @@
 # ØMQ — ZeroMQ for Ruby, no C required
 
-[![CI](https://github.com/zeromq/omq/actions/workflows/ci.yml/badge.svg)](https://github.com/zeromq/omq/actions/workflows/ci.yml)
+[![CI](https://github.com/zeromq/omq.rb/actions/workflows/ci.yml/badge.svg)](https://github.com/zeromq/omq.rb/actions/workflows/ci.yml)
 [![Gem Version](https://img.shields.io/gem/v/omq?color=e9573f)](https://rubygems.org/gems/omq)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
 [![Ruby](https://img.shields.io/badge/Ruby-%3E%3D%203.3-CC342D?logo=ruby&logoColor=white)](https://www.ruby-lang.org)
@@ -216,22 +216,23 @@ See the [omq-cli README](https://github.com/paddor/omq-cli) for full documentati
 
 ## Optional libzmq backend
 
-OMQ ships with an optional libzmq FFI backend. Same socket API, but
-backed by libzmq instead of the pure Ruby ZMTP stack. Useful when you
-need libzmq-specific features or for verifying wire compatibility.
+Install `omq-backend-libzmq` for a Ruby 4.0+ libzmq backend. Same socket
+API, but backed by libzmq instead of the pure Ruby ZMTP stack. Useful
+when you need libzmq-specific features or for verifying wire
+compatibility.
 
 ```ruby
-require "omq/ffi"
-push = OMQ::PUSH.new(backend: :ffi)
+require "omq/backend/libzmq"
+push = OMQ::PUSH.new(backend: :libzmq)
 ```
 
 Requires the `ffi` gem and a system libzmq 4.x. `ffi` is not a runtime
-dependency of `omq` — install it explicitly (`gem install ffi`) if you
-want the `:ffi` backend.
+dependency of `omq`. The old `require "omq/ffi"` and `backend: :ffi`
+names still work.
 
 ## Companion Gems
 
-- **[omq-ractor](https://github.com/paddor/omq-ractor)** — bridge OMQ sockets
+- **[omq-ractor](gems/omq-ractor)** — bridge OMQ sockets
   into Ruby Ractors for true parallel processing across cores. I/O stays on the
   main Ractor, worker Ractors do pure computation.
 
@@ -242,10 +243,10 @@ peers must use the same scheme — a `tcp://` peer cannot talk to a
 `zstd+tcp://` peer. The ZMTP handshake itself runs over plain TCP; only
 post-handshake message parts are compressed.
 
-- **[omq-lz4](https://github.com/paddor/omq-lz4)** — `lz4+tcp://`.
-  LZ4 per-part compression. ~4–8× faster encode than zstd, ~16 KiB per
+- **[omq-lz4](gems/omq-lz4)** — `lz4+tcp://`.
+  LZ4 per-part compression. ~4-8x faster encode than zstd, ~16 KiB per
   connection. Use for CPU- or memory-scarce deployments.
-- **[omq-zstd](https://github.com/paddor/omq-zstd)** — `zstd+tcp://`.
+- **[omq-zstd](gems/omq-zstd)** — `zstd+tcp://`.
   Zstandard per-part compression. Best ratio; ~256 KiB encoder state per
   connection. Use when bandwidth matters more than CPU.
 
@@ -254,13 +255,10 @@ post-handshake message parts are compressed.
 Optional plug-ins that extend the ZMTP wire protocol. Each is a separate gem;
 load the ones you need.
 
-- **[omq-qos](https://github.com/paddor/omq-qos)** — MQTT-style at-least-once
+- **[omq-qos](gems/omq-qos)** — MQTT-style at-least-once
   delivery. Receivers send an ACK command frame keyed by xxHash digest;
   unacked messages re-enqueue to the next peer on disconnect. PUSH/PULL,
-  SCATTER/GATHER, REQ/REP only — fan-out patterns are out of scope.
-- **[omq-blake3zmq](https://github.com/paddor/omq-blake3zmq)** — experimental
-  security mechanism replacing CurveZMQ with X25519 + ChaCha20-BLAKE3 AEAD
-  and BLAKE3 transcript hashing. Not audited; use CurveZMQ for production.
+  SCATTER/GATHER, REQ/REP only. Fan-out patterns are out of scope.
 
 ## Development
 
@@ -272,17 +270,17 @@ bundle exec rake
 ### Full development setup
 
 Set `OMQ_DEV=1` to tell Bundler to load sibling projects from source
-(protocol-zmtp, omq-zstd ,nuckle, etc.) instead of released gems.
+(protocol-zmtp, nuckle, lz4rip, zrip, etc.) instead of released gems.
 This is required for running benchmarks and for testing changes across
 the stack.
 
 ```sh
 # clone OMQ and its sibling repos into the same parent directory
-git clone https://github.com/paddor/omq.git
+git clone https://github.com/zeromq/omq.rb.git omq
 git clone https://github.com/paddor/protocol-zmtp.git
-git clone https://github.com/paddor/omq-zstd.git
-git clone https://github.com/paddor/omq-ractor.git
 git clone https://github.com/paddor/nuckle.git
+git clone https://github.com/paddor/lz4rip-rb.git lz4rip
+git clone https://github.com/paddor/zrip-rb.git zrip
 
 cd omq
 OMQ_DEV=1 bundle install

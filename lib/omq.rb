@@ -7,6 +7,7 @@ require "io/stream"
 # Core
 require_relative "omq/version"
 require_relative "omq/constants"
+require_relative "omq/backend"
 require_relative "omq/reactor"
 require_relative "omq/options"
 require_relative "omq/routing"
@@ -24,6 +25,7 @@ require_relative "omq/routing/xsub"
 require_relative "omq/routing/push"
 require_relative "omq/routing/pull"
 require_relative "omq/engine"
+OMQ::Backend.register(:ruby, OMQ::Engine)
 
 # Transport
 require_relative "omq/transport/inproc"
