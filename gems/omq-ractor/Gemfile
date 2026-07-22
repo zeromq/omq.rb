@@ -6,7 +6,7 @@ gemspec
 
 ROOT     = File.expand_path("../..", __dir__)
 
-gem "omq",           path: ENV["OMQ_DEV"] ? ROOT : nil
-gem "protocol-zmtp", path: ENV["OMQ_DEV"] ? File.join(ROOT, "gems/protocol-zmtp") : nil
+gem "omq",           path: ROOT
+gem "protocol-zmtp", path: File.join(ROOT, "gems/protocol-zmtp")
 gem "minitest"
 gem "rake"

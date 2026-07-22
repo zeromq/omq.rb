@@ -1,7 +1,13 @@
 # frozen_string_literal: true
 
-require "bundler/gem_tasks"
-Bundler::GemHelper.tag_prefix = "omq-qos-"
+require "rake/clean"
+CLOBBER.include "pkg"
+
+require "bundler/gem_helper"
+Bundler::GemHelper.new.tap do |gem_helper|
+  gem_helper.tag_prefix = "omq-qos-"
+  gem_helper.install
+end
 
 require "rake/testtask"
 

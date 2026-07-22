@@ -7,14 +7,14 @@ gemspec
 ROOT     = File.expand_path("../..", __dir__)
 SIBLINGS = File.expand_path("../../..", __dir__)
 
-gem "omq",           path: ENV["OMQ_DEV"] ? ROOT : nil
-gem "protocol-zmtp", path: ENV["OMQ_DEV"] ? File.join(ROOT, "gems/protocol-zmtp") : nil
+gem "omq",           path: ROOT
+gem "protocol-zmtp", path: File.join(ROOT, "gems/protocol-zmtp")
 gem "lz4rip",        "~> 0.1.1", path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "lz4rip") : nil
 
 # Optional: bench/head_to_head.rb compares omq-lz4 vs omq-zstd
 # side-by-side. Only loaded when that bench is run.
 group :bench do
-  gem "omq-zstd", path: ENV["OMQ_DEV"] ? File.join(ROOT, "gems/omq-zstd") : nil
+  gem "omq-zstd", path: File.join(ROOT, "gems/omq-zstd")
   gem "zrip",     "~> 0.1.1", path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "zrip") : nil
 end
 
