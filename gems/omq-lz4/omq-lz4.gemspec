@@ -10,9 +10,7 @@ Gem::Specification.new do |s|
   s.summary     = "LZ4+TCP transport for OMQ"
   s.description = "Adds lz4+tcp:// endpoint support to OMQ with per-part " \
                   "LZ4 block-format compression, bounded decompression, " \
-                  "and in-band dictionary shipping. Complementary to " \
-                  "omq-zstd: worse ratio, far faster encode, far smaller " \
-                  "per-connection footprint."
+                  "in-band dictionary shipping, and automatic dictionary training."
   s.homepage    = "https://github.com/zeromq/omq.rb/tree/main/gems/omq-lz4"
   s.license     = "ISC"
 

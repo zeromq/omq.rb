@@ -4,11 +4,18 @@
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
 [![Ruby](https://img.shields.io/badge/Ruby-%3E%3D%204.0-CC342D?logo=ruby&logoColor=white)](https://www.ruby-lang.org)
 
-Zstandard-compressed TCP transport for [OMQ](https://github.com/zeromq/omq.rb).
+Experimental Zstandard-compressed TCP transport for
+[OMQ](https://github.com/zeromq/omq.rb).
+
+Use [`omq-lz4`](../omq-lz4) for new compressed TCP work. OMQ.rs removed
+`zstd+tcp://` to reduce transport complexity after lz4rip gained
+dictionary training. This gem remains for research, comparison, and
+cases where zstd ratio matters more than transport simplicity.
+
 Pick `zstd+tcp://` instead of `tcp://` and every message part on the wire is
 compressed per-part with [Zstandard](https://github.com/facebook/zstd).
 Compression is intrinsic to the transport: no negotiation, no socket option,
-no payload changes. The ZMTP handshake runs over plain TCP; only
+no payload changes. The ZMTP handshake runs over plain TCP. Only
 post-handshake message parts are compressed.
 
 See [RFC.md](RFC.md) for the wire-format specification and
@@ -170,7 +177,7 @@ It is **not** worth it for:
 `require "omq/zstd"` registers the `zstd+tcp` scheme on
 `OMQ::Engine.transports`. A `zstd+tcp` socket builds a per-engine
 `Codec` (one Zstd dictionary instance shared across all the socket's
-connections; fan-out compresses each part exactly once). Each accepted
+connections. Fan-out compresses each part exactly once). Each accepted
 or dialed TCP connection is wrapped in `ZstdConnection`, a
 `SimpleDelegator` over the underlying ZMTP connection that intercepts
 `#send_message` / `#write_message` / `#receive_message`. Message parts

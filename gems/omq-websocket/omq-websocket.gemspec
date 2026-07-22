@@ -20,7 +20,7 @@ Gem::Specification.new do |s|
   s.files = Dir["lib/**/*.rb", "README.md", "LICENSE", "CHANGELOG.md"]
 
   s.add_dependency "omq",             "~> 0.28"
-  s.add_dependency "protocol-zmtp",   "~> 0.8"
+  s.add_dependency "protocol-zmtp",   "~> 0.10"
   s.add_dependency "async",           "~> 2.38"
   s.add_dependency "async-http",      "~> 0.94"
   s.add_dependency "async-websocket", "~> 0.30"

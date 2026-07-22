@@ -15,7 +15,7 @@ gem "ffi", require: false
 # CURVE tests use Nuckle (pure Ruby, no libsodium).
 # Cross-backend interop tests also use rbnacl when available.
 gem "nuckle",        path: ENV["OMQ_DEV"] ? "../nuckle" : nil
-gem "protocol-zmtp", path: ENV["OMQ_DEV"] ? "../protocol-zmtp" : nil
+gem "protocol-zmtp", path: "gems/protocol-zmtp"
 
 gem "omq-backend-rust",   require: false, path: "gems/omq-backend-rust"
 gem "omq-qos",            require: false, path: "gems/omq-qos"

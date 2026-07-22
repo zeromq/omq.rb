@@ -2,7 +2,7 @@
 
 You don't need Ractors for parallelism. With ZMQ, just fork.
 
-Each forked worker is a separate OS process — true parallelism, no GVL.
+Each forked worker is a separate OS process. True parallelism, no GVL.
 Workers communicate via IPC sockets, same as they would across machines
 via TCP. Scaling from processes on one box to services across a cluster
 is a config change, not a rewrite.
@@ -10,9 +10,9 @@ is a config change, not a rewrite.
 ## Topology
 
 Each worker receives a Marshal'd number, computes `fib(28)` (~2 ms CPU),
-and sends back the Marshal'd result — a realistic compute pipeline.
+and sends back the Marshal'd result. This is a realistic compute pipeline.
 
-**fork + OMQ** — workers are forked processes, PUSH/PULL over IPC:
+**fork + OMQ**: workers are forked processes, PUSH/PULL over IPC:
 
 ```
                    ┌───────────┐
@@ -29,7 +29,7 @@ and sends back the Marshal'd result — a realistic compute pipeline.
                    └───────────┘
 ```
 
-**Ractor::Port** — workers are Ractors, in-process message passing:
+**Ractor::Port**: workers are Ractors, in-process message passing:
 
 ```
              ┌────────┐
