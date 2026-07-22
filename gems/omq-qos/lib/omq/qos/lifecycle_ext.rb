@@ -10,7 +10,13 @@ module OMQ
     module LifecycleExt
       def handshake!(io, as_server:)
         transition!(:handshaking)
-        conn = Protocol::ZMTP::Connection.new io,
+        conn_class =
+          if @transport.respond_to?(:connection_class)
+            @transport.connection_class
+          else
+            Protocol::ZMTP::Connection
+          end
+        conn = conn_class.new io,
           socket_type:      @engine.socket_type.to_s,
           identity:         @engine.options.identity,
           as_server:        as_server,

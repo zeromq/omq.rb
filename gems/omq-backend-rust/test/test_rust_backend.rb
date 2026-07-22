@@ -14,6 +14,34 @@ describe "Rust backend" do
   end
 
 
+  describe "receive lifecycle" do
+    it "honors recv_timeout before bind or connect" do
+      Async do
+        pull = OMQ::PULL.new(backend: BACKEND, recv_timeout: 0.02)
+
+        assert_raises(IO::TimeoutError) { pull.receive }
+      ensure
+        pull&.close
+      end
+    end
+
+
+    it "close_read wakes a blocked receive with nil" do
+      Async do |task|
+        pull = OMQ::PULL.new(backend: BACKEND)
+        reader = task.async { pull.receive }
+
+        sleep 0.05
+        pull.close_read
+
+        assert_nil task.with_timeout(1) { reader.wait }
+      ensure
+        pull&.close
+      end
+    end
+  end
+
+
   describe "PUSH/PULL" do
     it "sends and receives a single message" do
       Async do

@@ -21,7 +21,8 @@ Gem::Specification.new do |s|
   s.files = Dir[
     "lib/**/*.rb",
     "ext/**/*.{rs,rb}",
-    "**/Cargo.toml",
+    "Cargo.toml",
+    "ext/**/Cargo.toml",
     "README.md",
     "LICENSE",
     "CHANGELOG.md",

@@ -41,4 +41,24 @@ describe "REQ/REP over inproc" do
     end
   end
 
+
+  it "preserves multiple routing identity frames through REP" do
+    Async do
+      router = OMQ::ROUTER.bind("ruby://reqrep-router-#{object_id}")
+      rep = OMQ::REP.new
+      rep.identity = "rep-peer"
+      rep.connect("ruby://reqrep-router-#{object_id}")
+      wait_connected(router, rep)
+
+      router.send(["rep-peer", "client-a", "client-b", "", "request"])
+      assert_equal ["request"], rep.receive
+
+      rep.send("reply")
+      assert_equal ["rep-peer", "client-a", "client-b", "", "reply"], router.receive
+    ensure
+      rep&.close
+      router&.close
+    end
+  end
+
 end
