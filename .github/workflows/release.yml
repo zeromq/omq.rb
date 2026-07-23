@@ -151,6 +151,38 @@ jobs:
           BUNDLE_WITHOUT: bench
         with:
           working-directory: ${{ steps.package.outputs.dir }}
+          await-release: false
+
+      - name: Verify RubyGems version
+        env:
+          PACKAGE: ${{ steps.package.outputs.package }}
+          VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          ruby <<'RUBY'
+          require "json"
+          require "net/http"
+          require "uri"
+
+          package  = ENV.fetch("PACKAGE")
+          version  = ENV.fetch("VERSION")
+          endpoint = URI("https://rubygems.org/api/v1/versions/#{package}.json")
+          deadline = Time.now + 180
+
+          loop do
+            response = Net::HTTP.get_response(endpoint)
+            if response.is_a?(Net::HTTPSuccess)
+              versions = JSON.parse(response.body)
+              if versions.any? { |entry| entry["number"] == version }
+                puts "#{package} #{version} is available on RubyGems.org"
+                break
+              end
+            end
+
+            abort "#{package} #{version} did not appear on RubyGems.org" if Time.now >= deadline
+
+            sleep 5
+          end
+          RUBY
 
       - name: Create GitHub Release
         env:
