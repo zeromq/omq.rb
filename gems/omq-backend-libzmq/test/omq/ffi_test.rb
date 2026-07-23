@@ -301,6 +301,57 @@ describe "libzmq backend" do
     assert_raises(ArgumentError) { OMQ::PUSH.new(backend: :bogus) }
   end
 
+  it "bricks the socket when the I/O thread dies" do
+    Async do
+      push = OMQ::PUSH.new(backend: :libzmq)
+      engine = push.engine
+      def engine.drain_sends = raise("ffi boom")
+
+      push << "trigger"
+
+      err = nil
+      deadline = Async::Clock.now + 1.0
+      until err
+        begin
+          push << "again"
+        rescue OMQ::SocketDeadError => e
+          err = e
+        end
+
+        raise "socket did not brick" if Async::Clock.now >= deadline
+
+        sleep 0.01
+      end
+
+      assert_match(/PUSH/, err.message)
+      assert_kind_of RuntimeError, err.cause
+      assert_equal "ffi boom", err.cause.message
+      assert_raises(OMQ::SocketDeadError) { push << "third" }
+    ensure
+      push&.close
+    end
+  end
+
+  it "wakes a waiting command when command processing dies" do
+    Async do
+      push = OMQ::PUSH.new(backend: :libzmq)
+      push.identity = "peer"
+      engine = push.engine
+      def engine.set_bytes_option(*) = raise("cmd boom")
+
+      err = assert_raises(OMQ::SocketDeadError) do
+        push.bind("tcp://127.0.0.1:0")
+      end
+
+      assert_match(/PUSH/, err.message)
+      assert_kind_of RuntimeError, err.cause
+      assert_equal "cmd boom", err.cause.message
+      assert_raises(OMQ::SocketDeadError) { push << "again" }
+    ensure
+      push&.close
+    end
+  end
+
   describe "errno mapping" do
     it "bind to a busy TCP port raises Errno::EADDRINUSE (same as pure Ruby)" do
       Async do

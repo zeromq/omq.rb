@@ -1,8 +1,14 @@
 # frozen_string_literal: true
 
 require "rake/testtask"
-require "bundler/gem_tasks"
-Bundler::GemHelper.tag_prefix = "omq-websocket-"
+require "rake/clean"
+CLOBBER.include "pkg"
+
+require "bundler/gem_helper"
+Bundler::GemHelper.new.tap do |gem_helper|
+  gem_helper.tag_prefix = "omq-websocket-"
+  gem_helper.install
+end
 
 Rake::TestTask.new(:test) do |t|
   t.libs << "test"

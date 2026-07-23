@@ -115,6 +115,7 @@ module OMQ
         @closed         = false
         @parent_task    = nil
         @on_io_thread   = false
+        @fatal_error    = nil
 
         @zmq_socket = L.zmq_socket(OMQ::FFI.context, L::SOCKET_TYPES.fetch(@socket_type))
         raise "zmq_socket failed: #{L.zmq_strerror(L.zmq_errno)}" if @zmq_socket.null?
@@ -271,6 +272,7 @@ module OMQ
       # @param parts [Array<String>] message frames
       # @return [void]
       def enqueue_send(parts)
+        raise_if_dead!
         ensure_io_thread
         @send_queue.push(parts)
         wake_io_thread
@@ -283,8 +285,11 @@ module OMQ
       #
       # @return [Array<String>] multipart message
       def dequeue_recv
+        raise_if_dead!
         ensure_io_thread
-        wait_for_message
+        msg = wait_for_message
+        raise_if_dead! if msg.nil?
+        msg
       end
 
 
@@ -301,6 +306,7 @@ module OMQ
       # @api private
       #
       def send_cmd(cmd, *args)
+        raise_if_dead!
         ensure_io_thread
         result = Thread::Queue.new
         @cmd_queue.push([cmd, args, result])
@@ -357,8 +363,8 @@ module OMQ
           IO.select([zmq_fd_io, @wake_r], nil, nil, 0.1)
           @wake_r.read_nonblock(4096, exception: false)
         end
-      rescue
-        # Thread exit
+      rescue => error
+        signal_fatal_error(error)
       ensure
         # Drain Ruby-side send queue into libzmq, bounded by linger deadline.
         # Then re-apply current linger to libzmq (user may have changed it
@@ -459,6 +465,9 @@ module OMQ
           result&.push(nil)
         end
         true
+      rescue => error
+        result&.push(signal_fatal_error(error))
+        false
       end
 
 
@@ -546,6 +555,56 @@ module OMQ
         len.write(:size_t, ::FFI.type_size(:int))
         L.zmq_getsockopt(@zmq_socket, L::ZMQ_FD, buf, len)
         buf.read_int
+      end
+
+
+      def raise_if_dead!
+        raise @fatal_error if @fatal_error
+      end
+
+
+      # Bricks the socket after an unexpected I/O thread failure. Mirrors
+      # the pure-Ruby engine fatal path: future send/receive/command calls
+      # raise SocketDeadError, and blocked receivers or commands wake up.
+      def signal_fatal_error(error)
+        @fatal_error ||= build_fatal_error(error)
+
+        unblock_recv_waiters
+        fail_pending_cmds
+        @peer_connected.resolve(nil) unless @peer_connected.resolved?
+        @all_peers_gone.resolve(nil) unless @all_peers_gone.resolved?
+        @routing.subscriber_joined.resolve(nil) unless @routing.subscriber_joined.resolved?
+
+        @fatal_error
+      end
+
+
+      def unblock_recv_waiters
+        @recv_queue.push(nil)
+        @recv_signal_w.write_nonblock(".", exception: false) rescue nil
+      end
+
+
+      def fail_pending_cmds
+        loop do
+          _name, _args, result = @cmd_queue.pop(true)
+          result&.push(@fatal_error)
+        rescue ThreadError
+          break
+        end
+      end
+
+
+      def build_fatal_error(error)
+        return error if error.is_a?(SocketDeadError)
+
+        raise error
+      rescue
+        begin
+          raise SocketDeadError, "#{@socket_type} socket killed: #{error.message}"
+        rescue SocketDeadError => wrapped
+          wrapped
+        end
       end
 
 

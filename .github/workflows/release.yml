@@ -131,7 +131,12 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ steps.package.outputs.ruby }}
-          bundler-cache: true
+
+      - name: Install package bundle
+        working-directory: ${{ steps.package.outputs.dir }}
+        env:
+          BUNDLE_WITHOUT: bench
+        run: bundle install --jobs 4 --retry 3
 
       - name: Verify tag version
         working-directory: ${{ steps.package.outputs.dir }}
