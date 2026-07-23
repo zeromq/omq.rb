@@ -17,8 +17,8 @@ curve   = ["omq-tokio/curve"]
 lz4     = ["omq-tokio/lz4"]
 
 [dependencies]
-omq-proto = { version = "=0.23.1", default-features = false }
-omq-tokio = { version = "=0.19.2", default-features = false }
+omq-proto = { version = "=0.23.2", default-features = false }
+omq-tokio = { version = "=0.19.3", default-features = false }
 tokio     = { version = "1.52.0", features = ["rt", "rt-multi-thread", "time", "sync", "io-util", "net"] }
 yring     = { version = "0.3.8", features = ["async"] }
 

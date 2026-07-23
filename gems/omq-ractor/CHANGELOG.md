@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## 0.1.7 - 2026-07-23
+
 ### Changed
 
 - Moved release source to the `zeromq/omq.rb` monorepo.
