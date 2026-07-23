@@ -136,7 +136,9 @@ jobs:
         working-directory: ${{ steps.package.outputs.dir }}
         env:
           BUNDLE_WITHOUT: bench
-        run: bundle install --jobs 4 --retry 3
+        run: |
+          bundle config set --local without bench
+          bundle install --jobs 4 --retry 3
 
       - name: Verify tag version
         working-directory: ${{ steps.package.outputs.dir }}
@@ -145,6 +147,8 @@ jobs:
 
       - name: Publish to RubyGems
         uses: rubygems/release-gem@v1
+        env:
+          BUNDLE_WITHOUT: bench
         with:
           working-directory: ${{ steps.package.outputs.dir }}
 
