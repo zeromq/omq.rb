@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.0 - 2026-07-23
+
 - Initial release. Adds `ws://` and `wss://` transports to OMQ
   implementing ZeroMQ RFC 45 (ZWS 2.0). Both schemes register on
   `require "omq/transport/websocket"`.

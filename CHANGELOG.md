@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## 0.28.1 - 2026-07-23
+
 ### Changed
 
 - Consolidated optional OMQ gems into this repository under `gems/`.

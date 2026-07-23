@@ -2,9 +2,11 @@
 
 ## [Unreleased]
 
+## 0.1.1 - 2026-07-23
+
 ### Changed
 
-- Updated to `omq-tokio` 0.19.2 and `omq-proto` 0.23.1.
+- Updated to `omq-tokio` 0.19.3 and `omq-proto` 0.23.2.
 - Removed obsolete Blake3ZMQ support.
 - Moved release source to the `zeromq/omq.rb` monorepo.
 
