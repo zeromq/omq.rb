@@ -12,6 +12,8 @@ fn set_io_threads(n: usize) {
 
 #[magnus::init]
 fn init(ruby: &Ruby) -> Result<(), Error> {
+    unsafe { rb_sys::rb_ext_ractor_safe(true) };
+
     let omq = ruby.define_module("OMQ")?;
     let rust = omq.define_module("Rust")?;
     let native = rust.define_module("Native")?;

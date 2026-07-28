@@ -60,9 +60,10 @@ module OMQ
   # Call this once before spawning any Ractors that create OMQ sockets.
   #
   def self.freeze_for_ractors!
-    CONNECTION_LOST.freeze
-    CONNECTION_FAILED.freeze
-    Engine.transports.freeze
-    Routing.registry.freeze
+    ::Ractor.make_shareable(CONNECTION_LOST)
+    ::Ractor.make_shareable(CONNECTION_FAILED)
+    Backend.freeze_for_ractors!
+    ::Ractor.make_shareable(Engine.transports)
+    ::Ractor.make_shareable(Routing.registry)
   end
 end
