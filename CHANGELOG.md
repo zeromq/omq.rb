@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## 0.28.2 - 2026-07-28
+
+### Fixed
+
+- Made `OMQ.freeze_for_ractors!` freeze all global registries with
+  `Ractor.make_shareable`.
+- Kept backend registration usable after a Ractor freeze via copy-on-write
+  registry updates.
+
 ## 0.28.1 - 2026-07-23
 
 ### Changed
