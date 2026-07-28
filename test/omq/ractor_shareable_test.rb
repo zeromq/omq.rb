@@ -5,6 +5,10 @@ require_relative "../test_helper"
 
 describe "OMQ.freeze_for_ractors!" do
   it "allows socket construction inside a Ractor" do
+    if Gem::Version.new(RUBY_VERSION) < Gem::Version.new("4.0")
+      skip "Ruby 4.0+ Ractor API required"
+    end
+
     OMQ.freeze_for_ractors!
 
     ractor = ::Ractor.new do
