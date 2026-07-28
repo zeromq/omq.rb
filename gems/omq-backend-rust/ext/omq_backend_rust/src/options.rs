@@ -104,8 +104,7 @@ fn apply_mechanism(
                     };
                     opts.mechanism = omq_proto::MechanismSetup::CurveServer {
                         our_keypair: keypair,
-                        cookie_keyring: std::sync::Arc::new(omq_proto::CurveCookieKeyring::new()),
-                        authenticator: None,
+                        options: omq_proto::CurveServerOptions::default(),
                     };
                 }
             } else {
