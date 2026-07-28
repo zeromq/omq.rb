@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## 0.1.2 - 2026-07-28
+
+### Changed
+
+- Updated to `omq-tokio` 0.20.1 and `omq-proto` 0.24.1.
+- Marked the native extension Ractor-safe for Ruby 4 Ractors.
+- Adapted CURVE server setup to `CurveServerOptions`.
+
 ## 0.1.1 - 2026-07-23
 
 ### Changed
