@@ -34,8 +34,9 @@ walkthrough of every major pattern with working code.
   knife for ØMQ. `gem install omq-cli`
 - **Every socket pattern**: req/rep, pub/sub, push/pull, dealer/router,
   xpub/xsub, pair, and all draft types
-- **Every transport**: tcp, ipc (Unix domain sockets), inproc (in-process
-  queues)
+- **Every transport**: tcp, ipc (Unix domain sockets), ruby/inproc
+  (in-process queues). `inproc://` aliases `ruby://` unless a backend
+  provides native inproc
 - **Async-native**: built on fibers, non-blocking from the ground up
 - **Works outside Async too**: a shared IO thread handles sockets for callers
   that aren't inside a reactor, so simple scripts just work

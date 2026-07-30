@@ -13,8 +13,8 @@ module OMQ
     # serialization. Parts are already frozen by Writable#send, so the
     # receiver sees the same immutable contract as ZMTP transports.
     #
-    # The inproc:// scheme is reserved for native backends (FFI/libzmq,
-    # Rust/omq-tokio) which have their own in-process registries.
+    # inproc:// is treated as a compatibility alias by the Ruby backend
+    # unless a backend or plugin registers a real inproc transport.
     #
     module Inproc
       Engine.transports["ruby"] = self
@@ -38,6 +38,17 @@ module OMQ
         attr_reader :registry
 
 
+        # Canonicalizes compatibility aliases so ruby:// and inproc://
+        # share the same in-process endpoint namespace.
+        #
+        # @param endpoint [String]
+        # @return [String]
+        #
+        def canonical_endpoint(endpoint)
+          endpoint.sub(/\Ainproc:\/\//, "ruby://")
+        end
+
+
         # Creates a bound inproc listener.
         #
         # @param endpoint [String] e.g. "ruby://my-endpoint"
@@ -46,6 +57,8 @@ module OMQ
         # @raise [ArgumentError] if endpoint is already bound
         #
         def listener(endpoint, engine, **)
+          endpoint = canonical_endpoint(endpoint)
+
           @mutex.synchronize do
             if @registry.key?(endpoint)
               raise ArgumentError, "endpoint already bound: #{endpoint}"
@@ -68,6 +81,7 @@ module OMQ
         # @return [void]
         #
         def connect(endpoint, engine, **)
+          endpoint     = canonical_endpoint(endpoint)
           bound_engine = @mutex.synchronize { @registry[endpoint] }
           bound_engine ||= await_bind(endpoint, engine) or return
           establish_link(engine, bound_engine, endpoint)
@@ -80,6 +94,7 @@ module OMQ
         # @return [void]
         #
         def unbind(endpoint)
+          endpoint = canonical_endpoint(endpoint)
           @mutex.synchronize { @registry.delete(endpoint) }
         end
 

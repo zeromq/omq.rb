@@ -484,6 +484,26 @@ describe "Rust backend" do
   end
 
 
+  describe "inproc transport" do
+    it "uses the native Rust inproc endpoint" do
+      Async do
+        endpoint = "inproc://rust-inproc-#{object_id}"
+        pull = OMQ::PULL.new(backend: BACKEND)
+        pull.bind(endpoint)
+        push = OMQ::PUSH.new(backend: BACKEND)
+        push.connect(endpoint)
+        push.peer_connected.wait
+
+        push << "inproc-msg"
+        assert_equal ["inproc-msg"], pull.receive
+      ensure
+        push&.close
+        pull&.close
+      end
+    end
+  end
+
+
   describe "IPC transport" do
     it "sends over Unix socket" do
       Async do

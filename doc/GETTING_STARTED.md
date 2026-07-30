@@ -481,7 +481,7 @@ of "my broker doesn't work" bugs.
 | tcp            | `tcp://host:port`       | Cross-machine. Bread and butter.     |
 | ipc            | `ipc:///tmp/feed.sock`  | Unix domain socket. Fast, local.     |
 | ipc (abstract) | `ipc://@name`           | Linux abstract namespace. No file.   |
-| inproc         | `inproc://name`         | Inter-fiber/thread. Sub-µs. Fastest. |
+| ruby/inproc    | `ruby://name`, `inproc://name` | Inter-fiber/thread. Sub-µs. Fastest. `inproc://` aliases `ruby://` unless a backend provides native inproc. |
 
 ```ruby
 Async do

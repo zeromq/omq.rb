@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Made `inproc://` a compatibility alias for `ruby://` when no backend or
+  plugin registers a real `inproc` transport.
+
 ## 0.28.2 - 2026-07-28
 
 ### Fixed
