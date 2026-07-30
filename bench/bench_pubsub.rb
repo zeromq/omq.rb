@@ -74,7 +74,7 @@ end
 def detect_backends
   available = ["ruby"]
 
-  { "rust" => "omq/rust", "libzmq" => "omq/backend/libzmq" }.each do |backend, lib|
+  { "rust" => "omq/backend/rust", "libzmq" => "omq/backend/libzmq" }.each do |backend, lib|
     check = IO.popen(
       [RUBY_BIN, "-e", "require 'bundler/setup'; require '#{lib}'; puts 'ok'"],
       err: File::NULL

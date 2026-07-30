@@ -8,7 +8,7 @@
 #   ruby bench/bench_peer.rb pull <endpoint> <msg_size> <duration>
 #
 # Environment:
-#   OMQ_BENCH_BACKEND  "ruby" (default), "rust", "libzmq", or "ffi"
+#   OMQ_BENCH_BACKEND  "ruby" (default), "rust", or "libzmq"
 
 $VERBOSE = nil
 $stdout.sync = true
@@ -25,11 +25,9 @@ BACKEND = (ENV.fetch("OMQ_BENCH_BACKEND", "ruby")).to_sym
 
 case BACKEND
 when :rust
-  require "omq/rust"
+  require "omq/backend/rust"
 when :libzmq
   require "omq/backend/libzmq"
-when :ffi
-  require "omq/ffi"
 end
 
 WARMUP_DURATION = 0.5
@@ -111,7 +109,7 @@ def run_pub(endpoint, msg_size)
     end
 
     case BACKEND
-    when :rust, :libzmq, :ffi
+    when :rust, :libzmq
       pub.peer_connected.wait
     else
       pub.subscriber_joined.wait

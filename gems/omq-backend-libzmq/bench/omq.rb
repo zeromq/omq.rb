@@ -30,7 +30,7 @@ def measure_throughput(backend, payload, n)
 
     push = OMQ::PUSH.new(backend: backend)
     push.connect("tcp://127.0.0.1:#{port}")
-    sleep 0.05 if backend == :libzmq || backend == :ffi
+    sleep 0.05 if backend == :libzmq
 
     100.times do
       push << payload
@@ -57,7 +57,7 @@ def measure_roundtrip(backend, payload, n)
 
     req = OMQ::REQ.new(backend: backend)
     req.connect("tcp://127.0.0.1:#{port}")
-    sleep 0.05 if backend == :libzmq || backend == :ffi
+    sleep 0.05 if backend == :libzmq
 
     responder = task.async do
       loop do
@@ -128,7 +128,7 @@ def measure_dealer(backend, payload, n, peers:)
       d.connect("tcp://127.0.0.1:#{port}")
       d
     end
-    sleep 0.05 if backend == :libzmq || backend == :ffi
+    sleep 0.05 if backend == :libzmq
 
     per_dealer = n / dealers.size
     100.times do

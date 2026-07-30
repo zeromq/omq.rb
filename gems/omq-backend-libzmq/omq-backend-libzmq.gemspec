@@ -5,7 +5,7 @@ Gem::Specification.new do |s|
   s.version  = "0.3.2"
   s.authors  = ["Patrik Wenger"]
   s.email    = ["paddor@gmail.com"]
-  s.summary  = "libzmq backend for OMQ using FFI"
+  s.summary  = "libzmq backend for OMQ"
   s.homepage = "https://github.com/zeromq/omq.rb/tree/main/gems/omq-backend-libzmq"
   s.license  = "ISC"
 

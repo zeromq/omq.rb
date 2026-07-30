@@ -3,12 +3,13 @@
 require "ffi"
 
 module OMQ
-  module FFI
-    # Minimal libzmq FFI bindings — only what OMQ needs.
-    #
+  module Backend
     module Libzmq
-      extend ::FFI::Library
-      ffi_lib ["libzmq.so.5", "libzmq.5.dylib", "libzmq"]
+      # Minimal libzmq FFI bindings — only what OMQ needs.
+      #
+      module Native
+        extend ::FFI::Library
+        ffi_lib ["libzmq.so.5", "libzmq.5.dylib", "libzmq"]
 
       # Context
       attach_function :zmq_ctx_new,  [], :pointer
@@ -128,6 +129,7 @@ module OMQ
         return rc if rc >= 0
         errno = zmq_errno
         raise "#{label}: #{zmq_strerror(errno)} (errno #{errno})"
+      end
       end
     end
   end

@@ -34,8 +34,9 @@ walkthrough of every major pattern with working code.
   knife for ØMQ. `gem install omq-cli`
 - **Every socket pattern**: req/rep, pub/sub, push/pull, dealer/router,
   xpub/xsub, pair, and all draft types
-- **Every transport**: tcp, ipc (Unix domain sockets), inproc (in-process
-  queues)
+- **Every transport**: tcp, ipc (Unix domain sockets), ruby/inproc
+  (in-process queues). `inproc://` aliases `ruby://` unless a backend
+  provides native inproc
 - **Async-native**: built on fibers, non-blocking from the ground up
 - **Works outside Async too**: a shared IO thread handles sockets for callers
   that aren't inside a reactor, so simple scripts just work
@@ -214,6 +215,16 @@ echo "hello" | omq req -c tcp://localhost:5555
 
 See the [omq-cli README](https://github.com/paddor/omq-cli) for full documentation.
 
+## Optional Rust backend
+
+Install `omq-backend-rust` for a Rust/omq-tokio backend. Same socket API,
+but connection handling runs in native code on a Tokio runtime.
+
+```ruby
+require "omq/backend/rust"
+push = OMQ::PUSH.new(backend: :rust)
+```
+
 ## Optional libzmq backend
 
 Install `omq-backend-libzmq` for a Ruby 4.0+ libzmq backend. Same socket
@@ -227,8 +238,7 @@ push = OMQ::PUSH.new(backend: :libzmq)
 ```
 
 Requires the `ffi` gem and a system libzmq 4.x. `ffi` is not a runtime
-dependency of `omq`. The old `require "omq/ffi"` and `backend: :ffi`
-names still work.
+dependency of `omq`.
 
 ## Companion Gems
 

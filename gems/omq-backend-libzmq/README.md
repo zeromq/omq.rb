@@ -22,8 +22,6 @@ socket API, options, and Async integration remain identical. A dedicated
 I/O thread per socket handles all libzmq operations because libzmq
 sockets are not thread-safe.
 
-`require "omq/ffi"` and `backend: :ffi` remain supported for compatibility.
-
 ## Interop
 
 libzmq and native Ruby backends are wire-compatible. You can mix them

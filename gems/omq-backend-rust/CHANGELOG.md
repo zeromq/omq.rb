@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `require "omq/backend/rust"` as the canonical backend load path.
+
+### Removed
+
+- Removed the old `require "omq/rust"` load path.
+
 ## 0.1.2 - 2026-07-28
 
 ### Changed

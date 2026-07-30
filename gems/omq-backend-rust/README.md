@@ -26,7 +26,7 @@ gem install omq-backend-rust
 
 ```ruby
 require "omq"
-require "omq/rust"
+require "omq/backend/rust"
 
 Async do
   push = OMQ::PUSH.new(backend: :rust)
