@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.28.4] - 2026-07-30
+
 ### Fixed
 
 - Exposed `conflate` through the public socket option accessors.

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-07-30
+
 ### Fixed
 
 - Accepted Ruby string identities when materializing Rust sockets.
