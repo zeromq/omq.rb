@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-07-30
+
 ### Changed
 
 - Moved implementation files under `lib/omq/backend/libzmq`.

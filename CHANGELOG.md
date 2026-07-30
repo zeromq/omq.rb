@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.28.3] - 2026-07-30
+
 ### Added
 
 - Made `inproc://` a compatibility alias for `ruby://` when no backend or
