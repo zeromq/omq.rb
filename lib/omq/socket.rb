@@ -55,6 +55,7 @@ module OMQ
       :write_timeout,         :write_timeout=,
       :router_mandatory,      :router_mandatory=,
       :router_mandatory?,
+      :conflate,              :conflate=,
       :reconnect_interval,    :reconnect_interval=,
       :heartbeat_interval,    :heartbeat_interval=,
       :heartbeat_ttl,         :heartbeat_ttl=,

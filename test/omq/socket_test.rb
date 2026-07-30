@@ -35,6 +35,49 @@ describe OMQ::Socket do
     end
   end
 
+  describe "options" do
+    it "exposes every core option through socket accessors" do
+      socket = OMQ::PUSH.new
+      mechanism = Protocol::ZMTP::Mechanism::Null.new
+
+      options = {
+        send_hwm: 10,
+        recv_hwm: 11,
+        linger: 0,
+        identity: "sock-1",
+        read_timeout: 0.1,
+        write_timeout: 0.2,
+        router_mandatory: true,
+        reconnect_interval: 0.3,
+        heartbeat_interval: 0.4,
+        heartbeat_ttl: 0.5,
+        heartbeat_timeout: 0.6,
+        max_message_size: 42,
+        conflate: true,
+        sndbuf: 1024,
+        rcvbuf: 2048,
+        on_mute: :drop_newest,
+        mechanism: mechanism,
+      }
+
+      options.each do |name, value|
+        socket.public_send("#{name}=", value)
+
+        assert_equal value, socket.public_send(name)
+      end
+
+      socket.recv_timeout = 0.7
+      socket.send_timeout = 0.8
+
+      assert_equal 0.7, socket.recv_timeout
+      assert_equal 0.7, socket.read_timeout
+      assert_equal 0.8, socket.send_timeout
+      assert_equal 0.8, socket.write_timeout
+    ensure
+      socket&.close
+    end
+  end
+
   describe "empty and binary messages" do
     it "handles empty string message" do
       Async do
