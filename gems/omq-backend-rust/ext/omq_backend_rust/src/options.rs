@@ -19,7 +19,7 @@ pub fn build_options(ruby: &Ruby, hash: RHash) -> Result<omq_tokio::Options, Err
             Some(Duration::from_secs_f64(v))
         };
     }
-    if let Some(v) = get_opt::<Vec<u8>>(ruby, hash, "identity")? {
+    if let Some(v) = get_opt_bytes(ruby, hash, "identity")? {
         if !v.is_empty() {
             opts.identity = Bytes::from(v);
         }

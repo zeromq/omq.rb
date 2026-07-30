@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Accepted Ruby string identities when materializing Rust sockets.
+
 ## [0.1.3] - 2026-07-30
 
 ### Added

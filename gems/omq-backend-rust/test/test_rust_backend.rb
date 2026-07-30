@@ -14,6 +14,44 @@ describe "Rust backend" do
   end
 
 
+  describe "socket options" do
+    it "materializes options set through public accessors" do
+      option_cases = [
+        [:send_hwm, 2],
+        [:recv_hwm, 2],
+        [:linger, 0],
+        [:identity, "D1"],
+        [:recv_timeout, 0.1],
+        [:send_timeout, 0.1],
+        [:read_timeout, 0.1],
+        [:write_timeout, 0.1],
+        [:router_mandatory, true],
+        [:reconnect_interval, 0.01],
+        [:reconnect_interval, 0.01..0.1],
+        [:heartbeat_interval, 0.1],
+        [:heartbeat_ttl, 0.1],
+        [:heartbeat_timeout, 0.1],
+        [:max_message_size, 4096],
+        [:conflate, true],
+        [:sndbuf, 4096],
+        [:rcvbuf, 4096],
+        [:on_mute, :drop_newest],
+        [:mechanism, Protocol::ZMTP::Mechanism::Null.new],
+      ]
+
+      option_cases.each do |name, value|
+        dealer = OMQ::DEALER.new(backend: BACKEND)
+        dealer.public_send("#{name}=", value)
+
+        assert_equal value, dealer.public_send(name)
+        assert_instance_of URI::Generic, dealer.bind("tcp://127.0.0.1:0")
+      ensure
+        dealer&.close
+      end
+    end
+  end
+
+
   describe "receive lifecycle" do
     it "honors recv_timeout before bind or connect" do
       Async do
@@ -186,16 +224,16 @@ describe "Rust backend" do
       Async do
         router = OMQ::ROUTER.new(backend: BACKEND)
         port = bind_port(router)
-        dealer = OMQ::DEALER.new(backend: BACKEND, identity: "D1")
+        dealer = OMQ::DEALER.new(backend: BACKEND)
+        dealer.identity = "D1"
         dealer.connect("tcp://127.0.0.1:#{port}")
         dealer.peer_connected.wait
 
         dealer << "request"
         msg = router.receive
-        assert_equal 3, msg.size
+        assert_equal 2, msg.size
         identity = msg[0]
-        assert_equal "", msg[1]
-        assert_equal "request", msg[2]
+        assert_equal "request", msg[1]
 
         router.send([identity, "", "reply"])
         assert_equal ["", "reply"], dealer.receive
