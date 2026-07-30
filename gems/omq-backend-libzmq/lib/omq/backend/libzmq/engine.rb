@@ -4,15 +4,16 @@ require "async"
 require "uri"
 
 module OMQ
-  module FFI
-    # FFI Engine — wraps a libzmq socket to implement the OMQ Engine contract.
-    #
-    # A dedicated I/O thread owns the zmq_socket exclusively (libzmq sockets
-    # are not thread-safe). Send and recv flow through queues, with an IO pipe
-    # to wake the Async fiber scheduler.
-    #
-    class Engine
-      L = Libzmq
+  module Backend
+    module Libzmq
+      # Engine — wraps a libzmq socket to implement the OMQ Engine contract.
+      #
+      # A dedicated I/O thread owns the zmq_socket exclusively (libzmq sockets
+      # are not thread-safe). Send and recv flow through queues, with an IO pipe
+      # to wake the Async fiber scheduler.
+      #
+      class Engine
+        L = Native
 
 
       # @return [Options] socket options
@@ -34,7 +35,7 @@ module OMQ
       alias on_io_thread? on_io_thread
       # @param value [Boolean] enables or disables automatic reconnection
       attr_writer :reconnect_enabled
-      # @note Monitor events are not yet emitted by the FFI backend; these
+      # @note Monitor events are not yet emitted by the libzmq backend; these
       #   writers exist so Socket#monitor can attach without raising. Wiring
       #   libzmq's zmq_socket_monitor is a TODO.
       attr_writer :monitor_queue, :verbose_monitor
@@ -117,7 +118,7 @@ module OMQ
         @on_io_thread   = false
         @fatal_error    = nil
 
-        @zmq_socket = L.zmq_socket(OMQ::FFI.context, L::SOCKET_TYPES.fetch(@socket_type))
+        @zmq_socket = L.zmq_socket(OMQ::Backend::Libzmq.context, L::SOCKET_TYPES.fetch(@socket_type))
         raise "zmq_socket failed: #{L.zmq_strerror(L.zmq_errno)}" if @zmq_socket.null?
 
         apply_options
@@ -247,7 +248,7 @@ module OMQ
 
       # Captures the current Async task as the parent for I/O scheduling.
       # +parent:+ is accepted for API compatibility with the pure-Ruby
-      # engine but has no effect: the FFI backend runs its own I/O
+      # engine but has no effect: the libzmq backend runs its own I/O
       # thread and doesn't participate in the Async barrier tree.
       #
       # @return [void]
@@ -686,18 +687,19 @@ module OMQ
       end
 
 
-    end
+      end
 
 
-    # Returns the shared ZMQ context (one per process, lazily initialized).
-    #
-    # @return [FFI::Pointer] zmq context pointer
-    def self.context
-      @context ||= Libzmq.zmq_ctx_new.tap do |ctx|
-        raise "zmq_ctx_new failed" if ctx.null?
-        at_exit do
-          Libzmq.zmq_ctx_shutdown(ctx) rescue nil
-          Libzmq.zmq_ctx_term(ctx) rescue nil
+      # Returns the shared ZMQ context (one per process, lazily initialized).
+      #
+      # @return [FFI::Pointer] zmq context pointer
+      def self.context
+        @context ||= Native.zmq_ctx_new.tap do |ctx|
+          raise "zmq_ctx_new failed" if ctx.null?
+          at_exit do
+            Native.zmq_ctx_shutdown(ctx) rescue nil
+            Native.zmq_ctx_term(ctx) rescue nil
+          end
         end
       end
     end

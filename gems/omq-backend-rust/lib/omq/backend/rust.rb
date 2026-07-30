@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 require "omq"
-require "omq/rust/omq_backend_rust"
-require_relative "rust/version"
-require_relative "rust/engine"
+require_relative "../rust/omq_backend_rust"
+require_relative "../rust/version"
+require_relative "../rust/engine"
 
 module OMQ
   module Rust

@@ -330,8 +330,7 @@ module OMQ
     def require_backend(name)
       path = case name
              when :libzmq then "omq/backend/libzmq"
-             when :ffi then "omq/ffi"
-             when :rust then "omq/rust"
+             when :rust then "omq/backend/rust"
              end
       return unless path
 

@@ -6,6 +6,13 @@
 
 - Made `inproc://` a compatibility alias for `ruby://` when no backend or
   plugin registers a real `inproc` transport.
+- Lazy-load the Rust backend from `omq/backend/rust`, matching
+  `omq/backend/libzmq`.
+
+### Removed
+
+- Removed the old `omq/rust` backend load path.
+- Removed the old `omq/ffi` backend load path and `backend: :ffi` alias.
 
 ## 0.28.2 - 2026-07-28
 

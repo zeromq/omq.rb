@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Moved implementation files under `lib/omq/backend/libzmq`.
+
+### Removed
+
+- Removed `require "omq/ffi"` and `backend: :ffi` compatibility aliases.
+
 ## 0.3.2 - 2026-07-23
 
 ### Changed

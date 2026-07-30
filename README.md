@@ -215,6 +215,16 @@ echo "hello" | omq req -c tcp://localhost:5555
 
 See the [omq-cli README](https://github.com/paddor/omq-cli) for full documentation.
 
+## Optional Rust backend
+
+Install `omq-backend-rust` for a Rust/omq-tokio backend. Same socket API,
+but connection handling runs in native code on a Tokio runtime.
+
+```ruby
+require "omq/backend/rust"
+push = OMQ::PUSH.new(backend: :rust)
+```
+
 ## Optional libzmq backend
 
 Install `omq-backend-libzmq` for a Ruby 4.0+ libzmq backend. Same socket
@@ -228,8 +238,7 @@ push = OMQ::PUSH.new(backend: :libzmq)
 ```
 
 Requires the `ffi` gem and a system libzmq 4.x. `ffi` is not a runtime
-dependency of `omq`. The old `require "omq/ffi"` and `backend: :ffi`
-names still work.
+dependency of `omq`.
 
 ## Companion Gems
 

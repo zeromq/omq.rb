@@ -3,7 +3,7 @@
 require_relative "../test_helper"
 
 describe "libzmq ↔ pure Ruby interop" do
-  before { skip "libzmq not available" unless OMQ_FFI_AVAILABLE }
+  before { skip "libzmq not available" unless OMQ_LIBZMQ_AVAILABLE }
 
   it "libzmq PUSH → pure Ruby PULL" do
     Async do

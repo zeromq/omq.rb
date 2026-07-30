@@ -20,7 +20,6 @@ OMQ_LIBZMQ_AVAILABLE = begin
 rescue LoadError
   false
 end
-OMQ_FFI_AVAILABLE = OMQ_LIBZMQ_AVAILABLE
 
 # Waits for +socket+ to have at least one peer connection.
 def wait_connected(*sockets)

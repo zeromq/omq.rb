@@ -351,10 +351,10 @@ you will deadlock under load, and the bug will only manifest at
 production throughput.
 
 This is why every serious libzmq binding wraps the FD in a reactor that
-polls `ZMQ_EVENTS` after every wake. It's also why OMQ's libzmq FFI
-backend (`OMQ::FFI::Engine`) has a dedicated I/O thread: libzmq sockets
-are not thread-safe, and the FD dance is too error-prone to hand to
-application code.
+polls `ZMQ_EVENTS` after every wake. It's also why OMQ's libzmq backend
+(`OMQ::Backend::Libzmq::Engine`) has a dedicated I/O thread: libzmq
+sockets are not thread-safe, and the FD dance is too error-prone to hand
+to application code.
 
 OMQ sidesteps the entire category. The pure-Ruby stack speaks ZMTP
 directly over TCP/IPC sockets using Async's fiber scheduler. The

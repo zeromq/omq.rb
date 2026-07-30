@@ -3,7 +3,7 @@
 require_relative "../test_helper"
 
 describe "libzmq backend" do
-  before { skip "libzmq not available" unless OMQ_FFI_AVAILABLE }
+  before { skip "libzmq not available" unless OMQ_LIBZMQ_AVAILABLE }
 
   it "PUSH/PULL over TCP" do
     Async do
@@ -206,7 +206,7 @@ describe "libzmq backend" do
 
   it "over IPC" do
     Async do
-      addr = "ipc:///tmp/omq_ffi_test_#{$$}.sock"
+      addr = "ipc:///tmp/omq_libzmq_test_#{$$}.sock"
 
       pull = OMQ::PULL.new(backend: :libzmq)
       pull.bind(addr)
@@ -278,20 +278,10 @@ describe "libzmq backend" do
     end
   end
 
-  it "backend: :ffi aliases libzmq engine" do
-    Async do
-      require "omq/ffi"
-      push = OMQ::PUSH.new(backend: :ffi)
-      assert_instance_of OMQ::FFI::Engine, push.engine
-    ensure
-      push&.close
-    end
-  end
-
   it "backend: :libzmq uses libzmq engine" do
     Async do
       push = OMQ::PUSH.new(backend: :libzmq)
-      assert_instance_of OMQ::FFI::Engine, push.engine
+      assert_instance_of OMQ::Backend::Libzmq::Engine, push.engine
     ensure
       push&.close
     end
@@ -305,7 +295,7 @@ describe "libzmq backend" do
     Async do
       push = OMQ::PUSH.new(backend: :libzmq)
       engine = push.engine
-      def engine.drain_sends = raise("ffi boom")
+      def engine.drain_sends = raise("libzmq boom")
 
       push << "trigger"
 
@@ -325,7 +315,7 @@ describe "libzmq backend" do
 
       assert_match(/PUSH/, err.message)
       assert_kind_of RuntimeError, err.cause
-      assert_equal "ffi boom", err.cause.message
+      assert_equal "libzmq boom", err.cause.message
       assert_raises(OMQ::SocketDeadError) { push << "third" }
     ensure
       push&.close

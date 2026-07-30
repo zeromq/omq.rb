@@ -2,7 +2,7 @@
 
 require "minitest/autorun"
 require "omq"
-require "omq/rust"
+require "omq/backend/rust"
 require "async"
 
 require "console"
