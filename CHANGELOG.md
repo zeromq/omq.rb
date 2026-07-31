@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.28.6] - 2026-08-01
+
+### Changed
+
+- Documented that the Rust backend exposes `zstd+tcp://`.
+
 ## [0.28.5] - 2026-07-31
 
 ### Fixed

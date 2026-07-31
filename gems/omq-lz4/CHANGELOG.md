@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## 0.3.3 - 2026-08-01
+
 ### Changed
 
 - Clarified that automatic dictionary training is opt-in and remains off

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-08-01
+
 ### Added
 
 - Updated to `omq-tokio` 0.20.3 and `omq-proto` 0.25.0.
