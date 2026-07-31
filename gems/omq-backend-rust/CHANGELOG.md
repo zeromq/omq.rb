@@ -2,10 +2,14 @@
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-07-31
+
 ### Fixed
 
 - Used `IO#wait_readable` for Rust backend receive waits and routed
   `close_read` wakeups through the native receive notifier.
+- Updated to `omq-tokio` 0.20.2, fixing large byte-stream `PUB` fan-out
+  delivery over IPC and TCP.
 
 ## [0.1.4] - 2026-07-30
 
