@@ -49,8 +49,8 @@ module OMQ
                    subscribe: nil, on_mute: :block, backend: nil, &block)
       init_engine(:SUB, recv_hwm: recv_hwm, recv_timeout: recv_timeout,
                   on_mute: on_mute, backend: backend)
-      attach_endpoints(endpoints, default: :connect)
       self.subscribe(subscribe) unless subscribe.nil?
+      attach_endpoints(endpoints, default: :connect)
       finalize_init(&block)
     end
 

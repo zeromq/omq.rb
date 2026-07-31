@@ -18,6 +18,7 @@ module OMQ
     THREAD_NAME = 'omq-io'
 
     @mutex      = Mutex.new
+    @pid        = nil
     @thread     = nil
     @root_task  = nil
     @work_queue = nil
@@ -36,16 +37,20 @@ module OMQ
       # @return [Async::Task]
       #
       def root_task
-        return @root_task if @root_task
+        pid = Process.pid
+        return @root_task if @root_task && @pid == pid
+
+        reset_after_fork if @pid && @pid != pid
 
         @mutex.synchronize do
-          return @root_task if @root_task
+          return @root_task if @root_task && @pid == pid
 
           ready        = Thread::Queue.new
           @work_queue  = Async::Queue.new
           @thread      = Thread.new { run_reactor(ready) }
           @thread.name = THREAD_NAME
           @root_task   = ready.pop
+          @pid         = pid
 
           at_exit { stop! }
         end
@@ -108,6 +113,11 @@ module OMQ
       # @return [void]
       #
       def stop!
+        if @pid && @pid != Process.pid
+          reset_after_fork
+          return
+        end
+
         return unless @thread&.alive?
 
         max_linger = @lingers.empty? ? 0 : @lingers.keys.max
@@ -118,11 +128,22 @@ module OMQ
         @thread     = nil
         @root_task  = nil
         @work_queue = nil
+        @pid        = nil
         @lingers.clear
       end
 
 
       private
+
+
+      def reset_after_fork
+        @mutex      = Mutex.new
+        @thread     = nil
+        @root_task  = nil
+        @work_queue = nil
+        @pid        = nil
+        @lingers.clear
+      end
 
 
       # Runs the shared Async reactor.

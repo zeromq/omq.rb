@@ -76,6 +76,43 @@ describe OMQ::Socket do
     ensure
       socket&.close
     end
+
+
+    it "applies SUB constructor subscription before connecting" do
+      events = []
+      engine_class = Class.new do
+        define_singleton_method(:events) { events }
+
+        def initialize(_socket_type, _options)
+        end
+
+        def capture_parent_task(parent: nil)
+        end
+
+        def connect(endpoint, **)
+          self.class.events << [:connect, endpoint]
+        end
+
+        def subscribe(prefix)
+          self.class.events << [:subscribe, prefix]
+        end
+
+        def close
+        end
+      end
+      OMQ::Backend.register(:sub_order_test, engine_class)
+
+      Async do
+        socket = OMQ::SUB.connect("ipc://sub-order-test", subscribe: "", backend: :sub_order_test)
+      ensure
+        socket&.close
+      end
+
+      assert_equal [
+        [:subscribe, ""],
+        [:connect, "ipc://sub-order-test"],
+      ], events
+    end
   end
 
   describe "empty and binary messages" do

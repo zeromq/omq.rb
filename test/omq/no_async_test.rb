@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../test_helper"
+require "timeout"
 
 describe "non-Async usage" do
   before { OMQ::Transport::Inproc.reset! }
@@ -36,5 +37,36 @@ describe "non-Async usage" do
   ensure
     a&.close
     b&.close
+  end
+
+
+  it "starts a fresh background reactor after fork" do
+    OMQ::Reactor.root_task
+
+    reader, writer = IO.pipe
+    pid = fork do
+      reader.close
+      OMQ::Reactor.run { writer.write("ok") }
+      writer.close
+      exit! 0
+    rescue => error
+      writer.write("#{error.class}: #{error.message}") rescue nil
+      writer.close rescue nil
+      exit! 1
+    end
+
+    writer.close
+    result = Timeout.timeout(2) { reader.read }
+    _, status = Process.wait2(pid)
+
+    assert_predicate status, :success?
+    assert_equal "ok", result
+  rescue Timeout::Error
+    Process.kill("KILL", pid) rescue nil
+    Process.wait(pid) rescue nil
+    flunk "child inherited a stale OMQ::Reactor"
+  ensure
+    reader&.close
+    writer&.close
   end
 end

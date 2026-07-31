@@ -25,8 +25,6 @@ module OMQ
         @on_io_thread   = false
         @materialized   = false
         @recv_sentinels = 0
-        @recv_sentinel_r = nil
-        @recv_sentinel_w = nil
 
         @native = Native::RustSocket.new(socket_type.to_s)
 
@@ -104,25 +102,20 @@ module OMQ
         return take_recv_sentinel if @recv_sentinels.positive?
 
         loop do
-          readable = IO.select([@recv_signal_r, @recv_sentinel_r]).first
+          @recv_signal_r.wait_readable
+          @recv_signal_r.read_nonblock(256, exception: false)
 
-          if readable.include?(@recv_signal_r)
-            @recv_signal_r.read_nonblock(256, exception: false)
-            msg = try_recv_batch
-            return msg
-          end
+          msg = try_recv_batch
+          return msg if msg
 
-          if readable.include?(@recv_sentinel_r)
-            @recv_sentinel_r.read_nonblock(256, exception: false)
-            return take_recv_sentinel if @recv_sentinels.positive?
-          end
+          return take_recv_sentinel if @recv_sentinels.positive?
         end
       end
 
 
       def dequeue_recv_sentinel
         @recv_sentinels += 1
-        @recv_sentinel_w&.write_nonblock(".", exception: false) rescue nil
+        @native.wake_recv if @materialized
         nil
       end
 
@@ -134,8 +127,6 @@ module OMQ
         @peer_connected.resolve(nil) unless @peer_connected.resolved?
         @all_peers_gone.resolve(nil) unless @all_peers_gone.resolved?
         @subscriber_joined.resolve(nil) unless @subscriber_joined.resolved?
-        @recv_sentinel_r&.close rescue nil
-        @recv_sentinel_w&.close rescue nil
         @native.close
       end
 
@@ -183,7 +174,6 @@ module OMQ
         @native.set_options(extract_options)
         @native.materialize
         @recv_signal_r = IO.for_fd(@native.recv_fd, autoclose: false)
-        ensure_recv_sentinel_pipe
         @materialized  = true
 
         @routing.replay_pending(@native)
@@ -193,13 +183,6 @@ module OMQ
         spawn_lifecycle_watcher(@native.subscriber_joined_fd, @subscriber_joined)
 
         start_monitor_forwarder if @monitor_queue
-      end
-
-
-      def ensure_recv_sentinel_pipe
-        return if @recv_sentinel_r
-
-        @recv_sentinel_r, @recv_sentinel_w = IO.pipe
       end
 
 

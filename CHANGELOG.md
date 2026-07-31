@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Recreated the shared background reactor after `fork`, avoiding inherited
+  queue/task state from the parent process.
+- Applied `SUB` constructor subscriptions before connecting endpoints.
+
 ## [0.28.4] - 2026-07-30
 
 ### Fixed
