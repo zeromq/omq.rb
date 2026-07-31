@@ -42,7 +42,7 @@ describe "zstd+tcp:// transport" do
       pull = OMQ::PULL.new
       push = OMQ::PUSH.new
       uri  = pull.bind("zstd+tcp://127.0.0.1:0")
-      push.connect(uri.to_s)
+      push.connect(uri.to_s, auto_dict: true)
 
       template = "user=%s|status=active|tier=gold|region=eu-west-%d|payload=" + ("x" * 600)
       sent = 200.times.map { |i| format(template, "user_#{i}@example.com", i % 4) }

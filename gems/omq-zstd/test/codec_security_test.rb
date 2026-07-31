@@ -180,4 +180,25 @@ describe "Codec security" do
       assert_equal orig.bytesize, fcs
     end
   end
+
+
+  it "does not auto-train by default" do
+    c = codec
+    1200.times do |i|
+      c.compress_parts([%Q({"event":"login","user":"user_#{i}","region":"us-east-1"})])
+    end
+
+    assert_nil c.send_dict_bytes
+  end
+
+
+  it "auto-trains when explicitly enabled" do
+    c = codec(auto_dict: true)
+    1200.times do |i|
+      c.compress_parts([%Q({"event":"login","user":"user_#{i}","region":"us-east-1"})])
+      break if c.send_dict_bytes
+    end
+
+    refute_nil c.send_dict_bytes
+  end
 end

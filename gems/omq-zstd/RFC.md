@@ -367,9 +367,8 @@ support auto-training:
 | Max sample length      | 2048 bytes                               |
 | Training algorithm     | FastCOVER                                |
 
-Whether auto-training is enabled by default is an implementation
-choice. Applications MAY disable it or supply an out-of-band
-dictionary instead.
+Auto-training SHOULD be disabled by default. Applications MAY enable it
+explicitly or supply an out-of-band dictionary instead.
 
 ### 7.6 Dictionary ID
 

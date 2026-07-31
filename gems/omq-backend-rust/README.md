@@ -58,6 +58,18 @@ SCATTER/GATHER, CHANNEL.
 - **NULL** (default)
 - **CURVE** (CurveZMQ, via [Nuckle](https://github.com/paddor/nuckle))
 
+## Compressed transports
+
+The Rust backend supports `lz4+tcp://` and `zstd+tcp://`. Compression
+configuration uses the same bind/connect kwargs as the Ruby transports:
+`level:` for zstd compression level (`-8..4`), `dict:` for a static
+send-side dictionary, and `auto_dict: true` for automatic dictionary
+training.
+
+Automatic dictionary training is off by default.
+OMQ.rs stores compression configuration per socket, so pass these kwargs on
+the first `bind` or `connect` for a Rust-backed socket.
+
 ## Development
 
 ```sh

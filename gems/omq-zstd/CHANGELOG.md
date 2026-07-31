@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Made automatic dictionary training opt-in via `auto_dict: true`.
+  `zstd+tcp://` now defaults to no dictionary training when `dict:` is
+  omitted.
+
 ## 0.4.3 - 2026-07-23
 
 ### Changed
