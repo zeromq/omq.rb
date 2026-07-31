@@ -265,21 +265,26 @@ exceeds the limit MUST be rejected before decoder invocation.
 ### 7.1 Dictionary message format
 
 A dictionary is shipped as a **single-part ZMTP message** (no MORE flag)
-whose body begins with the dictionary sentinel:
+whose body is exactly a Zstandard dictionary blob in ZDICT format. ZDICT
+blobs begin with the dictionary magic `37 A4 30 EC`; this transport uses
+those first 4 bytes as the dictionary sentinel:
 
 ```
 +------------------+------------------------+
-| 37 A4 30 EC      | dictionary bytes       |
-| (4 bytes)        | (D bytes)              |
+| 37 A4 30 EC      | rest of ZDICT blob     |
+| (4 bytes)        | (D - 4 bytes)          |
 +------------------+------------------------+
 ```
 
-The sentinel `37 A4 30 EC` is specific to this specification and has no
-relationship to Zstandard's internals. It was chosen to avoid collision
-with the Zstandard frame magic and the uncompressed sentinel.
+The sentinel `37 A4 30 EC` is the standard Zstandard dictionary magic
+(`DICT_MAGIC`, little-endian). It is intentionally reused as this
+transport's dictionary discriminator because a ZDICT blob already carries
+it and it does not collide with the Zstandard frame magic or the
+uncompressed sentinel.
 
-The remaining `D` bytes are the raw dictionary as it should be passed
-to the Zstandard decoder's dictionary-load operation.
+The complete `D` bytes, including the leading `37 A4 30 EC` magic, are
+the raw dictionary as it should be passed to the Zstandard decoder's
+dictionary-load operation.
 
 ### 7.2 Constraints
 
@@ -287,9 +292,10 @@ to the Zstandard decoder's dictionary-load operation.
   not set on the frame header). A dictionary sentinel in a multipart
   message's non-final or non-only part is a protocol error.
 
-- A dictionary message MUST NOT exceed **8 KiB** total (sentinel +
-  dictionary bytes). A receiver that receives a dictionary message
-  larger than 8 KiB MUST close the connection.
+- A dictionary message MUST NOT exceed **8 KiB** total. Since the
+  message body is exactly the ZDICT blob, this is also the maximum
+  dictionary size. A receiver that receives a dictionary message larger
+  than 8 KiB MUST close the connection.
 
 - A sender MUST send at most **one** dictionary message per direction
   per connection. A receiver that receives a second dictionary message
@@ -305,9 +311,9 @@ to the Zstandard decoder's dictionary-load operation.
 When the receiver encounters a dictionary part:
 
 1. Validate the constraints in Sec. 7.2.
-2. Strip the 4-byte sentinel.
-3. Install the remaining bytes as the decompression dictionary for this
-   connection.
+2. Install the complete message body as the decompression dictionary for
+   this connection. The leading `37 A4 30 EC` bytes are part of the ZDICT
+   blob and MUST NOT be stripped.
 4. Discard the message. It is not delivered to the application.
 
 If all parts of a ZMTP message are dictionary parts (which is always
