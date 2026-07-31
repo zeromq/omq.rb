@@ -7,10 +7,9 @@
 Experimental Zstandard-compressed TCP transport for
 [OMQ](https://github.com/zeromq/omq.rb).
 
-Use [`omq-lz4`](../omq-lz4) for new compressed TCP work. OMQ.rs removed
-`zstd+tcp://` to reduce transport complexity after lz4rip gained
-dictionary training. This gem remains for research, comparison, and
-cases where zstd ratio matters more than transport simplicity.
+Use [`omq-lz4`](../omq-lz4) for CPU- or memory-sensitive compressed TCP
+work. This gem remains for research, comparison, OMQ.rs parity, and cases
+where zstd ratio matters more than transport simplicity.
 
 Pick `zstd+tcp://` instead of `tcp://` and every message part on the wire is
 compressed per-part with [Zstandard](https://github.com/facebook/zstd).
@@ -80,11 +79,17 @@ The sender ships the dictionary to the receiver in-band as a one-shot
 single-part message prefixed with the dictionary sentinel
 (`37 A4 30 EC`), so the receiver does not need a copy on disk.
 
-**Auto-trained dictionary** (zero config, the default when no `dict:` is
-passed): the sender collects up to 1000 samples or 100 KiB (whichever hits
-first), skipping samples larger than 2048 bytes. It trains a 2 KiB dictionary,
-ships it inline, and switches to dictionary mode. Until then, payloads are
-compressed without a dictionary or sent plaintext when below the threshold.
+**Auto-trained dictionary** (opt-in):
+
+```ruby
+push.connect("zstd+tcp://127.0.0.1:5555", auto_dict: true)
+```
+
+The sender collects up to 1000 samples or 100 KiB (whichever hits first),
+skipping samples larger than 2048 bytes. It trains a 2 KiB dictionary, ships
+it inline, and switches to dictionary mode. Until then, payloads are compressed
+without a dictionary or sent plaintext when below the threshold. Automatic
+dictionary training is off by default.
 
 ### Compression thresholds
 
@@ -152,6 +157,7 @@ transport layer. They are not delivered to the application.
 | Train max bytes | 100 KiB |
 | Train max sample length | 2048 B |
 | Dictionary capacity | 2 KiB |
+| Auto dictionary training | Off by default |
 
 ## When to use it
 

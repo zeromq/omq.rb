@@ -24,10 +24,18 @@ module OMQ
         # @param engine [Engine]
         # @param level [Integer] Zstd compression level
         # @param dict [String, nil] user-supplied dictionary bytes
+        # @param auto_dict [true, Hash, nil] enable automatic dictionary
+        #   training. Pass `true` for defaults or `{ capacity: N }`.
         # @return [Listener]
         #
-        def listener(endpoint, engine, level: -3, dict: nil, **)
-          codec = codec_for(engine, level: level, dict: dict)
+        def listener(endpoint, engine, level: -3, dict: nil, auto_dict: nil, **)
+          validate_auto_dict!(auto_dict, dict)
+          codec = codec_for(
+            engine,
+            level: level,
+            dict: dict,
+            auto_dict: normalize_auto_dict(auto_dict),
+          )
 
           host, port = parse_endpoint(endpoint)
           host       = normalize_bind_host(host)
@@ -52,10 +60,18 @@ module OMQ
         # @param engine [Engine]
         # @param level [Integer] Zstd compression level
         # @param dict [String, nil] user-supplied dictionary bytes
+        # @param auto_dict [true, Hash, nil] enable automatic dictionary
+        #   training. Pass `true` for defaults or `{ capacity: N }`.
         # @return [Dialer]
         #
-        def dialer(endpoint, engine, level: -3, dict: nil, **)
-          codec = codec_for(engine, level: level, dict: dict)
+        def dialer(endpoint, engine, level: -3, dict: nil, auto_dict: nil, **)
+          validate_auto_dict!(auto_dict, dict)
+          codec = codec_for(
+            engine,
+            level: level,
+            dict: dict,
+            auto_dict: normalize_auto_dict(auto_dict),
+          )
           Dialer.new(endpoint, engine, codec)
         end
 
@@ -107,12 +123,41 @@ module OMQ
         # @param dict [String, nil]
         # @return [Codec]
         #
-        def codec_for(engine, level:, dict:)
-          @codecs[engine] ||= Codec.new level: level, dict: dict,
+        def validate_auto_dict!(auto_dict, dict)
+          return unless auto_dict
+
+          if dict
+            raise ArgumentError, "cannot combine auto_dict: and dict:"
+          end
+
+          return if auto_dict == true
+
+          unless auto_dict.is_a?(Hash)
+            raise TypeError, "auto_dict: must be true or a Hash; got #{auto_dict.class}"
+          end
+
+          cap = auto_dict[:capacity]
+          if cap && (cap < 1 || cap > Codec::MAX_DICT_SIZE)
+            raise ArgumentError,
+              "auto_dict capacity #{cap} out of range [1, #{Codec::MAX_DICT_SIZE}]"
+          end
+        end
+
+
+        def normalize_auto_dict(auto_dict)
+          return unless auto_dict
+          return { capacity: Codec::DICT_CAPACITY }.freeze if auto_dict == true
+
+          { capacity: auto_dict[:capacity] || Codec::DICT_CAPACITY }.freeze
+        end
+
+
+        def codec_for(engine, level:, dict:, auto_dict:)
+          @codecs[engine] ||= Codec.new level: level, dict: dict, auto_dict: auto_dict,
             max_message_size: engine.options.max_message_size
 
         rescue Ractor::IsolationError
-          Codec.new level: level, dict: dict,
+          Codec.new level: level, dict: dict, auto_dict: auto_dict,
             max_message_size: engine.options.max_message_size
         end
       end

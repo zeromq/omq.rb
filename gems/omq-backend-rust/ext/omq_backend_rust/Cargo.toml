@@ -11,16 +11,17 @@ name       = "omq_backend_rust"
 crate-type = ["cdylib"]
 
 [features]
-default = ["plain", "curve", "lz4"]
+default = ["plain", "curve", "lz4", "zstd"]
 plain   = ["omq-tokio/plain"]
 curve   = ["omq-tokio/curve"]
 lz4     = ["omq-tokio/lz4"]
+zstd    = ["omq-tokio/zstd"]
 
 [dependencies]
-omq-proto = { version = "=0.24.1", default-features = false }
-omq-tokio = { version = "=0.20.2", default-features = false }
+omq-proto = { version = "=0.25.0", default-features = false }
+omq-tokio = { version = "=0.20.3", default-features = false }
 tokio     = { version = "1.52.0", features = ["rt", "rt-multi-thread", "time", "sync", "io-util", "net"] }
-yring     = { version = "0.3.8", features = ["async"] }
+yring     = { version = "0.3.11", features = ["async"] }
 
 bytes   = "1.12.0"
 flume   = { version = "0.12", default-features = false, features = ["async"] }

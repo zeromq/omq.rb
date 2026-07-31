@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Clarified that automatic dictionary training is opt-in and remains off
+  by default for `lz4+tcp://`.
+
 ## 0.3.2 - 2026-07-23
 
 ### Changed

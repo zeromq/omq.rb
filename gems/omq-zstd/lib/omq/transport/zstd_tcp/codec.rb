@@ -22,9 +22,14 @@ module OMQ
         attr_reader :send_dict_bytes, :max_message_size
 
 
-        def initialize(level:, dict: nil, max_message_size: nil)
+        def initialize(level:, dict: nil, max_message_size: nil, auto_dict: nil)
           @level            = level
           @max_message_size = max_message_size
+          @dict_capacity    = if auto_dict.is_a?(Hash) && auto_dict[:capacity]
+                                auto_dict[:capacity]
+                              else
+                                DICT_CAPACITY
+                              end
 
           # Start with a no-dict FrameCodec. Once a dict is configured
           # (either via the `dict:` kwarg or via auto-training), this is
@@ -34,7 +39,7 @@ module OMQ
           @send_codec      = Zrip::FrameCodec.new(level: @level)
           @send_dict_bytes = nil
 
-          @training      = dict.nil?
+          @training      = !!auto_dict && dict.nil?
           @train_samples = []
           @train_bytes   = 0
 
@@ -102,7 +107,7 @@ module OMQ
           return unless @train_samples.size >= TRAIN_MAX_SAMPLES ||
                         @train_bytes >= TRAIN_MAX_BYTES
 
-          trainer = Zrip::DictTrainer.new(DICT_CAPACITY)
+          trainer = Zrip::DictTrainer.new(@dict_capacity)
           @train_samples.each { |s| trainer.add_sample(s) }
           trained_bytes = trainer.train
 

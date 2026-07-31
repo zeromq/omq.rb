@@ -48,6 +48,29 @@ pub fn build_options(ruby: &Ruby, hash: RHash) -> Result<omq_tokio::Options, Err
     if let Some(v) = get_opt::<i64>(ruby, hash, "rcvbuf")? {
         opts.recv_buffer_size = Some(v as usize);
     }
+    if let Some(v) = get_opt_bytes(ruby, hash, "compression_dict")? {
+        if !v.is_empty() {
+            opts.compression_dict = Some(Bytes::from(v));
+        }
+    }
+    if let Some(v) = get_opt::<bool>(ruby, hash, "compression_auto_train")? {
+        opts.compression_auto_train = v;
+    }
+    if let Some(v) = get_opt::<i64>(ruby, hash, "compression_threshold")? {
+        opts.compression_threshold = Some(v as usize);
+    }
+    if let Some(v) = get_opt::<i64>(ruby, hash, "compression_level")? {
+        opts.compression_level = Some(v as i32);
+    }
+    if let Some(v) = get_opt::<i64>(ruby, hash, "compression_dict_capacity")? {
+        opts.compression_dict_capacity = Some(v as usize);
+    }
+    if let Some(v) = get_opt::<i64>(ruby, hash, "max_recv_dict_size")? {
+        opts.max_recv_dict_size = Some(v as usize);
+    }
+    if let Some(v) = get_opt::<i64>(ruby, hash, "compression_offload_threshold")? {
+        opts.compression_offload_threshold = if v < 0 { None } else { Some(v as usize) };
+    }
     if let Some(v) = get_opt::<String>(ruby, hash, "on_mute")? {
         opts.on_mute = match v.as_str() {
             "drop_newest" | "drop" => omq_tokio::OnMute::DropNewest,

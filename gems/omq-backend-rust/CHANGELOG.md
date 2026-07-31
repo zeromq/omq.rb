@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Updated to `omq-tokio` 0.20.3 and `omq-proto` 0.25.0.
+- Enabled OMQ.rs `zstd+tcp://` by default.
+- Forwarded compression bind/connect kwargs to current OMQ.rs options:
+  `dict:`, `auto_dict:`, `compression_threshold:`, `max_recv_dict_size:`,
+  `compression_offload_threshold:`, and zstd `level:`.
+
 ## [0.1.5] - 2026-07-31
 
 ### Fixed

@@ -25,6 +25,7 @@ module OMQ
         @on_io_thread   = false
         @materialized   = false
         @recv_sentinels = 0
+        @compression_options = {}
 
         @native = Native::RustSocket.new(socket_type.to_s)
 
@@ -47,16 +48,18 @@ module OMQ
       end
 
 
-      def bind(endpoint, parent: nil, **)
+      def bind(endpoint, parent: nil, **opts)
         capture_parent_task(parent: parent)
+        apply_endpoint_options!(opts)
         ensure_materialized
         resolved = @native.bind(endpoint)
         URI.parse(resolved)
       end
 
 
-      def connect(endpoint, parent: nil, **)
+      def connect(endpoint, parent: nil, **opts)
         capture_parent_task(parent: parent)
+        apply_endpoint_options!(opts)
         ensure_materialized
         @native.connect(endpoint)
         URI.parse(endpoint)
@@ -241,6 +244,7 @@ module OMQ
         h["sndbuf"]             = @options.sndbuf
         h["rcvbuf"]             = @options.rcvbuf
         h["on_mute"]            = @options.on_mute.to_s
+        h.merge!(@compression_options)
 
         ri = @options.reconnect_interval
         if ri.is_a?(Range)
@@ -253,6 +257,88 @@ module OMQ
         extract_mechanism(h)
 
         h
+      end
+
+
+      def apply_endpoint_options!(opts)
+        compression = extract_endpoint_compression_options(opts)
+        return if compression.empty?
+
+        if @materialized
+          existing = compression.keys.to_h do |key|
+            [key, @compression_options.fetch(key, default_compression_option(key))]
+          end
+          return if compression == existing
+
+          raise ArgumentError,
+            "Rust backend compression options must be set before first bind/connect"
+        end
+
+        @compression_options.merge!(compression)
+      end
+
+
+      def extract_endpoint_compression_options(opts)
+        out = {}
+
+        if opts.key?(:level)
+          validate_zstd_level!(opts[:level])
+          out["compression_level"] = opts[:level]
+        end
+        out["compression_dict"] = opts[:dict].b if opts.key?(:dict) && opts[:dict]
+
+        if opts.key?(:auto_dict)
+          auto_dict = opts[:auto_dict]
+          if auto_dict && opts[:dict]
+            raise ArgumentError, "cannot combine auto_dict: and dict:"
+          end
+
+          case auto_dict
+          when nil, false
+            out["compression_auto_train"] = false
+          when true
+            out["compression_auto_train"] = true
+          when Hash
+            if auto_dict.key?(:trigger)
+              raise ArgumentError,
+                "Rust backend does not support auto_dict: trigger"
+            end
+            validate_positive!("auto_dict capacity", auto_dict[:capacity]) if auto_dict[:capacity]
+            out["compression_auto_train"] = true
+            out["compression_dict_capacity"] = auto_dict[:capacity] if auto_dict[:capacity]
+          else
+            raise TypeError, "auto_dict: must be true, false, or a Hash; got #{auto_dict.class}"
+          end
+        end
+
+        if opts.key?(:compression_threshold)
+          out["compression_threshold"] = opts[:compression_threshold]
+        end
+        out["max_recv_dict_size"] = opts[:max_recv_dict_size] if opts.key?(:max_recv_dict_size)
+        if opts.key?(:compression_offload_threshold)
+          out["compression_offload_threshold"] = opts[:compression_offload_threshold] || -1
+        end
+
+        out
+      end
+
+
+      def default_compression_option(key)
+        key == "compression_auto_train" ? false : nil
+      end
+
+
+      def validate_positive!(label, value)
+        return if value.respond_to?(:positive?) && value.positive?
+
+        raise ArgumentError, "#{label} must be positive"
+      end
+
+
+      def validate_zstd_level!(level)
+        return if level.is_a?(Integer) && (-8..4).cover?(level)
+
+        raise ArgumentError, "zstd compression level must be -8..4, got #{level.inspect}"
       end
 
 

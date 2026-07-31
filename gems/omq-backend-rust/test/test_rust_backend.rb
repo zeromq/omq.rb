@@ -14,7 +14,6 @@ describe "Rust backend" do
     ep.port
   end
 
-
   describe "socket options" do
     it "materializes options set through public accessors" do
       option_cases = [
@@ -440,6 +439,180 @@ describe "Rust backend" do
         rep&.close
       end
     end
+  end
+
+
+  describe "compression transports" do
+    it "round-trips over lz4+tcp" do
+      Async do
+        pull = OMQ::PULL.new(backend: BACKEND)
+        uri = pull.bind("lz4+tcp://127.0.0.1:0")
+        push = OMQ::PUSH.new(backend: BACKEND)
+        push.connect(uri.to_s)
+        push.peer_connected.wait
+
+        payload = ("A" * 4096).b
+        push << payload
+        assert_equal [payload], pull.receive
+      ensure
+        push&.close
+        pull&.close
+      end
+    end
+
+
+    it "accepts a static lz4 dictionary" do
+      dict = ("event=login user=alice payload=" * 10).b
+
+      Async do
+        pull = OMQ::PULL.new(backend: BACKEND)
+        uri = pull.bind("lz4+tcp://127.0.0.1:0")
+        push = OMQ::PUSH.new(backend: BACKEND)
+        push.connect(uri.to_s, dict: dict)
+        push.peer_connected.wait
+
+        payload = (dict + "body").b
+        push << payload
+        assert_equal [payload], pull.receive
+      ensure
+        push&.close
+        pull&.close
+      end
+    end
+
+
+    it "ships a static lz4 dictionary to a raw tcp peer" do
+      dict = ("event=login user=alice payload=" * 10).b
+
+      Async do
+        raw = OMQ::PULL.new(backend: BACKEND)
+        port = bind_port(raw)
+        push = OMQ::PUSH.new(backend: BACKEND)
+        push.connect("lz4+tcp://127.0.0.1:#{port}", dict: dict)
+        push.peer_connected.wait
+
+        push << (dict + "body").b
+        assert_equal "LZ4D".b, raw.receive.first.byteslice(0, 4)
+      ensure
+        push&.close
+        raw&.close
+      end
+    end
+
+
+    it "keeps lz4 auto_dict off by default" do
+      Async do
+        raw = OMQ::PULL.new(backend: BACKEND)
+        port = bind_port(raw)
+        push = OMQ::PUSH.new(backend: BACKEND)
+        push.connect("lz4+tcp://127.0.0.1:#{port}")
+        push.peer_connected.wait
+
+        120.times { |i| push << json_payload(i) }
+        frames = 120.times.map { raw.receive.first }
+        refute frames.any? { |frame| frame.start_with?("LZ4D".b) }
+      ensure
+        push&.close
+        raw&.close
+      end
+    end
+
+
+    it "enables lz4 auto_dict when requested" do
+      Async do
+        raw = OMQ::PULL.new(backend: BACKEND)
+        port = bind_port(raw)
+        push = OMQ::PUSH.new(backend: BACKEND)
+        push.connect("lz4+tcp://127.0.0.1:#{port}", auto_dict: true)
+        push.peer_connected.wait
+
+        140.times { |i| push << json_payload(i) }
+        frames = 141.times.map { raw.receive.first }
+        assert frames.any? { |frame| frame.start_with?("LZ4D".b) }
+      ensure
+        push&.close
+        raw&.close
+      end
+    end
+
+
+    it "rejects lz4 auto_dict trigger because OMQ.rs has a fixed trigger" do
+      Async do
+        pull = OMQ::PULL.new(backend: BACKEND)
+        assert_raises(ArgumentError) do
+          pull.bind("lz4+tcp://127.0.0.1:0", auto_dict: { trigger: 20 })
+        end
+      ensure
+        pull&.close
+      end
+    end
+
+
+    it "round-trips over zstd+tcp with a custom level" do
+      Async do
+        pull = OMQ::PULL.new(backend: BACKEND)
+        uri = pull.bind("zstd+tcp://127.0.0.1:0")
+        push = OMQ::PUSH.new(backend: BACKEND)
+        push.connect(uri.to_s, level: 4)
+        push.peer_connected.wait
+
+        payload = ("zstd payload " * 512).b
+        push << payload
+        assert_equal [payload], pull.receive
+      ensure
+        push&.close
+        pull&.close
+      end
+    end
+
+
+    it "ships a static zstd dictionary to a raw tcp peer" do
+      dict = zstd_test_dict
+
+      Async do
+        raw = OMQ::PULL.new(backend: BACKEND)
+        port = bind_port(raw)
+        push = OMQ::PUSH.new(backend: BACKEND)
+        push.connect("zstd+tcp://127.0.0.1:#{port}", dict: dict, level: 4)
+        push.peer_connected.wait
+
+        push << ("omq-" * 20).b
+        assert_equal "\x37\xA4\x30\xEC".b, raw.receive.first.byteslice(0, 4)
+      ensure
+        push&.close
+        raw&.close
+      end
+    end
+
+
+    it "rejects an invalid zstd compression level" do
+      Async do
+        pull = OMQ::PULL.new(backend: BACKEND)
+        assert_raises(ArgumentError) do
+          pull.bind("zstd+tcp://127.0.0.1:0", level: 99)
+        end
+      ensure
+        pull&.close
+      end
+    end
+  end
+
+
+  def json_payload(i)
+    %Q({"event":"login","user":"user_#{i}","region":"us-east-1","status":200}).b
+  end
+
+
+  def zstd_test_dict
+    require "zrip"
+
+    trainer = Zrip::DictTrainer.new(2048)
+    200.times do
+      trainer.add_sample("omq-omq-omq-omq-omq-omq-shared-prefix\n")
+    end
+    trainer.train.b
+  rescue LoadError
+    skip "zrip not available"
   end
 
 

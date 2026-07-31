@@ -262,8 +262,8 @@ post-handshake message parts are compressed.
   training from early traffic. Use for new compressed TCP work.
 - **[omq-zstd](gems/omq-zstd)**: experimental `zstd+tcp://`.
   Zstandard per-part compression kept for research and comparison. Prefer
-  `omq-lz4` for new compressed TCP work. OMQ.rs removed `zstd+tcp://`
-  to reduce transport complexity after lz4rip gained dictionary training.
+  `omq-lz4` for new compressed TCP work. The Rust backend also exposes
+  `zstd+tcp://`.
 
 ### Protocol extensions (RFCs)
 
