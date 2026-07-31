@@ -18,7 +18,7 @@ lz4     = ["omq-tokio/lz4"]
 
 [dependencies]
 omq-proto = { version = "=0.24.1", default-features = false }
-omq-tokio = { version = "=0.20.1", default-features = false }
+omq-tokio = { version = "=0.20.2", default-features = false }
 tokio     = { version = "1.52.0", features = ["rt", "rt-multi-thread", "time", "sync", "io-util", "net"] }
 yring     = { version = "0.3.8", features = ["async"] }
 

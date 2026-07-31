@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.28.5] - 2026-07-31
+
 ### Fixed
 
 - Recreated the shared background reactor after `fork`, avoiding inherited
