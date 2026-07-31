@@ -6,6 +6,7 @@ require "omq/radio_dish"
 require "omq/scatter_gather"
 require "omq/channel"
 require "omq/peer"
+require "timeout"
 
 describe "Rust backend" do
   def bind_port(sock)
@@ -61,6 +62,29 @@ describe "Rust backend" do
       ensure
         pull&.close
       end
+    end
+
+
+    it "uses wait_readable instead of IO.select while waiting" do
+      original_select = IO.method(:select)
+      verbose = $VERBOSE
+      $VERBOSE = nil
+      IO.define_singleton_method(:select) do |*|
+        raise "IO.select should not be called"
+      end
+      $VERBOSE = verbose
+
+      Async do
+        pull = OMQ::PULL.new(backend: BACKEND, recv_timeout: 0.02)
+
+        assert_raises(IO::TimeoutError) { pull.receive }
+      ensure
+        pull&.close
+      end
+    ensure
+      $VERBOSE = nil
+      IO.define_singleton_method(:select, original_select)
+      $VERBOSE = verbose
     end
 
 
@@ -559,6 +583,141 @@ describe "Rust backend" do
         pull&.close
         File.delete(path) rescue nil
       end
+    end
+
+
+    it "delivers PUB/SUB after forking with a background reactor" do
+      skip "fork unavailable" unless Process.respond_to?(:fork)
+
+      n = 6
+      path = "/tmp/omq-rust-pubsub-fork-#{$$}.sock"
+      endpoint = "ipc://#{path}"
+      ready_r, ready_w = IO.pipe
+      result_r, result_w = IO.pipe
+      children = []
+      pub = OMQ::PUB.new(backend: BACKEND)
+      pub.linger = 0
+      pub.bind(endpoint)
+
+      n.times do |i|
+        children << fork do
+          ready_r.close
+          result_r.close
+          child = nil
+
+          begin
+            child = OMQ::SUB.new(backend: BACKEND)
+            child.linger = 0
+            child.read_timeout = 3
+            child.connect(endpoint)
+            child.subscribe("")
+            ready_w.write("R")
+            result_w.write("#{i}:#{child.receive.first}\n")
+          rescue => error
+            result_w.write("#{i}:ERR #{error.class}: #{error.message}\n") rescue nil
+          ensure
+            child&.close
+            ready_w.close rescue nil
+            result_w.close rescue nil
+            exit! 0
+          end
+        end
+      end
+
+      ready_w.close
+      result_w.close
+      assert_equal "R" * n, Timeout.timeout(3) { ready_r.read(n) }
+
+      sleep 0.5
+      10.times { |i| pub << "msg-#{i}" }
+
+      result = +""
+      Timeout.timeout(5) do
+        result << result_r.readpartial(1024) while result.lines.size < n
+      end
+
+      lines = result.lines
+      assert_equal n, lines.size
+      lines.each do |line|
+        assert_match(/^\d+:msg-\d+$/, line.chomp)
+      end
+    ensure
+      children&.each do |pid|
+        Process.kill("KILL", pid) rescue nil
+        Process.wait(pid) rescue nil
+      end
+      pub&.close
+      ready_r&.close rescue nil
+      ready_w&.close rescue nil
+      result_r&.close rescue nil
+      result_w&.close rescue nil
+      File.delete(path) rescue nil
+    end
+
+
+    it "delivers to forked IPC subscribers using constructor subscriptions" do
+      skip "fork unavailable" unless Process.respond_to?(:fork)
+
+      n = 6
+      path = "/tmp/omq-rust-pubsub-constructor-fork-#{$$}.sock"
+      endpoint = "ipc://#{path}"
+      ready_r, ready_w = IO.pipe
+      result_r, result_w = IO.pipe
+      children = []
+      pub = OMQ::PUB.new(backend: BACKEND)
+      pub.linger = 0
+      pub.bind(endpoint)
+
+      n.times do |i|
+        children << fork do
+          ready_r.close
+          result_r.close
+          child = nil
+
+          begin
+            child = OMQ::SUB.connect(endpoint, subscribe: "", backend: BACKEND)
+            child.linger = 0
+            child.read_timeout = 3
+            ready_w.write("R")
+            result_w.write("#{i}:#{child.receive.first}\n")
+          rescue => error
+            result_w.write("#{i}:ERR #{error.class}: #{error.message}\n") rescue nil
+          ensure
+            child&.close
+            ready_w.close rescue nil
+            result_w.close rescue nil
+            exit! 0
+          end
+        end
+      end
+
+      ready_w.close
+      result_w.close
+      assert_equal "R" * n, Timeout.timeout(3) { ready_r.read(n) }
+
+      10.times { |i| pub << "msg-#{i}" }
+
+      result = +""
+      Timeout.timeout(5) do
+        result << result_r.readpartial(1024) while result.lines.size < n
+      end
+
+      lines = result.lines
+      assert_equal n, lines.size
+      lines.each do |line|
+        assert_match(/^\d+:msg-\d+$/, line.chomp)
+      end
+    ensure
+      children&.each do |pid|
+        Process.kill("KILL", pid) rescue nil
+        Process.wait(pid) rescue nil
+      end
+      pub&.close
+      ready_r&.close rescue nil
+      ready_w&.close rescue nil
+      result_r&.close rescue nil
+      result_w&.close rescue nil
+      File.delete(path) rescue nil
     end
   end
 

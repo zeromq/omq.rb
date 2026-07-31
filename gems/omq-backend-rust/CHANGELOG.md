@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Used `IO#wait_readable` for Rust backend receive waits and routed
+  `close_read` wakeups through the native receive notifier.
+
 ## [0.1.4] - 2026-07-30
 
 ### Fixed

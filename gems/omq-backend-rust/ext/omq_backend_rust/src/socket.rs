@@ -250,6 +250,13 @@ fn rust_socket_try_recv_batch(ruby: &Ruby, rb_self: &RustSocket) -> Result<Optio
     }
 }
 
+fn rust_socket_wake_recv(rb_self: &RustSocket) {
+    let mat_guard = rb_self.materialized.read().unwrap();
+    if let Some(mat) = mat_guard.as_ref() {
+        mat.recv_notify.force_wake();
+    }
+}
+
 fn rust_socket_recv_fd(ruby: &Ruby, rb_self: &RustSocket) -> Result<i32, Error> {
     let mat_guard = rb_self.materialized.read().unwrap();
     let mat = mat_guard
@@ -442,6 +449,7 @@ pub fn register(ruby: &Ruby) -> Result<(), Error> {
     class.define_method("enqueue_send", method!(rust_socket_enqueue_send, 1))?;
     class.define_method("try_recv", method!(rust_socket_try_recv, 0))?;
     class.define_method("try_recv_batch", method!(rust_socket_try_recv_batch, 0))?;
+    class.define_method("wake_recv", method!(rust_socket_wake_recv, 0))?;
     class.define_method("recv_fd", method!(rust_socket_recv_fd, 0))?;
     class.define_method("send_fd", method!(rust_socket_send_fd, 0))?;
     class.define_method(
