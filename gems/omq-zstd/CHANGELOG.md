@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## 0.4.4 - 2026-08-01
+
 ### Changed
 
 - Made automatic dictionary training opt-in via `auto_dict: true`.
