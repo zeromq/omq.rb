@@ -302,10 +302,11 @@ pub fn materialize(
         let s = sock.clone();
         let sn = send_notify.clone();
         let send_pump = tokio::spawn(async move {
-            futures::pin_mut!(send_cons);
+            let mut send_cons = send_cons;
             while let Some(msg) = futures::StreamExt::next(&mut send_cons).await {
-                let _ = s.send(msg).await;
+                send_cons.release();
                 sn.notify();
+                let _ = s.send(msg).await;
                 tokio::task::yield_now().await;
             }
             sn.notify();

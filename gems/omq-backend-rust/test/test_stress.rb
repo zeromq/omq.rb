@@ -12,25 +12,27 @@ describe "Rust backend stress" do
   describe "throughput" do
     it "transfers 10k messages" do
       n = 10_000
-      Async do
-        pull = OMQ::PULL.new(backend: BACKEND)
-        port = bind_port(pull)
-        push = OMQ::PUSH.new(backend: BACKEND)
-        push.connect("tcp://127.0.0.1:#{port}")
-        push.peer_connected.wait
+      Async do |task|
+        task.with_timeout(30) do
+          pull = OMQ::PULL.new(backend: BACKEND)
+          port = bind_port(pull)
+          push = OMQ::PUSH.new(backend: BACKEND)
+          push.connect("tcp://127.0.0.1:#{port}")
+          push.peer_connected.wait
 
-        sender = Async do
-          n.times { |i| push << i.to_s }
+          sender = task.async do
+            n.times { |i| push << i.to_s }
+          end
+
+          received = 0
+          n.times do
+            pull.receive
+            received += 1
+          end
+
+          sender.wait
+          assert_equal n, received
         end
-
-        received = 0
-        n.times do
-          pull.receive
-          received += 1
-        end
-
-        sender.wait
-        assert_equal n, received
       ensure
         push&.close
         pull&.close
