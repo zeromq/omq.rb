@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Updated to `omq-tokio` 0.21.0.
+
 ## [0.1.6] - 2026-08-01
 
 ### Added
