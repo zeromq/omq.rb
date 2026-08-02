@@ -2,9 +2,22 @@
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-08-02
+
+### Added
+
+- Restored Rust/Ruby backend interop coverage.
+
 ### Changed
 
 - Updated to `omq-tokio` 0.21.0.
+
+### Fixed
+
+- Drained the Ruby-to-Tokio send pump before native socket close.
+- Released Rust send ring slots before awaiting native sends, avoiding
+  high-throughput stalls under `omq-tokio` 0.21.0 backpressure.
+- Waited for Rust peer registration before resolving `peer_connected`.
 
 ## [0.1.6] - 2026-08-01
 

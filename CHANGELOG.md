@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.28.7] - 2026-08-02
+
+### Fixed
+
+- Resolved `RADIO` subscriber readiness when a peer sends `JOIN`, so
+  callers waiting on `subscriber_joined` can synchronize with `DISH`.
+
 ## [0.28.6] - 2026-08-01
 
 ### Changed
