@@ -1,0 +1,7 @@
+/.cla*/
+/Gemfile.lock
+/pkg/
+/coverage/
+/tmp/
+*.gem
+/TODO

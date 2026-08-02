@@ -1,0 +1,7 @@
+{
+  "lib/*.rb": { "alternate": "test/{}_test.rb" },
+  "test/*_test.rb": {
+    "alternate": "lib/{}.rb",
+    "dispatch": "bundle exec ruby -Ilib:test {file}"
+  }
+}

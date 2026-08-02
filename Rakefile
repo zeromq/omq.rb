@@ -36,6 +36,7 @@ def gem_test_task(name, min_ruby: nil)
 end
 
 gem_test_task "omq-backend-libzmq", min_ruby: "4.0"
+gem_test_task "omq-cli", min_ruby: "4.0"
 gem_test_task "omq-lz4", min_ruby: "4.0"
 gem_test_task "omq-qos"
 gem_test_task "omq-ractor", min_ruby: "4.0"
@@ -47,11 +48,24 @@ task "test:omq-backend-rust" do
   sh "bundle", "exec", "rake", "-C", "gems/omq-backend-rust"
 end
 
+task "test:omq-cli:system" do
+  if Gem::Version.new(RUBY_VERSION) < Gem::Version.new("4.0")
+    warn "Skipping omq-cli system tests: Ruby 4.0+ required"
+  else
+    Bundler.with_unbundled_env do
+      Dir.chdir("gems/omq-cli") do
+        sh({ "BUNDLE_GEMFILE" => File.expand_path("Gemfile") }, "sh", "test/system/run_all.sh")
+      end
+    end
+  end
+end
+
 task test: [
   "test:protocol-zmtp",
   "test:omq",
   "test:omq-backend-libzmq",
   "test:omq-backend-rust",
+  "test:omq-cli",
   "test:omq-lz4",
   "test:omq-qos",
   "test:omq-ractor",

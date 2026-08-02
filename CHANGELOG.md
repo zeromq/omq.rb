@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Imported `omq-cli` under `gems/omq-cli` and wired it into monorepo
+  test and release tasks.
+
 ## [0.28.7] - 2026-08-02
 
 ### Fixed

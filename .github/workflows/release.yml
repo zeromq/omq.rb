@@ -6,6 +6,7 @@ on:
       - 'omq-v*'
       - 'omq-backend-rust-v*'
       - 'omq-backend-libzmq-v*'
+      - 'omq-cli-v*'
       - 'omq-lz4-v*'
       - 'omq-qos-v*'
       - 'omq-ractor-v*'
@@ -72,6 +73,12 @@ jobs:
               package="omq-backend-libzmq"
               dir="gems/omq-backend-libzmq"
               gemspec="$dir/omq-backend-libzmq.gemspec"
+              ruby="4.0"
+              ;;
+            omq-cli-v*)
+              package="omq-cli"
+              dir="gems/omq-cli"
+              gemspec="$dir/omq-cli.gemspec"
               ruby="4.0"
               ;;
             omq-lz4-v*)
