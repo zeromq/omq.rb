@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-08-02
+
+### Fixed
+
+- Resolved `subscriber_joined` for `PUB`/`XPUB` after attach in the
+  monitor-less libzmq backend.
+
 ## [0.3.3] - 2026-07-30
 
 ### Changed
