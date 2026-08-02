@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Imported `omq-cli` under `gems/omq-cli` and wired it into monorepo
+  test and release tasks.
+- Added `OMQ_BACKEND` support to `omq-cli` for choosing `ruby`, `rust`,
+  or `libzmq` as the default socket backend.
+- Made `omq-cli -v` print the effective socket backend at startup.
+
 ## [0.28.7] - 2026-08-02
 
 ### Fixed

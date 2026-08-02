@@ -1,0 +1,22 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+gemspec
+
+gem "minitest"
+gem "rake"
+gem "async-debug" if ENV["OMQ_DEV"]
+
+ROOT     = File.expand_path("../..", __dir__)
+SIBLINGS = File.expand_path("../../..", __dir__)
+
+gem "omq",           path: ROOT
+gem "omq-zstd",      path: File.join(ROOT, "gems/omq-zstd")
+gem "omq-lz4",       path: File.join(ROOT, "gems/omq-lz4")
+gem "protocol-zmtp", path: File.join(ROOT, "gems/protocol-zmtp")
+gem "nuckle",        path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "nuckle") : nil
+gem "omq-backend-libzmq", "~> 0.3", require: false, path: File.join(ROOT, "gems/omq-backend-libzmq")
+gem "omq-backend-rust",   "~> 0.1", require: false, path: File.join(ROOT, "gems/omq-backend-rust")
+gem "zrip",          "~> 0.1.1", path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "zrip") : nil
+gem "lz4rip",        "~> 0.1.1", path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "lz4rip") : nil

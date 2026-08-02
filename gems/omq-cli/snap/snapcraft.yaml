@@ -1,0 +1,148 @@
+name: omq
+base: core24
+version: '0.8.2'
+summary: Pure Ruby ZeroMQ CLI
+description: |
+  omq is a ZeroMQ command-line tool backed by a pure Ruby ZMTP 3.1
+  implementation. Supports all 18 socket types (REQ/REP, PUB/SUB,
+  PUSH/PULL, DEALER/ROUTER, draft CLIENT/SERVER, RADIO/DISH, etc.),
+  TCP/IPC/inproc transports, CURVE encryption, Zstandard compression,
+  JSONL/MessagePack/Marshal formats, and Ruby -e expressions.
+grade: stable
+confinement: classic
+
+# Ruby is configured with effective prefix `/` (core24's autotools plugin
+# imposes its own prefix). So inside $SNAP:
+#   ruby binary      : $SNAP/bin/ruby
+#   libruby.so       : $SNAP/lib/libruby.so*
+#   ruby stdlib      : $SNAP/lib/ruby/4.0.0/
+#   ruby headers     : $SNAP/include/ruby-4.0.0/  (stripped from final snap)
+#   installed gems   : $SNAP/lib/ruby/gems/4.0.0/
+# Stage-packages (libssl, libyaml, libffi, libgmp, zlib, libsodium) still
+# live at $SNAP/usr/lib/$ARCH_TRIPLET/ because deb layouts are unchanged.
+
+apps:
+  omq:
+    command: bin/omq
+
+parts:
+  ruby:
+    plugin: autotools
+    source: https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.2.tar.gz
+    source-checksum: sha256/51502b26b50b68df4963336ca41e368cde92c928faf91654de4c4c1791f82aac
+    autotools-configure-parameters:
+      - --enable-shared
+      - --enable-yjit
+      - --enable-load-relative       # stdlib path resolved relative to ruby binary (snap-critical)
+      - --disable-install-doc
+      - --disable-rpath
+      - --with-out-ext=tk,tcltk,curses,readline,pty,syslog,gdbm,dbm,sdbm,nkf,win32,win32ole
+    build-packages:
+      - gcc
+      - g++
+      - make
+      - autoconf
+      - bison
+      - pkg-config
+      - libssl-dev
+      - libyaml-dev
+      - libffi-dev
+      - libgmp-dev
+      - zlib1g-dev
+      - rustc
+      - cargo
+    stage-packages:
+      - libssl3t64
+      - libyaml-0-2
+      - libffi8
+      - libgmp10
+      - zlib1g
+    override-build: |
+      craftctl default
+      set -eux
+      # Strip ruby binary + every shared library (libruby.so, C extensions)
+      strip --strip-all "$CRAFT_PART_INSTALL/bin/ruby" || true
+      find "$CRAFT_PART_INSTALL" -type f -name '*.so*' -exec strip --strip-unneeded {} + || true
+      # Drop unused binstubs — we only exec ruby directly
+      rm -f "$CRAFT_PART_INSTALL"/bin/erb \
+            "$CRAFT_PART_INSTALL"/bin/rdoc \
+            "$CRAFT_PART_INSTALL"/bin/ri \
+            "$CRAFT_PART_INSTALL"/bin/irb \
+            "$CRAFT_PART_INSTALL"/bin/typeprof \
+            "$CRAFT_PART_INSTALL"/bin/rbs \
+            "$CRAFT_PART_INSTALL"/bin/racc
+      # Drop unused stdlib dirs (REPL, docs, type tooling)
+      RLIB="$CRAFT_PART_INSTALL/lib/ruby/4.0.0"
+      rm -rf "$RLIB"/rdoc "$RLIB"/rdoc.rb \
+             "$RLIB"/irb "$RLIB"/irb.rb \
+             "$RLIB"/reline "$RLIB"/reline.rb \
+             "$RLIB"/debug "$RLIB"/debug.rb \
+             "$RLIB"/rbs "$RLIB"/typeprof
+      # Drop unused default gems
+      GEMS="$CRAFT_PART_INSTALL/lib/ruby/gems/4.0.0/gems"
+      for g in rdoc rbs debug typeprof irb reline test-unit minitest power_assert rexml rss webrick; do
+        rm -rf "$GEMS/$g"-* 2>/dev/null || true
+      done
+      # Strip docs/man brought in by stage-packages
+      rm -rf "$CRAFT_PART_INSTALL/usr/share/man" \
+             "$CRAFT_PART_INSTALL/usr/share/doc" \
+             "$CRAFT_PART_INSTALL/usr/share/doc-base" \
+             "$CRAFT_PART_INSTALL/share/man" \
+             "$CRAFT_PART_INSTALL/share/doc" \
+             "$CRAFT_PART_INSTALL/share/ri" \
+             "$CRAFT_PART_INSTALL/share/rdoc"
+      find "$CRAFT_PART_INSTALL" -type f -name '*.a' -delete
+      find "$CRAFT_PART_INSTALL/lib/ruby" -type d \( -name test -o -name spec \) -prune -exec rm -rf {} + || true
+    prime:
+      - '*'
+      - -include               # ruby headers: only needed by gems part at build time
+      - -share/ri
+      - -share/rdoc
+
+  libsodium:
+    plugin: nil
+    stage-packages:
+      - libsodium23
+    prime:
+      - usr/lib/*/libsodium.so*
+
+  gems:
+    after: [ruby, libsodium]
+    plugin: nil
+    build-packages:
+      - gcc
+      - g++
+      - make
+      - pkg-config
+      - libffi-dev
+      - libyaml-dev
+    override-build: |
+      set -eux
+      # Make the staged Ruby's shared libs + stage-package libs resolvable.
+      export LD_LIBRARY_PATH="$CRAFT_STAGE/lib:$CRAFT_STAGE/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR:${LD_LIBRARY_PATH:-}"
+      export GEM_HOME="$CRAFT_PART_INSTALL/lib/ruby/gems/4.0.0"
+      mkdir -p "$GEM_HOME"
+      # Invoke gem via ruby explicitly — the gem binstub's shebang is hardcoded
+      # to the build-time absolute path, which doesn't resolve here. Ruby itself
+      # relocates via --enable-load-relative, so $CRAFT_STAGE/bin/ruby works.
+      RUBY="$CRAFT_STAGE/bin/ruby"
+      GEM="$CRAFT_STAGE/bin/gem"
+      "$RUBY" "$GEM" install --no-document --install-dir "$GEM_HOME" \
+        omq-cli rbnacl omq-zstd rzstd msgpack
+      # Strip native extensions
+      find "$GEM_HOME" -type f -name '*.so' -exec strip --strip-unneeded {} + || true
+      # Prune caches and per-gem dev trees
+      rm -rf "$GEM_HOME/cache" "$GEM_HOME/doc"
+      find "$GEM_HOME/gems" -depth -type d \
+        \( -name test -o -name spec -o -name docs \
+           -o -name examples -o -name samples -o -name benchmark \) \
+        -exec rm -rf {} +
+    prime:
+      - '*'
+
+  wrapper:
+    after: [gems]
+    plugin: dump
+    source: snap/local
+    organize:
+      omq-wrapper.sh: bin/omq

@@ -1,0 +1,13 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+Warning[:experimental] = false
+
+# Enable YJIT by default. Skip if the user set RUBYOPT (they may have
+# --disable-yjit or similar in there), if the interpreter lacks YJIT
+# (TruffleRuby, older MRI), or if it's already on.
+if !ENV["RUBYOPT"] && defined?(RubyVM::YJIT) && !RubyVM::YJIT.enabled?
+  RubyVM::YJIT.enable
+end
+
+require "omq/cli"
+OMQ::CLI.run
