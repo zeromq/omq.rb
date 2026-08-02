@@ -374,6 +374,12 @@ pub fn materialize(
                                     subscriber_joined_notify.force_wake();
                                 }
                             }
+                            omq_tokio::MonitorEvent::JoinReceived { .. } => {
+                                if !subscriber_joined_fired {
+                                    subscriber_joined_fired = true;
+                                    subscriber_joined_notify.force_wake();
+                                }
+                            }
                             _ => {}
                         }
 
@@ -432,23 +438,32 @@ pub fn destroy_socket(
     io_threads: usize,
     sock: Arc<InnerSocket>,
     send_prod: Mutex<yring::AsyncProducer<omq_tokio::Message>>,
-    send_pump: JoinHandle<()>,
+    mut send_pump: JoinHandle<()>,
     recv_pump: JoinHandle<()>,
     monitor_pump: JoinHandle<()>,
     linger: Option<Duration>,
 ) {
     recv_pump.abort();
     monitor_pump.abort();
-    send_pump.abort();
-    drop(send_prod);
     let Ok(handle) = (|| -> std::result::Result<Handle, ()> { Ok(ensure_runtime(io_threads)) })()
     else {
+        send_pump.abort();
+        drop(send_prod);
         return;
     };
     let close_timeout = linger
         .unwrap_or(Duration::from_secs(30))
         .max(Duration::from_millis(10));
     handle.spawn(async move {
+        drop(send_prod);
+        if tokio::time::timeout(close_timeout, &mut send_pump)
+            .await
+            .is_err()
+        {
+            send_pump.abort();
+            let _ = send_pump.await;
+        }
+
         let s = Arc::try_unwrap(sock).unwrap_or_else(|arc| (*arc).clone());
         let _ = tokio::time::timeout(close_timeout, s.close()).await;
     });

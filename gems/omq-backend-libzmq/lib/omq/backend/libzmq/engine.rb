@@ -151,6 +151,7 @@ module OMQ
         resolved = get_string_option(L::ZMQ_LAST_ENDPOINT)
         @connections << :libzmq
         @peer_connected.resolve(:libzmq) unless @peer_connected.resolved?
+        resolve_subscriber_joined_without_monitor
         URI.parse(resolved)
       end
 
@@ -164,6 +165,7 @@ module OMQ
         send_cmd(:connect, endpoint)
         @connections << :libzmq
         @peer_connected.resolve(:libzmq) unless @peer_connected.resolved?
+        resolve_subscriber_joined_without_monitor
         URI.parse(endpoint)
       end
 
@@ -326,6 +328,16 @@ module OMQ
       end
 
       private
+
+      def resolve_subscriber_joined_without_monitor
+        return unless %i[PUB XPUB].include?(@socket_type)
+        return if @routing.subscriber_joined.resolved?
+
+        # libzmq monitor wiring is still TODO, so this backend cannot
+        # detect SUBSCRIBE commands. Resolve on attach so callers that wait
+        # for subscriber readiness can use their normal grace period.
+        @routing.subscriber_joined.resolve(:libzmq)
+      end
 
       # Waits for a message from the I/O thread's recv queue.
       # Uses the signal pipe so Async can yield the fiber.
