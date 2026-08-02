@@ -89,6 +89,16 @@ module OMQ
       # Returns socket constructor kwargs for the selected backend.
       #
       def self.backend_kwargs(config)
+        backend = backend_name(config)
+        return {} if backend.nil? || backend == :ruby
+
+        { backend: backend }
+      end
+
+
+      # Returns the effective backend name after legacy --ffi handling.
+      #
+      def self.backend_name(config)
         backend = if config.respond_to?(:ffi) && config.ffi
                     :libzmq
                   elsif config.respond_to?(:backend)
@@ -97,10 +107,7 @@ module OMQ
                     :ruby
                   end
         backend = :libzmq if backend == :ffi
-
-        return {} if backend.nil? || backend == :ruby
-
-        { backend: backend }
+        backend || :ruby
       end
 
 

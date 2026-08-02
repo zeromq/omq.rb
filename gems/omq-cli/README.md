@@ -87,6 +87,8 @@ The default backend is the pure Ruby engine.
 | `--backend ffi` or `--ffi` | Compatibility name for the libzmq backend |
 
 Optional backends must be installed next to `omq-cli`.
+Set `OMQ_BACKEND=ruby|rust|libzmq` to choose a default backend.
+Use `-v` to print the effective backend at startup.
 
 ## Socket types
 

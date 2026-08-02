@@ -25,6 +25,7 @@ module OMQ
       # @return [void]
       def call(task)
         set_process_title
+        log_backend
         setup_socket
         start_event_monitor
         maybe_start_transient_monitor(task)
@@ -554,6 +555,11 @@ module OMQ
       def log(msg)
         return unless config.verbose >= 1
         $stderr.write("#{Term.log_prefix(config.timestamps)}omq: #{msg}\n")
+      end
+
+
+      def log_backend
+        log("backend: #{SocketSetup.backend_name(config)}")
       end
 
 

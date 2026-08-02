@@ -30,6 +30,38 @@ describe "output" do
 end
 
 
+# -- Backend logging -------------------------------------------------
+
+describe "backend logging" do
+  it "logs socket runner backend at -v" do
+    runner = OMQ::CLI::PullRunner.new(
+      make_config(type_name: "pull", verbose: 1, backend: :rust),
+      OMQ::PULL
+    )
+
+    err = StringIO.new
+    $stderr = err
+    runner.send(:log_backend)
+    $stderr = STDERR
+
+    assert_equal "omq: backend: rust\n", err.string
+  end
+
+  it "logs pipe runner backend at -v" do
+    runner = OMQ::CLI::PipeRunner.new(
+      make_config(type_name: "pipe", verbose: 1, backend: :rust)
+    )
+
+    err = StringIO.new
+    $stderr = err
+    runner.send(:log_backend)
+    $stderr = STDERR
+
+    assert_equal "omq: backend: rust\n", err.string
+  end
+end
+
+
 # -- Grace period with Range reconnect_interval ---------------------
 
 describe "wait_for_peer grace period with range reconnect_ivl" do

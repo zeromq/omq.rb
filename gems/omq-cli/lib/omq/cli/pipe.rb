@@ -46,6 +46,7 @@ module OMQ
 
       def run_sequential(task)
         set_pipe_process_title
+        log_backend
         in_eps, out_eps = resolve_endpoints
         @pull, @push = build_pull_push(in_eps, out_eps)
         compile_expr
@@ -152,6 +153,7 @@ module OMQ
 
       def run_parallel(task)
         set_pipe_process_title
+        log_backend
         OMQ.freeze_for_ractors!
 
         in_eps, out_eps      = resolve_endpoints
@@ -238,6 +240,12 @@ module OMQ
             SocketSetup.kill_on_protocol_error(sock, event)
           end
         end
+      end
+
+
+      def log_backend
+        return unless config.verbose >= 1
+        $stderr.write("#{Term.log_prefix(config.timestamps)}omq: backend: #{SocketSetup.backend_name(config)}\n")
       end
 
     end

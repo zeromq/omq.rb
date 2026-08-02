@@ -268,6 +268,15 @@ end
 # -- Option parsing ---------------------------------------------------
 
 describe "OMQ::CLI::CliParser.parse" do
+  def with_omq_backend(value)
+    old = ENV["OMQ_BACKEND"]
+    value.nil? ? ENV.delete("OMQ_BACKEND") : ENV["OMQ_BACKEND"] = value
+    yield
+  ensure
+    old.nil? ? ENV.delete("OMQ_BACKEND") : ENV["OMQ_BACKEND"] = old
+  end
+
+
   it "parses socket type" do
     opts = OMQ::CLI::CliParser.parse(["req", "-c", "tcp://localhost:5555"])
     assert_equal "req", opts[:type_name]
@@ -456,6 +465,38 @@ describe "OMQ::CLI::CliParser.parse" do
     opts = OMQ::CLI::CliParser.parse(["req", "-c", "tcp://x:1", "--backend", "rust"])
     assert_equal :rust, opts[:backend]
     refute opts[:ffi]
+  end
+
+  it "uses OMQ_BACKEND as the socket backend default" do
+    with_omq_backend("rust") do
+      opts = OMQ::CLI::CliParser.parse(["req", "-c", "tcp://x:1"])
+      assert_equal :rust, opts[:backend]
+      refute opts[:ffi]
+    end
+  end
+
+  it "lets --backend override OMQ_BACKEND" do
+    with_omq_backend("rust") do
+      opts = OMQ::CLI::CliParser.parse(["req", "-c", "tcp://x:1", "--backend", "ruby"])
+      assert_equal :ruby, opts[:backend]
+      refute opts[:ffi]
+    end
+  end
+
+  it "rejects invalid OMQ_BACKEND values" do
+    with_omq_backend("bogus") do
+      assert_raises(SystemExit) { quietly { OMQ::CLI::CliParser.parse(["req", "-c", "tcp://x:1"]) } }
+    end
+  end
+
+  it "documents env vars before exit codes in help" do
+    out, = capture_io do
+      assert_raises(SystemExit) { OMQ::CLI::CliParser.parse(["--help"]) }
+    end
+
+    assert_includes out, "Env vars:"
+    assert_includes out, "OMQ_BACKEND (socket backend: ruby, rust, or libzmq)"
+    assert_operator out.index("Env vars:"), :<, out.index("Exit codes:")
   end
 
   it "parses --ffi as backend libzmq" do

@@ -332,6 +332,7 @@ module OMQ
       def parse(argv)
         opts      = DEFAULT_OPTS.transform_values { |v| v.is_a?(Array) ? v.dup : v }
         pipe_side = nil  # nil = legacy positional mode; :in/:out = modal
+        explicit_backend = false
 
         parser = OptionParser.new do |o|
           o.banner = "Usage: omq TYPE [options]\n\n" \
@@ -463,8 +464,6 @@ module OMQ
           o.on("--curve-server-key KEY", "Enable CURVE as client (server's Z85 public key)") { |v| opts[:curve_server_key] = v }
           o.on("--crypto BACKEND", "Crypto backend: rbnacl (default) or nuckle (pure Ruby, DANGEROUS)") { |v| opts[:crypto] = v }
           o.separator "  Install libsodium: apt install libsodium-dev / brew install libsodium"
-          o.separator "  Env vars: OMQ_SERVER_KEY (client), OMQ_SERVER_PUBLIC + OMQ_SERVER_SECRET (server)"
-          o.separator "            OMQ_CRYPTO (backend: rbnacl or nuckle)"
 
           o.separator "\nOther:"
           o.on("-v", "--verbose",   "Verbosity: -v endpoints, -vv events, -vvv messages") { opts[:verbose] += 1 }
@@ -479,11 +478,13 @@ module OMQ
             load_socket_backend!(backend)
             opts[:backend] = backend
             opts[:ffi] = false
+            explicit_backend = true
           end
           o.on(      "--ffi",       "Alias for --backend libzmq") do
             load_socket_backend!(:libzmq)
             opts[:backend] = :libzmq
             opts[:ffi] = true
+            explicit_backend = true
           end
           o.on("-V", "--version") {
             require "omq/version"
@@ -496,6 +497,12 @@ module OMQ
                                    exit }
           o.on("--examples")    { CLI.page EXAMPLES
                                    exit }
+
+          o.separator "\nEnv vars:"
+          o.separator "  OMQ_BACKEND (socket backend: ruby, rust, or libzmq)"
+          o.separator "  OMQ_SERVER_KEY (client CURVE server key)"
+          o.separator "  OMQ_SERVER_PUBLIC + OMQ_SERVER_SECRET (server CURVE keypair)"
+          o.separator "  OMQ_CRYPTO (CURVE crypto backend: rbnacl or nuckle)"
 
           o.separator "\nExit codes: 0 = success, 1 = error, 2 = timeout"
         end
@@ -517,6 +524,8 @@ module OMQ
         else
           opts[:type_name] = type_name.downcase
         end
+
+        apply_env_backend!(opts) if opts[:type_name] && !explicit_backend
 
         # Host shorthand (tcp://*:PORT, tcp://:PORT, tcp://localhost:PORT)
         # is normalized inside OMQ::Transport::TCP — see its
@@ -588,6 +597,23 @@ module OMQ
         else
           abort "omq: could not load backend #{backend} (#{e.message})"
         end
+      end
+
+
+      # Applies OMQ_BACKEND when no explicit backend flag was given.
+      #
+      def apply_env_backend!(opts)
+        env_backend = ENV["OMQ_BACKEND"]
+        return if env_backend.nil? || env_backend.empty?
+
+        unless %w[ruby rust libzmq].include?(env_backend)
+          abort "omq: invalid OMQ_BACKEND=#{env_backend.inspect} (use ruby, rust, or libzmq)"
+        end
+
+        backend = env_backend.to_sym
+        load_socket_backend!(backend)
+        opts[:backend] = backend
+        opts[:ffi] = false
       end
 
 

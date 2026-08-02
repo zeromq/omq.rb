@@ -111,4 +111,10 @@ describe "OMQ::CLI::SocketSetup.backend_kwargs" do
     cfg = make_config(type_name: "push", backend: :ruby, ffi: true)
     assert_equal({ backend: :libzmq }, OMQ::CLI::SocketSetup.backend_kwargs(cfg))
   end
+
+  it "reports effective backend names" do
+    assert_equal :ruby, OMQ::CLI::SocketSetup.backend_name(make_config(type_name: "push"))
+    assert_equal :rust, OMQ::CLI::SocketSetup.backend_name(make_config(type_name: "push", backend: :rust))
+    assert_equal :libzmq, OMQ::CLI::SocketSetup.backend_name(make_config(type_name: "push", backend: :ruby, ffi: true))
+  end
 end
