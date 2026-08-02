@@ -20,6 +20,7 @@ module OMQ
       # @return [Async::LimitedQueue]
       #
       attr_reader :send_queue
+      attr_reader :subscriber_joined
 
 
       # @param engine [Engine]
@@ -29,6 +30,7 @@ module OMQ
         @connections       = []
         @groups            = {} # connection => Set of joined groups (or ANY_GROUPS for UDP)
         @send_queue        = Routing.build_queue(engine.options.send_hwm, :block)
+        @subscriber_joined = Async::Promise.new
         @on_mute           = engine.options.on_mute
         @send_pump_started = false
         @conflate          = engine.options.conflate
@@ -175,6 +177,7 @@ module OMQ
             case cmd.name
             when "JOIN"
               @groups[conn]&.add(cmd.data)
+              @subscriber_joined.resolve(conn) unless @subscriber_joined.resolved?
             when "LEAVE"
               @groups[conn]&.delete(cmd.data)
             end

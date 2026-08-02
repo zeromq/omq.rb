@@ -299,20 +299,15 @@ pub fn materialize(
     let job: Job = Box::new(move || {
         let sock = Arc::new(InnerSocket::new(socket_type, options));
 
-        const SEND_YIELD_INTERVAL: u32 = 256;
         let s = sock.clone();
         let sn = send_notify.clone();
         let send_pump = tokio::spawn(async move {
-            futures::pin_mut!(send_cons);
-            let mut batch = 0u32;
+            let mut send_cons = send_cons;
             while let Some(msg) = futures::StreamExt::next(&mut send_cons).await {
-                let _ = s.send(msg).await;
+                send_cons.release();
                 sn.notify();
-                batch += 1;
-                if batch >= SEND_YIELD_INTERVAL {
-                    batch = 0;
-                    tokio::task::yield_now().await;
-                }
+                let _ = s.send(msg).await;
+                tokio::task::yield_now().await;
             }
             sn.notify();
         });
@@ -343,6 +338,7 @@ pub fn materialize(
         });
 
         let monitor_sock = sock.clone();
+        let peer_ready_sock = sock.clone();
         let monitor_pump = tokio::spawn(async move {
             let mut stream = monitor_sock.monitor();
             let mut peer_count: u32 = 0;
@@ -359,6 +355,7 @@ pub fn materialize(
                                 had_peers = true;
                                 if !peer_connected_fired {
                                     peer_connected_fired = true;
+                                    let _ = peer_ready_sock.connections().await;
                                     peer_connected_notify.force_wake();
                                 }
                             }
@@ -369,6 +366,12 @@ pub fn materialize(
                                 }
                             }
                             omq_tokio::MonitorEvent::SubscribeReceived { .. } => {
+                                if !subscriber_joined_fired {
+                                    subscriber_joined_fired = true;
+                                    subscriber_joined_notify.force_wake();
+                                }
+                            }
+                            omq_tokio::MonitorEvent::JoinReceived { .. } => {
                                 if !subscriber_joined_fired {
                                     subscriber_joined_fired = true;
                                     subscriber_joined_notify.force_wake();
@@ -432,24 +435,59 @@ pub fn destroy_socket(
     io_threads: usize,
     sock: Arc<InnerSocket>,
     send_prod: Mutex<yring::AsyncProducer<omq_tokio::Message>>,
-    send_pump: JoinHandle<()>,
+    mut send_pump: JoinHandle<()>,
     recv_pump: JoinHandle<()>,
     monitor_pump: JoinHandle<()>,
     linger: Option<Duration>,
 ) {
     recv_pump.abort();
     monitor_pump.abort();
-    send_pump.abort();
-    drop(send_prod);
     let Ok(handle) = (|| -> std::result::Result<Handle, ()> { Ok(ensure_runtime(io_threads)) })()
     else {
+        send_pump.abort();
+        drop(send_prod);
         return;
     };
     let close_timeout = linger
         .unwrap_or(Duration::from_secs(30))
         .max(Duration::from_millis(10));
-    handle.spawn(async move {
+    let fut = async move {
+        drop(send_prod);
+        if tokio::time::timeout(close_timeout, &mut send_pump)
+            .await
+            .is_err()
+        {
+            send_pump.abort();
+            let _ = send_pump.await;
+        }
+
         let s = Arc::try_unwrap(sock).unwrap_or_else(|arc| (*arc).clone());
         let _ = tokio::time::timeout(close_timeout, s.close()).await;
+    };
+
+    let (otx, orx) = flume::bounded::<()>(1);
+    handle.spawn(async move {
+        fut.await;
+        let _ = otx.send(());
     });
+
+    struct RecvBox {
+        rx: flume::Receiver<()>,
+    }
+
+    extern "C" fn blocking_recv(data: *mut libc::c_void) -> *mut libc::c_void {
+        let rd = unsafe { &mut *(data as *mut RecvBox) };
+        let _ = rd.rx.recv();
+        std::ptr::null_mut()
+    }
+
+    let mut rd = RecvBox { rx: orx };
+    unsafe {
+        rb_sys::rb_thread_call_without_gvl(
+            Some(blocking_recv),
+            &mut rd as *mut RecvBox as *mut libc::c_void,
+            None,
+            std::ptr::null_mut(),
+        );
+    }
 }

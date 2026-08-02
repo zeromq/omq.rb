@@ -19,7 +19,7 @@ zstd    = ["omq-tokio/zstd"]
 
 [dependencies]
 omq-proto = { version = "=0.25.0", default-features = false }
-omq-tokio = { version = "=0.20.3", default-features = false }
+omq-tokio = { version = "=0.21.0", default-features = false }
 tokio     = { version = "1.52.0", features = ["rt", "rt-multi-thread", "time", "sync", "io-util", "net"] }
 yring     = { version = "0.3.11", features = ["async"] }
 

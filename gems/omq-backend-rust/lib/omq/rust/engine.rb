@@ -19,7 +19,7 @@ module OMQ
         @peer_connected = Async::Promise.new
         @all_peers_gone = Async::Promise.new
         @subscriber_joined = Async::Promise.new
-        @connections    = []
+        @connections    = {}
         @closed         = false
         @parent_task    = nil
         @on_io_thread   = false
@@ -222,8 +222,26 @@ module OMQ
             monitor_io.wait_readable
             monitor_io.read_nonblock(256, exception: false)
             while (data = @native.try_recv_monitor)
+              track_connection_event(data)
               @monitor_queue.enqueue(MonitorEvent.new(**data))
             end
+          end
+        end
+      end
+
+
+      def track_connection_event(data)
+        detail = data[:detail] || {}
+        connection_id = detail[:connection_id]
+
+        case data[:type]
+        when :handshake_succeeded
+          @connections[connection_id || Object.new] = true
+        when :disconnected
+          if connection_id
+            @connections.delete(connection_id)
+          else
+            @connections.shift
           end
         end
       end
