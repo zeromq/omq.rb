@@ -54,7 +54,7 @@ describe "Rust backend" do
 
   describe "receive lifecycle" do
     it "honors recv_timeout before bind or connect" do
-      Async do
+      run_backend do
         pull = OMQ::PULL.new(backend: BACKEND, recv_timeout: 0.02)
 
         assert_raises(IO::TimeoutError) { pull.receive }
@@ -76,7 +76,7 @@ describe "Rust backend" do
       end
       $VERBOSE = verbose
 
-      Async do
+      run_backend do
         pull = OMQ::PULL.new(backend: BACKEND, recv_timeout: 0.02)
 
         assert_raises(IO::TimeoutError) { pull.receive }
@@ -91,7 +91,7 @@ describe "Rust backend" do
 
 
     it "close_read wakes a blocked receive with nil" do
-      Async do |task|
+      run_backend do |task|
         pull = OMQ::PULL.new(backend: BACKEND)
         reader = task.async { pull.receive }
 
@@ -108,7 +108,7 @@ describe "Rust backend" do
 
   describe "PUSH/PULL" do
     it "sends and receives a single message" do
-      Async do
+      run_backend do
         pull = OMQ::PULL.new(backend: BACKEND)
         port = bind_port(pull)
         push = OMQ::PUSH.new(backend: BACKEND)
@@ -125,7 +125,7 @@ describe "Rust backend" do
 
 
     it "sends multipart messages" do
-      Async do
+      run_backend do
         pull = OMQ::PULL.new(backend: BACKEND)
         port = bind_port(pull)
         push = OMQ::PUSH.new(backend: BACKEND)
@@ -142,7 +142,7 @@ describe "Rust backend" do
 
 
     it "handles binary data" do
-      Async do
+      run_backend do
         pull = OMQ::PULL.new(backend: BACKEND)
         port = bind_port(pull)
         push = OMQ::PUSH.new(backend: BACKEND)
@@ -164,7 +164,7 @@ describe "Rust backend" do
 
   describe "REQ/REP" do
     it "round-trips request and reply" do
-      Async do
+      run_backend do
         rep = OMQ::REP.new(backend: BACKEND)
         port = bind_port(rep)
         req = OMQ::REQ.new(backend: BACKEND)
@@ -185,7 +185,7 @@ describe "Rust backend" do
 
   describe "PUB/SUB" do
     it "delivers to subscriber" do
-      Async do
+      run_backend do
         pub = OMQ::PUB.new(backend: BACKEND)
         port = bind_port(pub)
         sub = OMQ::SUB.new(backend: BACKEND)
@@ -203,7 +203,7 @@ describe "Rust backend" do
 
 
     it "filters by prefix" do
-      Async do
+      run_backend do
         pub = OMQ::PUB.new(backend: BACKEND)
         port = bind_port(pub)
         sub = OMQ::SUB.new(backend: BACKEND)
@@ -226,7 +226,7 @@ describe "Rust backend" do
 
   describe "PAIR" do
     it "sends bidirectionally" do
-      Async do
+      run_backend do
         a = OMQ::PAIR.new(backend: BACKEND)
         port = bind_port(a)
         b = OMQ::PAIR.new(backend: BACKEND)
@@ -247,7 +247,7 @@ describe "Rust backend" do
 
   describe "DEALER/ROUTER" do
     it "routes with identity envelope" do
-      Async do
+      run_backend do
         router = OMQ::ROUTER.new(backend: BACKEND)
         port = bind_port(router)
         dealer = OMQ::DEALER.new(backend: BACKEND)
@@ -273,12 +273,12 @@ describe "Rust backend" do
 
   describe "XPUB/XSUB" do
     it "relays subscriptions" do
-      Async do
+      run_backend do
         xpub = OMQ::XPUB.new(backend: BACKEND)
         port = bind_port(xpub)
         xsub = OMQ::XSUB.new(backend: BACKEND)
         xsub.connect("tcp://127.0.0.1:#{port}")
-        xsub.subscribe("")
+        xsub << "\x01".b
         xpub.subscriber_joined.wait
 
         xpub << "hello"
@@ -293,7 +293,7 @@ describe "Rust backend" do
 
   describe "CLIENT/SERVER" do
     it "exchanges messages" do
-      Async do
+      run_backend do
         server = OMQ::SERVER.new(backend: BACKEND)
         port = bind_port(server)
         client = OMQ::CLIENT.new(backend: BACKEND)
@@ -303,7 +303,7 @@ describe "Rust backend" do
         client << "hello"
         msg = server.receive
         assert_equal ["hello"], msg[1..]
-        server.send(msg)
+        server.send_to(msg[0], msg[1])
         assert_equal ["hello"], client.receive
       ensure
         client&.close
@@ -315,7 +315,7 @@ describe "Rust backend" do
 
   describe "SCATTER/GATHER" do
     it "distributes work" do
-      Async do
+      run_backend do
         gather = OMQ::GATHER.new(backend: BACKEND)
         port = bind_port(gather)
         scatter = OMQ::SCATTER.new(backend: BACKEND)
@@ -334,7 +334,7 @@ describe "Rust backend" do
 
   describe "RADIO/DISH" do
     it "delivers to joined group" do
-      Async do
+      run_backend do
         radio = OMQ::RADIO.new(backend: BACKEND)
         port = bind_port(radio)
         dish = OMQ::DISH.new(backend: BACKEND)
@@ -343,8 +343,8 @@ describe "Rust backend" do
         radio.peer_connected.wait
         sleep 0.05
 
-        radio.publish("msg", group: "grp")
-        assert_equal ["msg"], dish.receive
+        radio.publish("grp", "msg")
+        assert_equal ["grp", "msg"], dish.receive
       ensure
         radio&.close
         dish&.close
@@ -355,7 +355,7 @@ describe "Rust backend" do
 
   describe "CHANNEL" do
     it "sends bidirectionally" do
-      Async do
+      run_backend do
         a = OMQ::CHANNEL.new(backend: BACKEND)
         port = bind_port(a)
         b = OMQ::CHANNEL.new(backend: BACKEND)
@@ -373,8 +373,13 @@ describe "Rust backend" do
 
 
   describe "cross-backend interop" do
+    before do
+      skip_without_ruby_backend
+    end
+
+
     it "Rust PUSH -> Ruby PULL" do
-      Async do
+      run_backend do
         pull = OMQ::PULL.new(backend: :ruby)
         port = bind_port(pull)
         push = OMQ::PUSH.new(backend: :rust)
@@ -391,7 +396,7 @@ describe "Rust backend" do
 
 
     it "Ruby PUSH -> Rust PULL" do
-      Async do
+      run_backend do
         pull = OMQ::PULL.new(backend: :rust)
         port = bind_port(pull)
         push = OMQ::PUSH.new(backend: :ruby)
@@ -408,7 +413,7 @@ describe "Rust backend" do
 
 
     it "Rust PUB -> Ruby SUB" do
-      Async do
+      run_backend do
         pub = OMQ::PUB.new(backend: :rust)
         port = bind_port(pub)
         sub = OMQ::SUB.new(backend: :ruby)
@@ -426,7 +431,7 @@ describe "Rust backend" do
 
 
     it "Ruby REQ -> Rust REP" do
-      Async do
+      run_backend do
         rep = OMQ::REP.new(backend: :rust)
         port = bind_port(rep)
         req = OMQ::REQ.new(backend: :ruby)
@@ -447,7 +452,7 @@ describe "Rust backend" do
 
   describe "compression transports" do
     it "round-trips over lz4+tcp" do
-      Async do
+      run_backend do
         pull = OMQ::PULL.new(backend: BACKEND)
         uri = pull.bind("lz4+tcp://127.0.0.1:0")
         push = OMQ::PUSH.new(backend: BACKEND)
@@ -467,7 +472,7 @@ describe "Rust backend" do
     it "accepts a static lz4 dictionary" do
       dict = ("event=login user=alice payload=" * 10).b
 
-      Async do
+      run_backend do
         pull = OMQ::PULL.new(backend: BACKEND)
         uri = pull.bind("lz4+tcp://127.0.0.1:0")
         push = OMQ::PUSH.new(backend: BACKEND)
@@ -487,7 +492,7 @@ describe "Rust backend" do
     it "ships a static lz4 dictionary to a raw tcp peer" do
       dict = ("event=login user=alice payload=" * 10).b
 
-      Async do
+      run_backend do
         raw = OMQ::PULL.new(backend: BACKEND)
         port = bind_port(raw)
         push = OMQ::PUSH.new(backend: BACKEND)
@@ -504,7 +509,7 @@ describe "Rust backend" do
 
 
     it "keeps lz4 auto_dict off by default" do
-      Async do
+      run_backend do
         raw = OMQ::PULL.new(backend: BACKEND)
         port = bind_port(raw)
         push = OMQ::PUSH.new(backend: BACKEND)
@@ -522,7 +527,7 @@ describe "Rust backend" do
 
 
     it "enables lz4 auto_dict when requested" do
-      Async do
+      run_backend do
         raw = OMQ::PULL.new(backend: BACKEND)
         port = bind_port(raw)
         push = OMQ::PUSH.new(backend: BACKEND)
@@ -540,7 +545,7 @@ describe "Rust backend" do
 
 
     it "rejects lz4 auto_dict trigger because OMQ.rs has a fixed trigger" do
-      Async do
+      run_backend do
         pull = OMQ::PULL.new(backend: BACKEND)
         assert_raises(ArgumentError) do
           pull.bind("lz4+tcp://127.0.0.1:0", auto_dict: { trigger: 20 })
@@ -552,7 +557,7 @@ describe "Rust backend" do
 
 
     it "round-trips over zstd+tcp with a custom level" do
-      Async do
+      run_backend do
         pull = OMQ::PULL.new(backend: BACKEND)
         uri = pull.bind("zstd+tcp://127.0.0.1:0")
         push = OMQ::PUSH.new(backend: BACKEND)
@@ -572,7 +577,7 @@ describe "Rust backend" do
     it "ships a static zstd dictionary to a raw tcp peer" do
       dict = zstd_test_dict
 
-      Async do
+      run_backend do
         raw = OMQ::PULL.new(backend: BACKEND)
         port = bind_port(raw)
         push = OMQ::PUSH.new(backend: BACKEND)
@@ -589,7 +594,7 @@ describe "Rust backend" do
 
 
     it "rejects an invalid zstd compression level" do
-      Async do
+      run_backend do
         pull = OMQ::PULL.new(backend: BACKEND)
         assert_raises(ArgumentError) do
           pull.bind("zstd+tcp://127.0.0.1:0", level: 99)
@@ -621,7 +626,7 @@ describe "Rust backend" do
 
   describe "lifecycle promises" do
     it "resolves peer_connected on handshake" do
-      Async do
+      run_backend do
         pull = OMQ::PULL.new(backend: BACKEND)
         port = bind_port(pull)
         push = OMQ::PUSH.new(backend: BACKEND)
@@ -638,7 +643,7 @@ describe "Rust backend" do
 
 
     it "resolves subscriber_joined for PUB" do
-      Async do
+      run_backend do
         pub = OMQ::PUB.new(backend: BACKEND)
         port = bind_port(pub)
         sub = OMQ::SUB.new(backend: BACKEND)
@@ -664,7 +669,7 @@ describe "Rust backend" do
       client_sec = crypto::PrivateKey.generate
       client_pub = client_sec.public_key
 
-      Async do
+      run_backend do
         pull = OMQ::PULL.new(backend: BACKEND)
         pull.mechanism = Protocol::ZMTP::Mechanism::Curve.server(
           public_key: server_pub.to_s, secret_key: server_sec.to_s, crypto: crypto,
@@ -689,6 +694,8 @@ describe "Rust backend" do
 
 
     it "interops: Rust CURVE server, Ruby CURVE client" do
+      skip_without_ruby_backend
+
       require "nuckle"
       require "protocol/zmtp/mechanism/curve"
       crypto = Nuckle
@@ -697,7 +704,7 @@ describe "Rust backend" do
       client_sec = crypto::PrivateKey.generate
       client_pub = client_sec.public_key
 
-      Async do
+      run_backend do
         pull = OMQ::PULL.new(backend: :rust)
         pull.mechanism = Protocol::ZMTP::Mechanism::Curve.server(
           public_key: server_pub.to_s, secret_key: server_sec.to_s, crypto: crypto,
@@ -724,7 +731,7 @@ describe "Rust backend" do
 
   describe "inproc transport" do
     it "uses the native Rust inproc endpoint" do
-      Async do
+      run_backend do
         endpoint = "inproc://rust-inproc-#{object_id}"
         pull = OMQ::PULL.new(backend: BACKEND)
         pull.bind(endpoint)
@@ -744,7 +751,7 @@ describe "Rust backend" do
 
   describe "IPC transport" do
     it "sends over Unix socket" do
-      Async do
+      run_backend do
         path = "/tmp/omq-rust-test-#{$$}.sock"
         pull = OMQ::PULL.new(backend: BACKEND)
         pull.bind("ipc://#{path}")
@@ -900,7 +907,7 @@ describe "Rust backend" do
 
   describe "large messages" do
     it "handles 1 MiB payload" do
-      Async do
+      run_backend do
         pull = OMQ::PULL.new(backend: BACKEND)
         port = bind_port(pull)
         push = OMQ::PUSH.new(backend: BACKEND)

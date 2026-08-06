@@ -17,7 +17,11 @@ module OMQ
       if @engine.on_io_thread?
         Reactor.run(timeout: @options.read_timeout) { @engine.dequeue_recv }
       elsif (timeout = @options.read_timeout)
-        Async::Task.current.with_timeout(timeout, IO::TimeoutError) { @engine.dequeue_recv }
+        if Reactor.native_fiber_scheduler?
+          Async::Task.current.with_timeout(timeout, IO::TimeoutError) { @engine.dequeue_recv }
+        else
+          Reactor.run(timeout:) { @engine.dequeue_recv }
+        end
       else
         @engine.dequeue_recv
       end

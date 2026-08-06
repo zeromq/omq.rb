@@ -1,108 +1,7 @@
 # frozen_string_literal: true
 
-native_fiber_scheduler = Fiber.respond_to?(:scheduler)
-
-unless native_fiber_scheduler
-  ENV["IO_EVENT_SELECTOR"] ||= "Select"
-
-  class Fiber
-    class << self
-      def scheduler
-        scheduler = Thread.current.thread_variable_get(:__omq_fiber_scheduler__)
-        return unless scheduler
-
-        if __omq_scheduler_closed?(scheduler)
-          Thread.current.thread_variable_set(:__omq_fiber_scheduler__, nil)
-          nil
-        else
-          scheduler
-        end
-      end
-
-      def set_scheduler(scheduler)
-        old_scheduler = Thread.current.thread_variable_get(:__omq_fiber_scheduler__)
-        if old_scheduler && old_scheduler != scheduler && !__omq_scheduler_closed?(old_scheduler) && old_scheduler.respond_to?(:scheduler_close)
-          begin
-            old_scheduler.scheduler_close
-          ensure
-            Thread.current.thread_variable_set(:__omq_fiber_scheduler__, scheduler)
-          end
-        else
-          Thread.current.thread_variable_set(:__omq_fiber_scheduler__, scheduler)
-        end
-
-        scheduler
-      end
-
-      private
-
-      def __omq_scheduler_closed?(scheduler)
-        scheduler.instance_variable_defined?(:@selector) && scheduler.instance_variable_get(:@selector).nil?
-      end
-    end
-
-    def backtrace(*)
-      []
-    end unless method_defined?(:backtrace)
-  end
-
-  class IO
-    alias __omq_wait_readable wait_readable
-    alias __omq_wait_writable wait_writable
-
-    def timeout
-      nil
-    end unless method_defined?(:timeout)
-
-    def wait_readable(timeout = nil)
-      if (scheduler = Fiber.scheduler)
-        scheduler.io_wait(self, IO::READABLE, timeout)
-      else
-        __omq_wait_readable(timeout)
-      end
-    end
-
-    def wait_writable(timeout = nil)
-      if (scheduler = Fiber.scheduler)
-        scheduler.io_wait(self, IO::WRITABLE, timeout)
-      else
-        __omq_wait_writable(timeout)
-      end
-    end
-  end
-end
-
 require "async"
 require "timeout"
-
-unless native_fiber_scheduler
-  module OMQAsyncPromiseWaitCompat
-    def wait(timeout: nil)
-      scheduler = Fiber.scheduler
-      return super unless scheduler
-
-      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout if timeout
-
-      until (state = resolved)
-        if deadline && Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
-          raise Async::TimeoutError, "Timeout while waiting for promise!"
-        end
-
-        scheduler.yield
-      end
-
-      value = self.value
-      case state
-      when :completed
-        value
-      when :failed, :cancelled
-        raise value if value
-      end
-    end
-  end
-
-  Async::Promise.prepend(OMQAsyncPromiseWaitCompat)
-end
 
 module OMQ
   # Shared IO reactor for the Ruby backend.
@@ -118,7 +17,7 @@ module OMQ
   #
   module Reactor
     THREAD_NAME = 'omq-io'
-    NATIVE_FIBER_SCHEDULER = Fiber.method(:scheduler).source_location.nil?
+    NATIVE_FIBER_SCHEDULER = Fiber.respond_to?(:scheduler) && Fiber.method(:scheduler).source_location.nil?
 
     @mutex      = Mutex.new
     @pid        = nil

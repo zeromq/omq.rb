@@ -12,7 +12,8 @@ describe "Rust backend stress" do
   describe "throughput" do
     it "transfers 10k messages" do
       n = 10_000
-      Async do |task|
+      run_backend do |task|
+        push = pull = nil
         task.with_timeout(30) do
           pull = OMQ::PULL.new(backend: BACKEND)
           port = bind_port(pull)
@@ -46,7 +47,7 @@ describe "Rust backend stress" do
       pairs = 10
       msgs_per_pair = 100
 
-      Async do
+      run_backend do
         sockets = []
         pairs.times do |i|
           pull = OMQ::PULL.new(backend: BACKEND)
@@ -59,7 +60,7 @@ describe "Rust backend stress" do
         sockets.each { |push, _| push.peer_connected.wait }
 
         tasks = sockets.map do |push, pull|
-          Async do
+          run_backend do
             msgs_per_pair.times { |i| push << "msg-#{i}" }
             msgs_per_pair.times { pull.receive }
           end
@@ -73,12 +74,38 @@ describe "Rust backend stress" do
         end
       end
     end
+
+
+    it "uses one shared watcher thread without a native Fiber scheduler" do
+      skip unless TRUFFLERUBY_WITHOUT_ASYNC
+
+      run_backend do
+        sockets = []
+        5.times do
+          pull = OMQ::PULL.new(backend: BACKEND)
+          port = bind_port(pull)
+          push = OMQ::PUSH.new(backend: BACKEND)
+          push.connect("tcp://127.0.0.1:#{port}")
+          sockets << [push, pull]
+        end
+
+        sockets.each { |push, _| push.peer_connected.wait }
+        watcher_threads = Thread.list.count { |thread| thread.name == "omq-rust-watch" }
+
+        assert_operator watcher_threads, :<=, 1
+      ensure
+        sockets&.each do |push, pull|
+          push&.close
+          pull&.close
+        end
+      end
+    end
   end
 
 
   describe "close under load" do
     it "closes sender while messages are in flight" do
-      Async do |task|
+      run_backend do |task|
         pull = OMQ::PULL.new(backend: BACKEND, recv_timeout: 0.5)
         port = bind_port(pull)
         push = OMQ::PUSH.new(backend: BACKEND)
@@ -104,7 +131,7 @@ describe "Rust backend stress" do
 
 
     it "closes receiver while sender is active" do
-      Async do
+      run_backend do
         pull = OMQ::PULL.new(backend: BACKEND)
         port = bind_port(pull)
         push = OMQ::PUSH.new(backend: BACKEND)
@@ -130,7 +157,7 @@ describe "Rust backend stress" do
       baseline = fd_count.call
 
       5.times do
-        Async do
+        run_backend do
           pull = OMQ::PULL.new(backend: BACKEND)
           port = bind_port(pull)
           push = OMQ::PUSH.new(backend: BACKEND)
@@ -154,7 +181,7 @@ describe "Rust backend stress" do
 
   describe "reconnect" do
     it "reconnects after server restart" do
-      Async do
+      run_backend do
         pull = OMQ::PULL.new(backend: BACKEND)
         port = bind_port(pull)
         push = OMQ::PUSH.new(backend: BACKEND)

@@ -245,6 +245,12 @@ module OMQ
     end
 
 
+    # @return [Boolean] true once the underlying engine is closed.
+    def closed?
+      @engine.closed?
+    end
+
+
     # Immediate hard stop. Skips the linger drain and cascades teardown
     # through the socket-level Async::Barrier. Intended for crash-path
     # cleanup or when the caller already knows no pending sends matter.
@@ -316,6 +322,10 @@ module OMQ
       @options.conflate     = conflate
       @options.on_mute      = on_mute      if on_mute
       backend_name = (backend || :ruby).to_sym
+      if backend_name == :ruby && !Reactor.native_fiber_scheduler?
+        raise NotImplementedError, "Ruby backend requires native Fiber.scheduler; use backend: :rust"
+      end
+
       require_backend(backend_name) unless Backend.registered?(backend_name)
 
       engine_class = Backend.fetch(backend_name)

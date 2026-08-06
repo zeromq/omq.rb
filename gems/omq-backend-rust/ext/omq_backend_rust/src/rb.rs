@@ -336,12 +336,11 @@ pub unsafe fn typed_data_ref<T>(
     data_type: *const rb_data_type_t,
     type_name: &str,
 ) -> RbResult<&'static T> {
-    let ok = unsafe { rb_sys::rb_typeddata_is_kind_of(value, data_type) };
-    if ok == 0 {
-        return Err(RubyErr::type_error(format!("expected {type_name}")));
-    }
-
-    let ptr = unsafe { rb_sys::RTYPEDDATA_GET_DATA(value) };
+    let mut ptr = std::ptr::null_mut();
+    protect_unit(|| unsafe {
+        ptr = rb_sys::rb_check_typeddata(value, data_type);
+    })
+    .map_err(|_| RubyErr::type_error(format!("expected {type_name}")))?;
     if ptr.is_null() {
         return Err(RubyErr::runtime(format!(
             "{type_name} data pointer is null"

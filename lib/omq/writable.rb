@@ -46,7 +46,11 @@ module OMQ
       if @engine.on_io_thread?
         Reactor.run(timeout: @options.write_timeout) { @engine.enqueue_send(parts) }
       elsif (timeout = @options.write_timeout)
-        Async::Task.current.with_timeout(timeout, IO::TimeoutError) { @engine.enqueue_send(parts) }
+        if Reactor.native_fiber_scheduler?
+          Async::Task.current.with_timeout(timeout, IO::TimeoutError) { @engine.enqueue_send(parts) }
+        else
+          Reactor.run(timeout:) { @engine.enqueue_send(parts) }
+        end
       else
         @engine.enqueue_send(parts)
       end
