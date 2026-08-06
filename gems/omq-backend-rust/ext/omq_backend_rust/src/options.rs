@@ -18,16 +18,16 @@ pub fn build_options(hash: VALUE) -> RbResult<omq_tokio::Options> {
         opts.recv_hwm = v.max(0) as u32;
     }
     if let Some(v) = get_opt_f64(hash, "linger")? {
-        opts.linger = if v.is_infinite() {
+        opts.linger = if v.is_infinite() && v.is_sign_positive() {
             None
         } else {
-            Some(Duration::from_secs_f64(v))
+            Some(duration_from_seconds("linger", v)?)
         };
     }
-    if let Some(v) = get_opt_bytes(hash, "identity")? {
-        if !v.is_empty() {
-            opts.identity = Bytes::from(v);
-        }
+    if let Some(v) = get_opt_bytes(hash, "identity")?
+        && !v.is_empty()
+    {
+        opts.identity = Bytes::from(v);
     }
     if let Some(v) = get_opt_bool(hash, "router_mandatory")? {
         opts.router_mandatory = v;
@@ -44,34 +44,34 @@ pub fn build_options(hash: VALUE) -> RbResult<omq_tokio::Options> {
     if let Some(v) = get_opt_duration(hash, "heartbeat_timeout")? {
         opts.heartbeat_timeout = Some(v);
     }
-    if let Some(v) = get_opt_i64(hash, "max_message_size")? {
-        opts.max_message_size = Some(v as usize);
+    if let Some(v) = get_opt_usize(hash, "max_message_size")? {
+        opts.max_message_size = Some(v);
     }
-    if let Some(v) = get_opt_i64(hash, "sndbuf")? {
-        opts.send_buffer_size = Some(v as usize);
+    if let Some(v) = get_opt_usize(hash, "sndbuf")? {
+        opts.send_buffer_size = Some(v);
     }
-    if let Some(v) = get_opt_i64(hash, "rcvbuf")? {
-        opts.recv_buffer_size = Some(v as usize);
+    if let Some(v) = get_opt_usize(hash, "rcvbuf")? {
+        opts.recv_buffer_size = Some(v);
     }
-    if let Some(v) = get_opt_bytes(hash, "compression_dict")? {
-        if !v.is_empty() {
-            opts.compression_dict = Some(Bytes::from(v));
-        }
+    if let Some(v) = get_opt_bytes(hash, "compression_dict")?
+        && !v.is_empty()
+    {
+        opts.compression_dict = Some(Bytes::from(v));
     }
     if let Some(v) = get_opt_bool(hash, "compression_auto_train")? {
         opts.compression_auto_train = v;
     }
-    if let Some(v) = get_opt_i64(hash, "compression_threshold")? {
-        opts.compression_threshold = Some(v as usize);
+    if let Some(v) = get_opt_usize(hash, "compression_threshold")? {
+        opts.compression_threshold = Some(v);
     }
     if let Some(v) = get_opt_i64(hash, "compression_level")? {
         opts.compression_level = Some(v as i32);
     }
-    if let Some(v) = get_opt_i64(hash, "compression_dict_capacity")? {
-        opts.compression_dict_capacity = Some(v as usize);
+    if let Some(v) = get_opt_usize(hash, "compression_dict_capacity")? {
+        opts.compression_dict_capacity = Some(v);
     }
-    if let Some(v) = get_opt_i64(hash, "max_recv_dict_size")? {
-        opts.max_recv_dict_size = Some(v as usize);
+    if let Some(v) = get_opt_usize(hash, "max_recv_dict_size")? {
+        opts.max_recv_dict_size = Some(v);
     }
     if let Some(v) = get_opt_i64(hash, "compression_offload_threshold")? {
         opts.compression_offload_threshold = if v < 0 { None } else { Some(v as usize) };
@@ -84,13 +84,16 @@ pub fn build_options(hash: VALUE) -> RbResult<omq_tokio::Options> {
     }
 
     if let Some(v) = get_opt_f64(hash, "reconnect_interval")? {
-        opts.reconnect = omq_proto::options::ReconnectPolicy::Fixed(Duration::from_secs_f64(v));
+        opts.reconnect = omq_proto::options::ReconnectPolicy::Fixed(duration_from_seconds(
+            "reconnect_interval",
+            v,
+        )?);
     }
     if let Some(min) = get_opt_f64(hash, "reconnect_interval_min")? {
         let max = get_opt_f64(hash, "reconnect_interval_max")?.unwrap_or(min * 16.0);
         opts.reconnect = omq_proto::options::ReconnectPolicy::Exponential {
-            min: Duration::from_secs_f64(min),
-            max: Duration::from_secs_f64(max),
+            min: duration_from_seconds("reconnect_interval min", min)?,
+            max: duration_from_seconds("reconnect_interval max", max)?,
         };
     }
 
@@ -186,6 +189,16 @@ fn get_opt_f64(hash: VALUE, key: &str) -> RbResult<Option<f64>> {
     }
 }
 
+fn get_opt_usize(hash: VALUE, key: &str) -> RbResult<Option<usize>> {
+    let Some(v) = get_opt_i64(hash, key)? else {
+        return Ok(None);
+    };
+
+    usize::try_from(v)
+        .map(Some)
+        .map_err(|_| RubyErr::arg(format!("{key} must be non-negative")))
+}
+
 fn get_opt_bool(hash: VALUE, key: &str) -> RbResult<Option<bool>> {
     match rb::hash_get(hash, key)? {
         Some(v) if v == rb::qnil() => Ok(None),
@@ -196,7 +209,12 @@ fn get_opt_bool(hash: VALUE, key: &str) -> RbResult<Option<bool>> {
 
 fn get_opt_duration(hash: VALUE, key: &str) -> RbResult<Option<Duration>> {
     match get_opt_f64(hash, key)? {
-        Some(v) => Ok(Some(Duration::from_secs_f64(v))),
+        Some(v) => Ok(Some(duration_from_seconds(key, v)?)),
         None => Ok(None),
     }
+}
+
+fn duration_from_seconds(label: &str, value: f64) -> RbResult<Duration> {
+    Duration::try_from_secs_f64(value)
+        .map_err(|_| RubyErr::arg(format!("{label} must be finite and non-negative")))
 }

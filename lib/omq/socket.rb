@@ -202,6 +202,10 @@ module OMQ
     #   task.stop
     #
     def monitor(verbose: false, &block)
+      unless Reactor.native_fiber_scheduler?
+        raise NotImplementedError, "Socket#monitor requires native Fiber.scheduler"
+      end
+
       ensure_parent_task
 
       queue                   = Async::LimitedQueue.new(64)

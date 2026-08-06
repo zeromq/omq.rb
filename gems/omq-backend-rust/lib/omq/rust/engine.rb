@@ -212,15 +212,16 @@ module OMQ
 
 
       def spawn_lifecycle_watcher(fd, promise)
-        io = io_for_native_fd(fd)
         if Reactor.native_fiber_scheduler?
+          io = io_for_native_fd(fd)
           @parent_task.async(transient: true) do
             io.wait_readable
             promise.resolve(true) unless promise.resolved? || @closed
           rescue IOError, Errno::EBADF
+          ensure
+            close_io_wrapper(io)
           end
         else
-          close_io_wrapper(io)
           FdWatcher.watch_once(fd, owner: self) do
             promise.resolve(true) unless promise.resolved? || @closed
           end
@@ -229,10 +230,10 @@ module OMQ
 
 
       def start_monitor_forwarder
-        monitor_io = io_for_native_fd(@native.monitor_fd)
         if Reactor.native_fiber_scheduler?
+          monitor_io = io_for_native_fd(@native.monitor_fd)
           @parent_task.async(transient: true, annotation: "rust-monitor") do
-            loop do
+            until @closed
               monitor_io.wait_readable
               monitor_io.read_nonblock(256, exception: false)
               while (data = @native.try_recv_monitor)
@@ -240,9 +241,11 @@ module OMQ
                 @monitor_queue.enqueue(MonitorEvent.new(**data))
               end
             end
+          rescue IOError, Errno::EBADF
+          ensure
+            close_io_wrapper(monitor_io)
           end
         else
-          close_io_wrapper(monitor_io)
           FdWatcher.watch_loop(@native.monitor_fd, owner: self) do |io|
             io.read_nonblock(256, exception: false)
             while (data = @native.try_recv_monitor)
@@ -261,7 +264,6 @@ module OMQ
 
       def close_io_wrapper(io)
         return unless io && !io.closed?
-        return if Reactor.native_fiber_scheduler?
 
         io.close
       rescue IOError, SystemCallError

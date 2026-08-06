@@ -142,7 +142,7 @@ describe "Rust backend stress" do
         pull.receive
         pull.close
 
-        refute pull.closed?.nil?
+        assert pull.closed?
       ensure
         push&.close
       end

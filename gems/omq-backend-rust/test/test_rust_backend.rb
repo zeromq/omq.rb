@@ -49,6 +49,31 @@ describe "Rust backend" do
         dealer&.close
       end
     end
+
+
+    it "rejects negative numeric options that map to Rust sizes or durations" do
+      invalid_cases = [
+        [:linger, -0.1],
+        [:reconnect_interval, -0.1],
+        [:heartbeat_interval, -0.1],
+        [:heartbeat_ttl, -0.1],
+        [:heartbeat_timeout, -0.1],
+        [:max_message_size, -1],
+        [:sndbuf, -1],
+        [:rcvbuf, -1],
+      ]
+
+      invalid_cases.each do |name, value|
+        dealer = OMQ::DEALER.new(backend: BACKEND)
+        dealer.public_send("#{name}=", value)
+
+        assert_raises(ArgumentError, "#{name}=#{value.inspect}") do
+          dealer.bind("tcp://127.0.0.1:0")
+        end
+      ensure
+        dealer&.close
+      end
+    end
   end
 
 
@@ -102,6 +127,27 @@ describe "Rust backend" do
       ensure
         pull&.close
       end
+    end
+  end
+
+
+  describe "TruffleRuby fallback" do
+    it "rejects the pure Ruby backend without a native Fiber scheduler" do
+      skip unless TRUFFLERUBY_WITHOUT_ASYNC
+
+      err = assert_raises(NotImplementedError) { OMQ::PULL.new(backend: :ruby) }
+      assert_equal "Ruby backend requires native Fiber.scheduler; use backend: :rust", err.message
+    end
+
+
+    it "rejects monitor without a native Fiber scheduler" do
+      skip unless TRUFFLERUBY_WITHOUT_ASYNC
+
+      pull = OMQ::PULL.new(backend: BACKEND)
+      err = assert_raises(NotImplementedError) { pull.monitor { |_| } }
+      assert_equal "Socket#monitor requires native Fiber.scheduler", err.message
+    ensure
+      pull&.close
     end
   end
 
@@ -598,6 +644,23 @@ describe "Rust backend" do
         pull = OMQ::PULL.new(backend: BACKEND)
         assert_raises(ArgumentError) do
           pull.bind("zstd+tcp://127.0.0.1:0", level: 99)
+        end
+      ensure
+        pull&.close
+      end
+    end
+
+
+    it "rejects negative compression size options" do
+      invalid_cases = [
+        { compression_threshold: -1 },
+        { max_recv_dict_size: -1 },
+      ]
+
+      invalid_cases.each do |opts|
+        pull = OMQ::PULL.new(backend: BACKEND)
+        assert_raises(ArgumentError, opts.inspect) do
+          pull.bind("zstd+tcp://127.0.0.1:0", **opts)
         end
       ensure
         pull&.close

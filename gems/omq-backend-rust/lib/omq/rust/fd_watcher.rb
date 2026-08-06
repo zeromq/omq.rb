@@ -20,6 +20,7 @@ module OMQ
           removed = nil
 
           mutex.synchronize do
+            reset_after_fork
             removed = watchers.values.select { |watch| watch.owner.equal?(owner) }
             removed.each { |watch| watchers.delete(watch.id) }
           end
@@ -37,6 +38,7 @@ module OMQ
 
           io = IO.for_fd(fd, autoclose: false)
           mutex.synchronize do
+            reset_after_fork
             ensure_started
             id = next_id
             watchers[id] = Watch.new(id: id, io: io, owner: owner, once: once, callback: block)
@@ -47,6 +49,22 @@ module OMQ
           raise
         ensure
           wake if io
+        end
+
+
+        def reset_after_fork
+          pid = Process.pid
+          return if @pid == pid
+
+          watchers.each_value { |watch| close_io(watch.io) }
+          close_io(@wake_r)
+          close_io(@wake_w)
+          @watchers = {}
+          @wake_r   = nil
+          @wake_w   = nil
+          @thread   = nil
+          @next_id  = 0
+          @pid      = pid
         end
 
 

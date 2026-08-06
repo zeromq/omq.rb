@@ -27,10 +27,10 @@ pub fn ensure_runtime(io_threads: usize) -> Handle {
     }
     let mut guard = RUNTIME.lock().unwrap();
     let pid = std::process::id();
-    if let Some(ref rt) = *guard {
-        if rt.pid == pid {
-            return rt.handle.clone();
-        }
+    if let Some(ref rt) = *guard
+        && rt.pid == pid
+    {
+        return rt.handle.clone();
     }
     let (tx, rx) = flume::unbounded::<Job>();
     let (handle_tx, handle_rx) = flume::bounded::<Handle>(1);
@@ -69,10 +69,10 @@ pub fn ensure_runtime(io_threads: usize) -> Handle {
 
 fn submit_job(io_threads: usize) -> flume::Sender<Job> {
     let guard = RUNTIME.lock().unwrap();
-    if let Some(ref rt) = *guard {
-        if rt.pid == std::process::id() {
-            return rt.submit.clone();
-        }
+    if let Some(ref rt) = *guard
+        && rt.pid == std::process::id()
+    {
+        return rt.submit.clone();
     }
     drop(guard);
     ensure_runtime(io_threads);
@@ -178,10 +178,10 @@ fn convert_monitor_event(event: &omq_tokio::MonitorEvent) -> MonitorEventData {
         },
         HandshakeSucceeded { endpoint, peer } => {
             let mut detail = vec![("connection_id", peer.connection_id.to_string())];
-            if let Some(ref ident) = peer.peer_identity {
-                if !ident.is_empty() {
-                    detail.push(("identity", format!("{:?}", ident)));
-                }
+            if let Some(ref ident) = peer.peer_identity
+                && !ident.is_empty()
+            {
+                detail.push(("identity", format!("{:?}", ident)));
             }
             MonitorEventData {
                 event_type: "handshake_succeeded",
@@ -372,17 +372,12 @@ pub fn materialize(
                                     all_peers_gone_notify.force_wake();
                                 }
                             }
-                            omq_tokio::MonitorEvent::SubscribeReceived { .. } => {
-                                if !subscriber_joined_fired {
-                                    subscriber_joined_fired = true;
-                                    subscriber_joined_notify.force_wake();
-                                }
-                            }
-                            omq_tokio::MonitorEvent::JoinReceived { .. } => {
-                                if !subscriber_joined_fired {
-                                    subscriber_joined_fired = true;
-                                    subscriber_joined_notify.force_wake();
-                                }
+                            omq_tokio::MonitorEvent::SubscribeReceived { .. }
+                            | omq_tokio::MonitorEvent::JoinReceived { .. }
+                                if !subscriber_joined_fired =>
+                            {
+                                subscriber_joined_fired = true;
+                                subscriber_joined_notify.force_wake();
                             }
                             _ => {}
                         }
@@ -416,12 +411,7 @@ pub fn destroy_socket(
 ) {
     recv_pump.abort();
     monitor_pump.abort();
-    let Ok(handle) = (|| -> std::result::Result<Handle, ()> { Ok(ensure_runtime(io_threads)) })()
-    else {
-        send_pump.abort();
-        drop(send_prod);
-        return;
-    };
+    let handle = ensure_runtime(io_threads);
     let close_timeout = linger
         .unwrap_or(Duration::from_secs(30))
         .max(Duration::from_millis(10));

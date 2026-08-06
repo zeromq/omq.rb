@@ -24,6 +24,9 @@ unsafe extern "C" fn set_io_threads(_module: VALUE, n: VALUE) -> VALUE {
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+///
+/// Ruby calls this once while loading the native extension.
 pub unsafe extern "C" fn Init_omq_backend_rust() {
     rb::wrap_init(init);
 }
