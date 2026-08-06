@@ -1,129 +1,121 @@
 use std::time::Duration;
 
 use bytes::Bytes;
-use magnus::{Error, Ruby, TryConvert, r_hash::RHash, value::ReprValue};
 
-pub fn build_options(ruby: &Ruby, hash: RHash) -> Result<omq_tokio::Options, Error> {
+use rb_sys::VALUE;
+
+use crate::rb::{self, RbResult, RubyErr};
+
+pub fn build_options(hash: VALUE) -> RbResult<omq_tokio::Options> {
+    rb::check_hash(hash)?;
+
     let mut opts = omq_tokio::Options::default();
 
-    if let Some(v) = get_opt::<i64>(ruby, hash, "send_hwm")? {
+    if let Some(v) = get_opt_i64(hash, "send_hwm")? {
         opts.send_hwm = v.max(0) as u32;
     }
-    if let Some(v) = get_opt::<i64>(ruby, hash, "recv_hwm")? {
+    if let Some(v) = get_opt_i64(hash, "recv_hwm")? {
         opts.recv_hwm = v.max(0) as u32;
     }
-    if let Some(v) = get_opt::<f64>(ruby, hash, "linger")? {
+    if let Some(v) = get_opt_f64(hash, "linger")? {
         opts.linger = if v.is_infinite() {
             None
         } else {
             Some(Duration::from_secs_f64(v))
         };
     }
-    if let Some(v) = get_opt_bytes(ruby, hash, "identity")? {
+    if let Some(v) = get_opt_bytes(hash, "identity")? {
         if !v.is_empty() {
             opts.identity = Bytes::from(v);
         }
     }
-    if let Some(v) = get_opt::<bool>(ruby, hash, "router_mandatory")? {
+    if let Some(v) = get_opt_bool(hash, "router_mandatory")? {
         opts.router_mandatory = v;
     }
-    if let Some(v) = get_opt::<bool>(ruby, hash, "conflate")? {
+    if let Some(v) = get_opt_bool(hash, "conflate")? {
         opts.conflate = v;
     }
-    if let Some(v) = get_opt_duration(ruby, hash, "heartbeat_interval")? {
+    if let Some(v) = get_opt_duration(hash, "heartbeat_interval")? {
         opts.heartbeat_interval = Some(v);
     }
-    if let Some(v) = get_opt_duration(ruby, hash, "heartbeat_ttl")? {
+    if let Some(v) = get_opt_duration(hash, "heartbeat_ttl")? {
         opts.heartbeat_ttl = Some(v);
     }
-    if let Some(v) = get_opt_duration(ruby, hash, "heartbeat_timeout")? {
+    if let Some(v) = get_opt_duration(hash, "heartbeat_timeout")? {
         opts.heartbeat_timeout = Some(v);
     }
-    if let Some(v) = get_opt::<i64>(ruby, hash, "max_message_size")? {
+    if let Some(v) = get_opt_i64(hash, "max_message_size")? {
         opts.max_message_size = Some(v as usize);
     }
-    if let Some(v) = get_opt::<i64>(ruby, hash, "sndbuf")? {
+    if let Some(v) = get_opt_i64(hash, "sndbuf")? {
         opts.send_buffer_size = Some(v as usize);
     }
-    if let Some(v) = get_opt::<i64>(ruby, hash, "rcvbuf")? {
+    if let Some(v) = get_opt_i64(hash, "rcvbuf")? {
         opts.recv_buffer_size = Some(v as usize);
     }
-    if let Some(v) = get_opt_bytes(ruby, hash, "compression_dict")? {
+    if let Some(v) = get_opt_bytes(hash, "compression_dict")? {
         if !v.is_empty() {
             opts.compression_dict = Some(Bytes::from(v));
         }
     }
-    if let Some(v) = get_opt::<bool>(ruby, hash, "compression_auto_train")? {
+    if let Some(v) = get_opt_bool(hash, "compression_auto_train")? {
         opts.compression_auto_train = v;
     }
-    if let Some(v) = get_opt::<i64>(ruby, hash, "compression_threshold")? {
+    if let Some(v) = get_opt_i64(hash, "compression_threshold")? {
         opts.compression_threshold = Some(v as usize);
     }
-    if let Some(v) = get_opt::<i64>(ruby, hash, "compression_level")? {
+    if let Some(v) = get_opt_i64(hash, "compression_level")? {
         opts.compression_level = Some(v as i32);
     }
-    if let Some(v) = get_opt::<i64>(ruby, hash, "compression_dict_capacity")? {
+    if let Some(v) = get_opt_i64(hash, "compression_dict_capacity")? {
         opts.compression_dict_capacity = Some(v as usize);
     }
-    if let Some(v) = get_opt::<i64>(ruby, hash, "max_recv_dict_size")? {
+    if let Some(v) = get_opt_i64(hash, "max_recv_dict_size")? {
         opts.max_recv_dict_size = Some(v as usize);
     }
-    if let Some(v) = get_opt::<i64>(ruby, hash, "compression_offload_threshold")? {
+    if let Some(v) = get_opt_i64(hash, "compression_offload_threshold")? {
         opts.compression_offload_threshold = if v < 0 { None } else { Some(v as usize) };
     }
-    if let Some(v) = get_opt::<String>(ruby, hash, "on_mute")? {
+    if let Some(v) = get_opt_string(hash, "on_mute")? {
         opts.on_mute = match v.as_str() {
             "drop_newest" | "drop" => omq_tokio::OnMute::DropNewest,
             _ => omq_tokio::OnMute::Block,
         };
     }
 
-    if let Some(v) = get_opt::<f64>(ruby, hash, "reconnect_interval")? {
+    if let Some(v) = get_opt_f64(hash, "reconnect_interval")? {
         opts.reconnect = omq_proto::options::ReconnectPolicy::Fixed(Duration::from_secs_f64(v));
     }
-    if let Some(min) = get_opt::<f64>(ruby, hash, "reconnect_interval_min")? {
-        let max = get_opt::<f64>(ruby, hash, "reconnect_interval_max")?.unwrap_or(min * 16.0);
+    if let Some(min) = get_opt_f64(hash, "reconnect_interval_min")? {
+        let max = get_opt_f64(hash, "reconnect_interval_max")?.unwrap_or(min * 16.0);
         opts.reconnect = omq_proto::options::ReconnectPolicy::Exponential {
             min: Duration::from_secs_f64(min),
             max: Duration::from_secs_f64(max),
         };
     }
 
-    if let Some(mech_type) = get_opt::<String>(ruby, hash, "mechanism_type")? {
-        apply_mechanism(ruby, hash, &mech_type, &mut opts)?;
+    if let Some(mech_type) = get_opt_string(hash, "mechanism_type")? {
+        apply_mechanism(hash, &mech_type, &mut opts)?;
     }
 
     Ok(opts)
 }
 
-fn apply_mechanism(
-    ruby: &Ruby,
-    hash: RHash,
-    mech_type: &str,
-    opts: &mut omq_tokio::Options,
-) -> Result<(), Error> {
+fn apply_mechanism(hash: VALUE, mech_type: &str, opts: &mut omq_tokio::Options) -> RbResult<()> {
     match mech_type {
         "null" => {}
 
         #[cfg(feature = "curve")]
         "curve" => {
-            let is_server = get_opt::<bool>(ruby, hash, "mechanism_server")?.unwrap_or(false);
-            let pub_key = get_opt_bytes(ruby, hash, "mechanism_public_key")?;
-            let sec_key = get_opt_bytes(ruby, hash, "mechanism_secret_key")?;
+            let is_server = get_opt_bool(hash, "mechanism_server")?.unwrap_or(false);
+            let pub_key = get_opt_bytes(hash, "mechanism_public_key")?;
+            let sec_key = get_opt_bytes(hash, "mechanism_secret_key")?;
 
             if is_server {
                 if let (Some(pk), Some(sk)) = (pub_key, sec_key) {
                     let keypair = omq_proto::CurveKeypair {
-                        public: omq_proto::CurvePublicKey::from_bytes(to_32(
-                            ruby,
-                            &pk,
-                            "public key",
-                        )?),
-                        secret: omq_proto::CurveSecretKey::from_bytes(to_32(
-                            ruby,
-                            &sk,
-                            "secret key",
-                        )?),
+                        public: omq_proto::CurvePublicKey::from_bytes(to_32(&pk, "public key")?),
+                        secret: omq_proto::CurveSecretKey::from_bytes(to_32(&sk, "secret key")?),
                     };
                     opts.mechanism = omq_proto::MechanismSetup::CurveServer {
                         our_keypair: keypair,
@@ -131,24 +123,15 @@ fn apply_mechanism(
                     };
                 }
             } else {
-                let srv_key = get_opt_bytes(ruby, hash, "mechanism_server_key")?;
+                let srv_key = get_opt_bytes(hash, "mechanism_server_key")?;
                 if let (Some(pk), Some(sk), Some(svk)) = (pub_key, sec_key, srv_key) {
                     let keypair = omq_proto::CurveKeypair {
-                        public: omq_proto::CurvePublicKey::from_bytes(to_32(
-                            ruby,
-                            &pk,
-                            "public key",
-                        )?),
-                        secret: omq_proto::CurveSecretKey::from_bytes(to_32(
-                            ruby,
-                            &sk,
-                            "secret key",
-                        )?),
+                        public: omq_proto::CurvePublicKey::from_bytes(to_32(&pk, "public key")?),
+                        secret: omq_proto::CurveSecretKey::from_bytes(to_32(&sk, "secret key")?),
                     };
                     opts.mechanism = omq_proto::MechanismSetup::CurveClient {
                         our_keypair: keypair,
                         server_public: omq_proto::CurvePublicKey::from_bytes(to_32(
-                            ruby,
                             &svk,
                             "server key",
                         )?),
@@ -162,45 +145,57 @@ fn apply_mechanism(
     Ok(())
 }
 
-fn to_32(ruby: &Ruby, bytes: &[u8], label: &str) -> Result<[u8; 32], Error> {
+fn to_32(bytes: &[u8], label: &str) -> RbResult<[u8; 32]> {
     bytes.try_into().map_err(|_| {
-        Error::new(
-            ruby.exception_arg_error(),
-            format!("{label} must be exactly 32 bytes, got {}", bytes.len()),
-        )
+        RubyErr::arg(format!(
+            "{label} must be exactly 32 bytes, got {}",
+            bytes.len()
+        ))
     })
 }
 
-fn get_opt_bytes(ruby: &Ruby, hash: RHash, key: &str) -> Result<Option<Vec<u8>>, Error> {
-    let k = ruby.str_new(key);
-    match hash.get(k) {
-        Some(v) => {
-            if v.is_nil() {
-                return Ok(None);
-            }
-            let s = magnus::r_string::RString::try_convert(v)?;
-            Ok(Some(unsafe { s.as_slice() }.to_vec()))
-        }
+fn get_opt_bytes(hash: VALUE, key: &str) -> RbResult<Option<Vec<u8>>> {
+    match rb::hash_get(hash, key)? {
+        Some(v) if v == rb::qnil() => Ok(None),
+        Some(v) => Ok(Some(rb::value_to_bytes(v)?)),
         None => Ok(None),
     }
 }
 
-fn get_opt<T: TryConvert>(ruby: &Ruby, hash: RHash, key: &str) -> Result<Option<T>, Error> {
-    let k = ruby.str_new(key);
-    match hash.get(k) {
-        Some(v) => {
-            if v.is_nil() {
-                Ok(None)
-            } else {
-                Ok(Some(T::try_convert(v)?))
-            }
-        }
+fn get_opt_string(hash: VALUE, key: &str) -> RbResult<Option<String>> {
+    match rb::hash_get(hash, key)? {
+        Some(v) if v == rb::qnil() => Ok(None),
+        Some(v) => Ok(Some(rb::value_to_string(v)?)),
         None => Ok(None),
     }
 }
 
-fn get_opt_duration(ruby: &Ruby, hash: RHash, key: &str) -> Result<Option<Duration>, Error> {
-    match get_opt::<f64>(ruby, hash, key)? {
+fn get_opt_i64(hash: VALUE, key: &str) -> RbResult<Option<i64>> {
+    match rb::hash_get(hash, key)? {
+        Some(v) if v == rb::qnil() => Ok(None),
+        Some(v) => Ok(Some(rb::value_to_i64(v)?)),
+        None => Ok(None),
+    }
+}
+
+fn get_opt_f64(hash: VALUE, key: &str) -> RbResult<Option<f64>> {
+    match rb::hash_get(hash, key)? {
+        Some(v) if v == rb::qnil() => Ok(None),
+        Some(v) => Ok(Some(rb::value_to_f64(v)?)),
+        None => Ok(None),
+    }
+}
+
+fn get_opt_bool(hash: VALUE, key: &str) -> RbResult<Option<bool>> {
+    match rb::hash_get(hash, key)? {
+        Some(v) if v == rb::qnil() => Ok(None),
+        Some(v) => Ok(Some(rb::value_to_bool(v)?)),
+        None => Ok(None),
+    }
+}
+
+fn get_opt_duration(hash: VALUE, key: &str) -> RbResult<Option<Duration>> {
+    match get_opt_f64(hash, key)? {
         Some(v) => Ok(Some(Duration::from_secs_f64(v))),
         None => Ok(None),
     }

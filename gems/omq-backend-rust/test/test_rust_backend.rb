@@ -65,8 +65,11 @@ describe "Rust backend" do
 
 
     it "uses wait_readable instead of IO.select while waiting" do
+      original_select = nil
+      verbose         = $VERBOSE
+      skip "TruffleRuby fallback uses io-event Select internally" unless OMQ::Reactor.native_fiber_scheduler?
+
       original_select = IO.method(:select)
-      verbose = $VERBOSE
       $VERBOSE = nil
       IO.define_singleton_method(:select) do |*|
         raise "IO.select should not be called"
@@ -82,7 +85,7 @@ describe "Rust backend" do
       end
     ensure
       $VERBOSE = nil
-      IO.define_singleton_method(:select, original_select)
+      IO.define_singleton_method(:select, original_select) if original_select
       $VERBOSE = verbose
     end
 

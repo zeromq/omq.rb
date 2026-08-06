@@ -79,6 +79,36 @@ fn submit_job(io_threads: usize) -> flume::Sender<Job> {
     RUNTIME.lock().unwrap().as_ref().unwrap().submit.clone()
 }
 
+#[cfg(ruby_engine = "mri")]
+fn recv_blocking<T>(rx: flume::Receiver<T>, missing: &'static str) -> T {
+    struct RecvBox<U> {
+        rx: flume::Receiver<U>,
+        result: Option<U>,
+    }
+
+    extern "C" fn blocking_recv<U>(data: *mut libc::c_void) -> *mut libc::c_void {
+        let rd = unsafe { &mut *(data as *mut RecvBox<U>) };
+        rd.result = rd.rx.recv().ok();
+        std::ptr::null_mut()
+    }
+
+    let mut rd = RecvBox { rx, result: None };
+    unsafe {
+        rb_sys::rb_thread_call_without_gvl(
+            Some(blocking_recv::<T>),
+            &mut rd as *mut RecvBox<T> as *mut libc::c_void,
+            None,
+            std::ptr::null_mut(),
+        );
+    }
+    rd.result.expect(missing)
+}
+
+#[cfg(not(ruby_engine = "mri"))]
+fn recv_blocking<T>(rx: flume::Receiver<T>, missing: &'static str) -> T {
+    rx.recv().expect(missing)
+}
+
 pub fn spawn_blocking<F, T>(io_threads: usize, fut: F) -> T
 where
     F: Future<Output = T> + Send + 'static,
@@ -91,30 +121,7 @@ where
         let _ = otx.send(out);
     });
 
-    struct RecvBox<U> {
-        rx: flume::Receiver<U>,
-        result: Option<U>,
-    }
-
-    extern "C" fn blocking_recv<U>(data: *mut libc::c_void) -> *mut libc::c_void {
-        let rd = unsafe { &mut *(data as *mut RecvBox<U>) };
-        rd.result = rd.rx.recv().ok();
-        std::ptr::null_mut()
-    }
-
-    let mut rd = RecvBox {
-        rx: orx,
-        result: None,
-    };
-    unsafe {
-        rb_sys::rb_thread_call_without_gvl(
-            Some(blocking_recv::<T>),
-            &mut rd as *mut RecvBox<T> as *mut libc::c_void,
-            None,
-            std::ptr::null_mut(),
-        );
-    }
-    rd.result.expect("omq-backend-rust: runtime dropped result")
+    recv_blocking(orx, "omq-backend-rust: runtime dropped result")
 }
 
 pub struct Materialized {
@@ -395,40 +402,7 @@ pub fn materialize(
     });
     tx.send(job).expect("omq-backend-rust: tokio runtime gone");
 
-    struct RecvBox {
-        rx: flume::Receiver<(
-            Arc<InnerSocket>,
-            JoinHandle<()>,
-            JoinHandle<()>,
-            JoinHandle<()>,
-        )>,
-        result: Option<(
-            Arc<InnerSocket>,
-            JoinHandle<()>,
-            JoinHandle<()>,
-            JoinHandle<()>,
-        )>,
-    }
-
-    extern "C" fn blocking_recv(data: *mut libc::c_void) -> *mut libc::c_void {
-        let rd = unsafe { &mut *(data as *mut RecvBox) };
-        rd.result = rd.rx.recv().ok();
-        std::ptr::null_mut()
-    }
-
-    let mut rd = RecvBox {
-        rx: orx,
-        result: None,
-    };
-    unsafe {
-        rb_sys::rb_thread_call_without_gvl(
-            Some(blocking_recv),
-            &mut rd as *mut RecvBox as *mut libc::c_void,
-            None,
-            std::ptr::null_mut(),
-        );
-    }
-    rd.result.expect("omq-backend-rust: materialize failed")
+    recv_blocking(orx, "omq-backend-rust: materialize failed")
 }
 
 pub fn destroy_socket(
@@ -471,23 +445,5 @@ pub fn destroy_socket(
         let _ = otx.send(());
     });
 
-    struct RecvBox {
-        rx: flume::Receiver<()>,
-    }
-
-    extern "C" fn blocking_recv(data: *mut libc::c_void) -> *mut libc::c_void {
-        let rd = unsafe { &mut *(data as *mut RecvBox) };
-        let _ = rd.rx.recv();
-        std::ptr::null_mut()
-    }
-
-    let mut rd = RecvBox { rx: orx };
-    unsafe {
-        rb_sys::rb_thread_call_without_gvl(
-            Some(blocking_recv),
-            &mut rd as *mut RecvBox as *mut libc::c_void,
-            None,
-            std::ptr::null_mut(),
-        );
-    }
+    recv_blocking(orx, "omq-backend-rust: close failed")
 }

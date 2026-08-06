@@ -14,18 +14,19 @@ module OMQ
 
 
       def initialize(socket_type, options)
-        @socket_type    = socket_type
-        @options        = options
-        @peer_connected = Async::Promise.new
-        @all_peers_gone = Async::Promise.new
-        @subscriber_joined = Async::Promise.new
-        @connections    = {}
-        @closed         = false
-        @parent_task    = nil
-        @on_io_thread   = false
-        @materialized   = false
-        @recv_sentinels = 0
-        @compression_options = {}
+        @socket_type          = socket_type
+        @options              = options
+        @peer_connected       = Async::Promise.new
+        @all_peers_gone       = Async::Promise.new
+        @subscriber_joined    = Async::Promise.new
+        @connections          = {}
+        @closed               = false
+        @parent_task          = nil
+        @on_io_thread         = false
+        @materialized         = false
+        @recv_sentinels       = 0
+        @compression_options  = {}
+        @watcher_threads      = []
 
         @native = Native::RustSocket.new(socket_type.to_s)
 
@@ -81,7 +82,7 @@ module OMQ
         result = @native.enqueue_send(parts)
         return if result == :ok
 
-        @send_signal_r ||= IO.for_fd(@native.send_fd, autoclose: false)
+        @send_signal_r ||= io_for_native_fd(@native.send_fd)
         loop do
           result = @native.enqueue_send(parts)
           return if result == :ok
@@ -131,6 +132,9 @@ module OMQ
         @all_peers_gone.resolve(nil) unless @all_peers_gone.resolved?
         @subscriber_joined.resolve(nil) unless @subscriber_joined.resolved?
         @native.close
+        close_io_wrapper(@recv_signal_r)
+        close_io_wrapper(@send_signal_r)
+        join_watcher_threads unless Reactor.native_fiber_scheduler?
       end
 
 
@@ -176,7 +180,7 @@ module OMQ
         Native.send(:io_threads=, OMQ::Rust.io_threads)
         @native.set_options(extract_options)
         @native.materialize
-        @recv_signal_r = IO.for_fd(@native.recv_fd, autoclose: false)
+        @recv_signal_r = io_for_native_fd(@native.recv_fd)
         @materialized  = true
 
         @routing.replay_pending(@native)
@@ -206,26 +210,85 @@ module OMQ
 
 
       def spawn_lifecycle_watcher(fd, promise)
-        io = IO.for_fd(fd, autoclose: false)
-        @parent_task.async(transient: true) do
-          io.wait_readable
-          promise.resolve(true) unless promise.resolved? || @closed
-        rescue IOError, Errno::EBADF
+        io = io_for_native_fd(fd)
+        if Reactor.native_fiber_scheduler?
+          @parent_task.async(transient: true) do
+            io.wait_readable
+            promise.resolve(true) unless promise.resolved? || @closed
+          rescue IOError, Errno::EBADF
+          end
+        else
+          spawn_watcher_thread("omq-rust-watch") do
+            io.wait_readable
+            promise.resolve(true) unless promise.resolved? || @closed
+          rescue IOError, Errno::EBADF
+          ensure
+            close_io_wrapper(io)
+          end
         end
       end
 
 
       def start_monitor_forwarder
-        monitor_io = IO.for_fd(@native.monitor_fd, autoclose: false)
-        @parent_task.async(transient: true, annotation: "rust-monitor") do
-          loop do
-            monitor_io.wait_readable
-            monitor_io.read_nonblock(256, exception: false)
-            while (data = @native.try_recv_monitor)
-              track_connection_event(data)
-              @monitor_queue.enqueue(MonitorEvent.new(**data))
+        monitor_io = io_for_native_fd(@native.monitor_fd)
+        if Reactor.native_fiber_scheduler?
+          @parent_task.async(transient: true, annotation: "rust-monitor") do
+            loop do
+              monitor_io.wait_readable
+              monitor_io.read_nonblock(256, exception: false)
+              while (data = @native.try_recv_monitor)
+                track_connection_event(data)
+                @monitor_queue.enqueue(MonitorEvent.new(**data))
+              end
             end
           end
+        else
+          spawn_watcher_thread("omq-rust-monitor") do
+            until @closed
+              monitor_io.wait_readable
+              monitor_io.read_nonblock(256, exception: false)
+              while (data = @native.try_recv_monitor)
+                track_connection_event(data)
+                @monitor_queue.enqueue(MonitorEvent.new(**data))
+              end
+            end
+          rescue IOError, Errno::EBADF
+          ensure
+            close_io_wrapper(monitor_io)
+          end
+        end
+      end
+
+
+      def io_for_native_fd(fd)
+        IO.for_fd(fd, autoclose: !Reactor.native_fiber_scheduler?)
+      end
+
+
+      def close_io_wrapper(io)
+        return unless io && !io.closed?
+        return if Reactor.native_fiber_scheduler?
+
+        io.close
+      rescue IOError, SystemCallError
+      end
+
+
+      def spawn_watcher_thread(name, &block)
+        thread = Thread.new do
+          Thread.current.name = name if Thread.current.respond_to?(:name=)
+          block.call
+        end
+        @watcher_threads << thread
+        thread
+      end
+
+
+      def join_watcher_threads
+        threads = @watcher_threads
+        @watcher_threads = []
+        threads.each do |thread|
+          thread.join(0.1) unless thread == Thread.current
         end
       end
 
