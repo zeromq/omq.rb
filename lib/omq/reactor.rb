@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "async"
+require "timeout"
 
 module OMQ
   # Shared IO reactor for the Ruby backend.
@@ -16,6 +17,7 @@ module OMQ
   #
   module Reactor
     THREAD_NAME = 'omq-io'
+    NATIVE_FIBER_SCHEDULER = Fiber.respond_to?(:scheduler) && Fiber.method(:scheduler).source_location.nil?
 
     @mutex      = Mutex.new
     @pid        = nil
@@ -29,6 +31,11 @@ module OMQ
       # @return [Hash{Numeric => Integer}] linger value → active socket count
       #
       attr_reader :lingers
+
+
+      def native_fiber_scheduler?
+        NATIVE_FIBER_SCHEDULER
+      end
 
 
       # Returns the root Async task inside the shared IO thread.
@@ -73,6 +80,12 @@ module OMQ
         if task
           if timeout
             task.with_timeout(timeout, IO::TimeoutError) { yield }
+          else
+            yield
+          end
+        elsif !native_fiber_scheduler?
+          if timeout
+            Timeout.timeout(timeout, IO::TimeoutError) { yield }
           else
             yield
           end

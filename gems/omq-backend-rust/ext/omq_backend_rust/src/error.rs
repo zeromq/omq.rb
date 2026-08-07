@@ -1,15 +1,16 @@
-use magnus::{Error, Ruby};
 use omq_proto::error::Error as OmqError;
 
-pub fn map_err(ruby: &Ruby, e: OmqError) -> Error {
+use crate::rb::RubyErr;
+
+pub fn map_err(e: OmqError) -> RubyErr {
     match e {
-        OmqError::Closed => Error::new(ruby.exception_io_error(), "socket closed"),
-        OmqError::Timeout => Error::new(ruby.exception_runtime_error(), "operation timed out"),
-        OmqError::Unroutable => Error::new(ruby.exception_runtime_error(), "no route to peer"),
-        OmqError::InvalidEndpoint(msg) => Error::new(ruby.exception_arg_error(), msg),
-        OmqError::Protocol(msg) => Error::new(ruby.exception_runtime_error(), msg),
-        OmqError::Io(e) => Error::new(ruby.exception_runtime_error(), e.to_string()),
-        OmqError::HandshakeFailed(msg) => Error::new(ruby.exception_runtime_error(), msg),
-        _ => Error::new(ruby.exception_runtime_error(), format!("{e}")),
+        OmqError::Closed => RubyErr::io("socket closed"),
+        OmqError::Timeout => RubyErr::runtime("operation timed out"),
+        OmqError::Unroutable => RubyErr::runtime("no route to peer"),
+        OmqError::InvalidEndpoint(msg) => RubyErr::arg(msg),
+        OmqError::Protocol(msg) => RubyErr::runtime(msg),
+        OmqError::Io(e) => RubyErr::runtime(e.to_string()),
+        OmqError::HandshakeFailed(msg) => RubyErr::runtime(msg),
+        _ => RubyErr::runtime(format!("{e}")),
     }
 }

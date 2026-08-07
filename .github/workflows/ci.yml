@@ -22,3 +22,17 @@ jobs:
         ruby-version: ${{ matrix.ruby }}
         bundler-cache: true
     - run: timeout 240 bundle exec rake
+
+  truffleruby-rust-backend:
+    name: TruffleRuby rust backend
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: truffleruby
+        bundler-cache: true
+        working-directory: gems/omq-backend-rust
+    - run: timeout 240 bundle exec rake
+      working-directory: gems/omq-backend-rust

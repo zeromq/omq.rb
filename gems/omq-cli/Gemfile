@@ -18,5 +18,5 @@ gem "protocol-zmtp", path: File.join(ROOT, "gems/protocol-zmtp")
 gem "nuckle",        path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "nuckle") : nil
 gem "omq-backend-libzmq", "~> 0.3", require: false, path: File.join(ROOT, "gems/omq-backend-libzmq")
 gem "omq-backend-rust",   "~> 0.1", require: false, path: File.join(ROOT, "gems/omq-backend-rust")
-gem "zrip",          "~> 0.1.1", path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "zrip") : nil
-gem "lz4rip",        "~> 0.1.1", path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "lz4rip") : nil
+gem "zrip",          "~> 0.2.0", path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "zrip") : nil
+gem "lz4rip",        "~> 0.2.0", path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "lz4rip") : nil

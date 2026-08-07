@@ -25,6 +25,7 @@ end
 
 describe "Rust backend Ruby interop" do
   before do
+    skip_without_ruby_backend
     @ipc_paths = []
   end
 
@@ -238,12 +239,12 @@ describe "Rust backend Ruby interop" do
         wait_connected(dish)
         Async::Task.current.with_timeout(2) { radio.subscriber_joined.wait }
 
-        radio.publish("sunny", group: "weather")
-        radio.publish("ignored", group: "news")
-        radio.publish("rainy", group: "weather")
+        radio.publish("weather", "sunny")
+        radio.publish("news", "ignored")
+        radio.publish("weather", "rainy")
 
-        assert_equal ["sunny"], recv(dish)
-        assert_equal ["rainy"], recv(dish)
+        assert_equal ["weather", "sunny"], recv(dish)
+        assert_equal ["weather", "rainy"], recv(dish)
       ensure
         dish&.close
         radio&.close
@@ -261,12 +262,12 @@ describe "Rust backend Ruby interop" do
         wait_connected(dish)
         Async::Task.current.with_timeout(2) { radio.subscriber_joined.wait }
 
-        radio.publish("sunny", group: "weather")
-        radio.publish("ignored", group: "news")
-        radio.publish("rainy", group: "weather")
+        radio.publish("weather", "sunny")
+        radio.publish("news", "ignored")
+        radio.publish("weather", "rainy")
 
-        assert_equal ["sunny"], recv(dish)
-        assert_equal ["rainy"], recv(dish)
+        assert_equal ["weather", "sunny"], recv(dish)
+        assert_equal ["weather", "rainy"], recv(dish)
       ensure
         dish&.close
         radio&.close

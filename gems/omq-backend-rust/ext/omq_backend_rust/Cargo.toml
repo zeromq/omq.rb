@@ -26,7 +26,6 @@ yring     = { version = "0.3.11", features = ["async"] }
 bytes   = "1.12.0"
 flume   = { version = "0.12", default-features = false, features = ["async"] }
 futures = { version = "0.3", default-features = false, features = ["std", "async-await"] }
-magnus  = "0.8"
 rb-sys  = "0.9"
 libc    = "0.2"
 

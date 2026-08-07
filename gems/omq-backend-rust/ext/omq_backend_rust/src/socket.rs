@@ -1,13 +1,15 @@
+use std::ffi::c_void;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 use bytes::Bytes;
-use magnus::r_hash::RHash;
-use magnus::{Error, Ruby, function, method, prelude::*, r_array::RArray, r_string::RString};
+use rb_sys::{VALUE, rb_data_type_struct__bindgen_ty_1, rb_data_type_t, size_t};
 
 use crate::error::map_err;
 use crate::notify::PipeNotify;
+use crate::rb::{self, RbResult, RubyErr};
 use crate::runtime::{self, Materialized};
 
 static IO_THREADS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(1);
@@ -20,7 +22,6 @@ fn io_threads() -> usize {
     IO_THREADS.load(Ordering::Relaxed)
 }
 
-#[magnus::wrap(class = "OMQ::Rust::Native::RustSocket", free_immediately, size)]
 pub struct RustSocket {
     socket_type: omq_tokio::SocketType,
     options: Mutex<Option<omq_tokio::Options>>,
@@ -31,6 +32,59 @@ pub struct RustSocket {
 
 unsafe impl Send for RustSocket {}
 unsafe impl Sync for RustSocket {}
+
+struct SocketDataType(rb_data_type_t);
+
+unsafe impl Send for SocketDataType {}
+unsafe impl Sync for SocketDataType {}
+
+static RUST_SOCKET_DATA_TYPE: OnceLock<SocketDataType> = OnceLock::new();
+
+fn rust_socket_data_type() -> *const rb_data_type_t {
+    &RUST_SOCKET_DATA_TYPE
+        .get_or_init(|| SocketDataType(make_rust_socket_data_type()))
+        .0
+}
+
+fn make_rust_socket_data_type() -> rb_data_type_t {
+    rb_data_type_t {
+        wrap_struct_name: c"omq_backend_rust_socket".as_ptr(),
+        function: rb_data_type_struct__bindgen_ty_1 {
+            dmark: None,
+            dfree: Some(rust_socket_free),
+            dsize: Some(rust_socket_size),
+            dcompact: None,
+            reserved: [std::ptr::null_mut(); 1],
+        },
+        parent: std::ptr::null(),
+        data: std::ptr::null_mut(),
+        flags: 1,
+    }
+}
+
+unsafe extern "C" fn rust_socket_free(ptr: *mut c_void) {
+    if ptr.is_null() {
+        return;
+    }
+
+    let _ = catch_unwind(AssertUnwindSafe(|| unsafe {
+        drop(Box::from_raw(ptr as *mut RustSocket));
+    }));
+}
+
+unsafe extern "C" fn rust_socket_size(_ptr: *const c_void) -> size_t {
+    std::mem::size_of::<RustSocket>() as size_t
+}
+
+unsafe fn rust_socket_ref(value: VALUE) -> RbResult<&'static RustSocket> {
+    unsafe {
+        rb::typed_data_ref(
+            value,
+            rust_socket_data_type(),
+            "OMQ::Rust::Native::RustSocket",
+        )
+    }
+}
 
 fn parse_socket_type(s: &str) -> Result<omq_tokio::SocketType, String> {
     match s {
@@ -57,27 +111,46 @@ fn parse_socket_type(s: &str) -> Result<omq_tokio::SocketType, String> {
     }
 }
 
-fn rust_socket_new(ruby: &Ruby, type_str: String) -> Result<RustSocket, Error> {
-    let st = parse_socket_type(&type_str).map_err(|e| Error::new(ruby.exception_arg_error(), e))?;
-    Ok(RustSocket {
-        socket_type: st,
-        options: Mutex::new(None),
-        materialized: RwLock::new(None),
-        closed: AtomicBool::new(false),
-        linger: Mutex::new(None),
-    })
+fn rust_socket_new_impl(class: VALUE, type_str: VALUE) -> RbResult<VALUE> {
+    let type_str = rb::value_to_string(type_str)?;
+    let st = parse_socket_type(&type_str).map_err(RubyErr::arg)?;
+    unsafe {
+        rb::wrap_typed_data(
+            class,
+            Box::new(RustSocket {
+                socket_type: st,
+                options: Mutex::new(None),
+                materialized: RwLock::new(None),
+                closed: AtomicBool::new(false),
+                linger: Mutex::new(None),
+            }),
+            rust_socket_data_type(),
+        )
+    }
 }
 
-fn rust_socket_set_options(ruby: &Ruby, rb_self: &RustSocket, hash: RHash) -> Result<(), Error> {
-    let opts = crate::options::build_options(ruby, hash)?;
+unsafe extern "C" fn rust_socket_new(class: VALUE, type_str: VALUE) -> VALUE {
+    rb::wrap(|| rust_socket_new_impl(class, type_str))
+}
+
+fn rust_socket_set_options_impl(rb_self: &RustSocket, hash: VALUE) -> RbResult<()> {
+    let opts = crate::options::build_options(hash)?;
     *rb_self.linger.lock().unwrap() = opts.linger;
     *rb_self.options.lock().unwrap() = Some(opts);
     Ok(())
 }
 
-fn rust_socket_materialize(ruby: &Ruby, rb_self: &RustSocket) -> Result<(), Error> {
+unsafe extern "C" fn rust_socket_set_options(rb_self: VALUE, hash: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_set_options_impl(rb_self, hash)?;
+        Ok(rb::qnil())
+    })
+}
+
+fn rust_socket_materialize_impl(rb_self: &RustSocket) -> RbResult<()> {
     if rb_self.closed.load(Ordering::Relaxed) {
-        return Err(Error::new(ruby.exception_io_error(), "socket closed"));
+        return Err(RubyErr::io("socket closed"));
     }
     {
         let slot = rb_self.materialized.read().unwrap();
@@ -140,235 +213,375 @@ fn rust_socket_materialize(ruby: &Ruby, rb_self: &RustSocket) -> Result<(), Erro
     Ok(())
 }
 
-fn rust_socket_bind(ruby: &Ruby, rb_self: &RustSocket, endpoint: String) -> Result<String, Error> {
-    let sock = ensure_socket(ruby, rb_self)?;
-    let ep = omq_tokio::Endpoint::from_str(&endpoint).map_err(|e| map_err(ruby, e))?;
+unsafe extern "C" fn rust_socket_materialize(rb_self: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_materialize_impl(rb_self)?;
+        Ok(rb::qnil())
+    })
+}
+
+fn rust_socket_bind_impl(rb_self: &RustSocket, endpoint: VALUE) -> RbResult<VALUE> {
+    let sock = ensure_socket(rb_self)?;
+    let endpoint = rb::value_to_string(endpoint)?;
+    let ep = omq_tokio::Endpoint::from_str(&endpoint).map_err(map_err)?;
     let result = runtime::spawn_blocking(io_threads(), async move { sock.bind(ep).await });
-    result
-        .map(|ep| ep.to_string())
-        .map_err(|e| map_err(ruby, e))
+    let endpoint = result.map_err(map_err)?;
+    rb::new_utf8_string(&endpoint.to_string())
 }
 
-fn rust_socket_connect(ruby: &Ruby, rb_self: &RustSocket, endpoint: String) -> Result<(), Error> {
-    let sock = ensure_socket(ruby, rb_self)?;
-    let ep = omq_tokio::Endpoint::from_str(&endpoint).map_err(|e| map_err(ruby, e))?;
+unsafe extern "C" fn rust_socket_bind(rb_self: VALUE, endpoint: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_bind_impl(rb_self, endpoint)
+    })
+}
+
+fn rust_socket_connect_impl(rb_self: &RustSocket, endpoint: VALUE) -> RbResult<()> {
+    let sock = ensure_socket(rb_self)?;
+    let endpoint = rb::value_to_string(endpoint)?;
+    let ep = omq_tokio::Endpoint::from_str(&endpoint).map_err(map_err)?;
     let result = runtime::spawn_blocking(io_threads(), async move { sock.connect(ep).await });
-    result.map_err(|e| map_err(ruby, e))
+    result.map_err(map_err)
 }
 
-fn rust_socket_disconnect(
-    ruby: &Ruby,
-    rb_self: &RustSocket,
-    endpoint: String,
-) -> Result<(), Error> {
-    let sock = ensure_socket(ruby, rb_self)?;
-    let ep = omq_tokio::Endpoint::from_str(&endpoint).map_err(|e| map_err(ruby, e))?;
+unsafe extern "C" fn rust_socket_connect(rb_self: VALUE, endpoint: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_connect_impl(rb_self, endpoint)?;
+        Ok(rb::qnil())
+    })
+}
+
+fn rust_socket_disconnect_impl(rb_self: &RustSocket, endpoint: VALUE) -> RbResult<()> {
+    let sock = ensure_socket(rb_self)?;
+    let endpoint = rb::value_to_string(endpoint)?;
+    let ep = omq_tokio::Endpoint::from_str(&endpoint).map_err(map_err)?;
     let result = runtime::spawn_blocking(io_threads(), async move { sock.disconnect(ep).await });
-    result.map_err(|e| map_err(ruby, e))
+    result.map_err(map_err)
 }
 
-fn rust_socket_unbind(ruby: &Ruby, rb_self: &RustSocket, endpoint: String) -> Result<(), Error> {
-    let sock = ensure_socket(ruby, rb_self)?;
-    let ep = omq_tokio::Endpoint::from_str(&endpoint).map_err(|e| map_err(ruby, e))?;
+unsafe extern "C" fn rust_socket_disconnect(rb_self: VALUE, endpoint: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_disconnect_impl(rb_self, endpoint)?;
+        Ok(rb::qnil())
+    })
+}
+
+fn rust_socket_unbind_impl(rb_self: &RustSocket, endpoint: VALUE) -> RbResult<()> {
+    let sock = ensure_socket(rb_self)?;
+    let endpoint = rb::value_to_string(endpoint)?;
+    let ep = omq_tokio::Endpoint::from_str(&endpoint).map_err(map_err)?;
     let result = runtime::spawn_blocking(io_threads(), async move { sock.unbind(ep).await });
-    result.map_err(|e| map_err(ruby, e))
+    result.map_err(map_err)
 }
 
-fn rust_socket_enqueue_send(
-    ruby: &Ruby,
-    rb_self: &RustSocket,
-    parts: RArray,
-) -> Result<magnus::Symbol, Error> {
+unsafe extern "C" fn rust_socket_unbind(rb_self: VALUE, endpoint: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_unbind_impl(rb_self, endpoint)?;
+        Ok(rb::qnil())
+    })
+}
+
+fn rust_socket_enqueue_send_impl(rb_self: &RustSocket, parts: VALUE) -> RbResult<VALUE> {
     let mat_guard = rb_self.materialized.read().unwrap();
     let mat = mat_guard
         .as_ref()
-        .ok_or_else(|| Error::new(ruby.exception_runtime_error(), "socket not materialized"))?;
+        .ok_or_else(|| RubyErr::runtime("socket not materialized"))?;
 
-    let msg = ruby_parts_to_message(ruby, parts)?;
+    let msg = ruby_parts_to_message(parts)?;
     let mut prod = mat.send_prod.lock().unwrap();
     match prod.push(msg) {
         Ok(()) => {
             prod.flush();
-            Ok(ruby.to_symbol("ok"))
+            rb::symbol("ok")
         }
         Err(returned) => {
             prod.flush();
             match prod.push(returned) {
                 Ok(()) => {
                     prod.flush();
-                    Ok(ruby.to_symbol("ok"))
+                    rb::symbol("ok")
                 }
-                Err(_) => Ok(ruby.to_symbol("full")),
+                Err(_) => rb::symbol("full"),
             }
         }
     }
 }
 
-fn rust_socket_try_recv(ruby: &Ruby, rb_self: &RustSocket) -> Result<Option<RArray>, Error> {
+unsafe extern "C" fn rust_socket_enqueue_send(rb_self: VALUE, parts: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_enqueue_send_impl(rb_self, parts)
+    })
+}
+
+fn rust_socket_try_recv_impl(rb_self: &RustSocket) -> RbResult<VALUE> {
     let mat_guard = rb_self.materialized.read().unwrap();
     let mat = match mat_guard.as_ref() {
         Some(m) => m,
-        None => return Ok(None),
+        None => return Ok(rb::qnil()),
     };
 
     let mut cons = mat.recv_cons.lock().unwrap();
     match cons.prefetch_and_pop() {
         Some(msg) => {
             mat.recv_space.notify_one();
-            Ok(Some(message_to_ruby_parts(ruby, msg)?))
+            message_to_ruby_parts(msg)
         }
-        None => Ok(None),
+        None => Ok(rb::qnil()),
     }
 }
 
-fn rust_socket_try_recv_batch(ruby: &Ruby, rb_self: &RustSocket) -> Result<Option<RArray>, Error> {
+unsafe extern "C" fn rust_socket_try_recv(rb_self: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_try_recv_impl(rb_self)
+    })
+}
+
+fn rust_socket_try_recv_batch_impl(rb_self: &RustSocket) -> RbResult<VALUE> {
     let mat_guard = rb_self.materialized.read().unwrap();
     let mat = match mat_guard.as_ref() {
         Some(m) => m,
-        None => return Ok(None),
+        None => return Ok(rb::qnil()),
     };
 
     let mut cons = mat.recv_cons.lock().unwrap();
     let count = cons.prefetch();
     if count == 0 {
-        return Ok(None);
+        return Ok(rb::qnil());
     }
 
-    let batch = ruby.ary_new_capa(count);
+    let batch = rb::array_new_capa(count)?;
     let mut popped = 0usize;
     while let Some(msg) = cons.pop() {
-        batch.push(message_to_ruby_parts(ruby, msg)?)?;
+        rb::array_push(batch, message_to_ruby_parts(msg)?)?;
         popped += 1;
     }
     cons.release();
 
     if popped > 0 {
         mat.recv_space.notify_one();
-        Ok(Some(batch))
+        Ok(batch)
     } else {
-        Ok(None)
+        Ok(rb::qnil())
     }
 }
 
-fn rust_socket_wake_recv(rb_self: &RustSocket) {
+unsafe extern "C" fn rust_socket_try_recv_batch(rb_self: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_try_recv_batch_impl(rb_self)
+    })
+}
+
+fn rust_socket_wake_recv_impl(rb_self: &RustSocket) {
     let mat_guard = rb_self.materialized.read().unwrap();
     if let Some(mat) = mat_guard.as_ref() {
         mat.recv_notify.force_wake();
     }
 }
 
-fn rust_socket_recv_fd(ruby: &Ruby, rb_self: &RustSocket) -> Result<i32, Error> {
+unsafe extern "C" fn rust_socket_wake_recv(rb_self: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_wake_recv_impl(rb_self);
+        Ok(rb::qnil())
+    })
+}
+
+fn rust_socket_recv_fd_impl(rb_self: &RustSocket) -> RbResult<VALUE> {
     let mat_guard = rb_self.materialized.read().unwrap();
     let mat = mat_guard
         .as_ref()
-        .ok_or_else(|| Error::new(ruby.exception_runtime_error(), "socket not materialized"))?;
+        .ok_or_else(|| RubyErr::runtime("socket not materialized"))?;
     mat.recv_notify.park_begin();
-    Ok(mat.recv_notify.read_fd())
+    Ok(rb::int_value(mat.recv_notify.read_fd()))
 }
 
-fn rust_socket_send_fd(ruby: &Ruby, rb_self: &RustSocket) -> Result<i32, Error> {
+unsafe extern "C" fn rust_socket_recv_fd(rb_self: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_recv_fd_impl(rb_self)
+    })
+}
+
+fn rust_socket_send_fd_impl(rb_self: &RustSocket) -> RbResult<VALUE> {
     let mat_guard = rb_self.materialized.read().unwrap();
     let mat = mat_guard
         .as_ref()
-        .ok_or_else(|| Error::new(ruby.exception_runtime_error(), "socket not materialized"))?;
+        .ok_or_else(|| RubyErr::runtime("socket not materialized"))?;
     mat.send_notify.park_begin();
-    Ok(mat.send_notify.read_fd())
+    Ok(rb::int_value(mat.send_notify.read_fd()))
 }
 
-fn rust_socket_peer_connected_fd(ruby: &Ruby, rb_self: &RustSocket) -> Result<i32, Error> {
+unsafe extern "C" fn rust_socket_send_fd(rb_self: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_send_fd_impl(rb_self)
+    })
+}
+
+fn rust_socket_peer_connected_fd_impl(rb_self: &RustSocket) -> RbResult<VALUE> {
     let mat_guard = rb_self.materialized.read().unwrap();
     let mat = mat_guard
         .as_ref()
-        .ok_or_else(|| Error::new(ruby.exception_runtime_error(), "socket not materialized"))?;
-    Ok(mat.peer_connected_notify.read_fd())
+        .ok_or_else(|| RubyErr::runtime("socket not materialized"))?;
+    Ok(rb::int_value(mat.peer_connected_notify.read_fd()))
 }
 
-fn rust_socket_all_peers_gone_fd(ruby: &Ruby, rb_self: &RustSocket) -> Result<i32, Error> {
+unsafe extern "C" fn rust_socket_peer_connected_fd(rb_self: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_peer_connected_fd_impl(rb_self)
+    })
+}
+
+fn rust_socket_all_peers_gone_fd_impl(rb_self: &RustSocket) -> RbResult<VALUE> {
     let mat_guard = rb_self.materialized.read().unwrap();
     let mat = mat_guard
         .as_ref()
-        .ok_or_else(|| Error::new(ruby.exception_runtime_error(), "socket not materialized"))?;
-    Ok(mat.all_peers_gone_notify.read_fd())
+        .ok_or_else(|| RubyErr::runtime("socket not materialized"))?;
+    Ok(rb::int_value(mat.all_peers_gone_notify.read_fd()))
 }
 
-fn rust_socket_subscriber_joined_fd(ruby: &Ruby, rb_self: &RustSocket) -> Result<i32, Error> {
+unsafe extern "C" fn rust_socket_all_peers_gone_fd(rb_self: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_all_peers_gone_fd_impl(rb_self)
+    })
+}
+
+fn rust_socket_subscriber_joined_fd_impl(rb_self: &RustSocket) -> RbResult<VALUE> {
     let mat_guard = rb_self.materialized.read().unwrap();
     let mat = mat_guard
         .as_ref()
-        .ok_or_else(|| Error::new(ruby.exception_runtime_error(), "socket not materialized"))?;
-    Ok(mat.subscriber_joined_notify.read_fd())
+        .ok_or_else(|| RubyErr::runtime("socket not materialized"))?;
+    Ok(rb::int_value(mat.subscriber_joined_notify.read_fd()))
 }
 
-fn rust_socket_monitor_fd(ruby: &Ruby, rb_self: &RustSocket) -> Result<i32, Error> {
+unsafe extern "C" fn rust_socket_subscriber_joined_fd(rb_self: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_subscriber_joined_fd_impl(rb_self)
+    })
+}
+
+fn rust_socket_monitor_fd_impl(rb_self: &RustSocket) -> RbResult<VALUE> {
     let mat_guard = rb_self.materialized.read().unwrap();
     let mat = mat_guard
         .as_ref()
-        .ok_or_else(|| Error::new(ruby.exception_runtime_error(), "socket not materialized"))?;
+        .ok_or_else(|| RubyErr::runtime("socket not materialized"))?;
     mat.monitor_notify.park_begin();
-    Ok(mat.monitor_notify.read_fd())
+    Ok(rb::int_value(mat.monitor_notify.read_fd()))
 }
 
-fn rust_socket_try_recv_monitor(ruby: &Ruby, rb_self: &RustSocket) -> Result<Option<RHash>, Error> {
+unsafe extern "C" fn rust_socket_monitor_fd(rb_self: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_monitor_fd_impl(rb_self)
+    })
+}
+
+fn rust_socket_try_recv_monitor_impl(rb_self: &RustSocket) -> RbResult<VALUE> {
     let mat_guard = rb_self.materialized.read().unwrap();
     let mat = match mat_guard.as_ref() {
         Some(m) => m,
-        None => return Ok(None),
+        None => return Ok(rb::qnil()),
     };
 
     match mat.monitor_rx.try_recv() {
         Ok(data) => {
-            let hash = ruby.hash_new();
-            hash.aset(ruby.to_symbol("type"), ruby.to_symbol(data.event_type))?;
+            let hash = rb::hash_new()?;
+            rb::hash_aset(hash, rb::symbol("type")?, rb::symbol(data.event_type)?)?;
             if let Some(ep) = data.endpoint {
-                hash.aset(ruby.to_symbol("endpoint"), ruby.str_new(&ep))?;
+                rb::hash_aset(hash, rb::symbol("endpoint")?, rb::new_utf8_string(&ep)?)?;
             }
             if !data.detail.is_empty() {
-                let detail = ruby.hash_new();
+                let detail = rb::hash_new()?;
                 for (k, v) in &data.detail {
-                    detail.aset(ruby.to_symbol(k), ruby.str_new(v))?;
+                    rb::hash_aset(detail, rb::symbol(k)?, rb::new_utf8_string(v)?)?;
                 }
-                hash.aset(ruby.to_symbol("detail"), detail)?;
+                rb::hash_aset(hash, rb::symbol("detail")?, detail)?;
             }
-            Ok(Some(hash))
+            Ok(hash)
         }
-        Err(_) => Ok(None),
+        Err(_) => Ok(rb::qnil()),
     }
 }
 
-fn rust_socket_subscribe(ruby: &Ruby, rb_self: &RustSocket, prefix: RString) -> Result<(), Error> {
-    let sock = ensure_socket(ruby, rb_self)?;
-    let bytes = Bytes::from(unsafe { prefix.as_slice() }.to_vec());
-    let result = runtime::spawn_blocking(io_threads(), async move { sock.subscribe(bytes).await });
-    result.map_err(|e| map_err(ruby, e))
+unsafe extern "C" fn rust_socket_try_recv_monitor(rb_self: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_try_recv_monitor_impl(rb_self)
+    })
 }
 
-fn rust_socket_unsubscribe(
-    ruby: &Ruby,
-    rb_self: &RustSocket,
-    prefix: RString,
-) -> Result<(), Error> {
-    let sock = ensure_socket(ruby, rb_self)?;
-    let bytes = Bytes::from(unsafe { prefix.as_slice() }.to_vec());
+fn rust_socket_subscribe_impl(rb_self: &RustSocket, prefix: VALUE) -> RbResult<()> {
+    let sock = ensure_socket(rb_self)?;
+    let bytes = Bytes::from(rb::value_to_bytes(prefix)?);
+    let result = runtime::spawn_blocking(io_threads(), async move { sock.subscribe(bytes).await });
+    result.map_err(map_err)
+}
+
+unsafe extern "C" fn rust_socket_subscribe(rb_self: VALUE, prefix: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_subscribe_impl(rb_self, prefix)?;
+        Ok(rb::qnil())
+    })
+}
+
+fn rust_socket_unsubscribe_impl(rb_self: &RustSocket, prefix: VALUE) -> RbResult<()> {
+    let sock = ensure_socket(rb_self)?;
+    let bytes = Bytes::from(rb::value_to_bytes(prefix)?);
     let result =
         runtime::spawn_blocking(io_threads(), async move { sock.unsubscribe(bytes).await });
-    result.map_err(|e| map_err(ruby, e))
+    result.map_err(map_err)
 }
 
-fn rust_socket_join(ruby: &Ruby, rb_self: &RustSocket, group: RString) -> Result<(), Error> {
-    let sock = ensure_socket(ruby, rb_self)?;
-    let bytes = Bytes::from(unsafe { group.as_slice() }.to_vec());
+unsafe extern "C" fn rust_socket_unsubscribe(rb_self: VALUE, prefix: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_unsubscribe_impl(rb_self, prefix)?;
+        Ok(rb::qnil())
+    })
+}
+
+fn rust_socket_join_impl(rb_self: &RustSocket, group: VALUE) -> RbResult<()> {
+    let sock = ensure_socket(rb_self)?;
+    let bytes = Bytes::from(rb::value_to_bytes(group)?);
     let result = runtime::spawn_blocking(io_threads(), async move { sock.join(bytes).await });
-    result.map_err(|e| map_err(ruby, e))
+    result.map_err(map_err)
 }
 
-fn rust_socket_leave(ruby: &Ruby, rb_self: &RustSocket, group: RString) -> Result<(), Error> {
-    let sock = ensure_socket(ruby, rb_self)?;
-    let bytes = Bytes::from(unsafe { group.as_slice() }.to_vec());
+unsafe extern "C" fn rust_socket_join(rb_self: VALUE, group: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_join_impl(rb_self, group)?;
+        Ok(rb::qnil())
+    })
+}
+
+fn rust_socket_leave_impl(rb_self: &RustSocket, group: VALUE) -> RbResult<()> {
+    let sock = ensure_socket(rb_self)?;
+    let bytes = Bytes::from(rb::value_to_bytes(group)?);
     let result = runtime::spawn_blocking(io_threads(), async move { sock.leave(bytes).await });
-    result.map_err(|e| map_err(ruby, e))
+    result.map_err(map_err)
 }
 
-fn rust_socket_close(rb_self: &RustSocket) {
+unsafe extern "C" fn rust_socket_leave(rb_self: VALUE, group: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_leave_impl(rb_self, group)?;
+        Ok(rb::qnil())
+    })
+}
+
+fn rust_socket_close_impl(rb_self: &RustSocket) {
     rb_self.closed.store(true, Ordering::Relaxed);
     let mat = rb_self.materialized.write().unwrap().take();
     if let Some(m) = mat {
@@ -391,88 +604,104 @@ fn rust_socket_close(rb_self: &RustSocket) {
     }
 }
 
-fn rust_socket_closed(rb_self: &RustSocket) -> bool {
+unsafe extern "C" fn rust_socket_close(rb_self: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_close_impl(rb_self);
+        Ok(rb::qnil())
+    })
+}
+
+fn rust_socket_closed_impl(rb_self: &RustSocket) -> bool {
     rb_self.closed.load(Ordering::Relaxed)
 }
 
-fn rust_socket_type_name(rb_self: &RustSocket) -> &'static str {
-    rb_self.socket_type.as_str()
+unsafe extern "C" fn rust_socket_closed(rb_self: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        Ok(rb::bool_value(rust_socket_closed_impl(rb_self)))
+    })
 }
 
-fn ensure_socket(ruby: &Ruby, rb_self: &RustSocket) -> Result<Arc<omq_tokio::Socket>, Error> {
+fn rust_socket_type_name_impl(rb_self: &RustSocket) -> RbResult<VALUE> {
+    rb::new_utf8_string(rb_self.socket_type.as_str())
+}
+
+unsafe extern "C" fn rust_socket_type_name(rb_self: VALUE) -> VALUE {
+    rb::wrap(|| {
+        let rb_self = unsafe { rust_socket_ref(rb_self)? };
+        rust_socket_type_name_impl(rb_self)
+    })
+}
+
+fn ensure_socket(rb_self: &RustSocket) -> RbResult<Arc<omq_tokio::Socket>> {
     let slot = rb_self.materialized.read().unwrap();
     slot.as_ref()
         .map(|m| m.socket.clone())
-        .ok_or_else(|| Error::new(ruby.exception_runtime_error(), "socket not materialized"))
+        .ok_or_else(|| RubyErr::runtime("socket not materialized"))
 }
 
-fn ruby_parts_to_message(_ruby: &Ruby, parts: RArray) -> Result<omq_tokio::Message, Error> {
-    let len = parts.len();
+fn ruby_parts_to_message(parts: VALUE) -> RbResult<omq_tokio::Message> {
+    let len = rb::array_len(parts)?;
     if len == 1 {
-        let part: RString = parts.entry(0)?;
-        let data = unsafe { part.as_slice() }.to_vec();
+        let part = rb::array_entry(parts, 0)?;
+        let data = rb::value_to_bytes(part)?;
         Ok(omq_tokio::Message::from_slice(&data))
     } else {
         let mut frames: Vec<Bytes> = Vec::with_capacity(len);
         for i in 0..len {
-            let part: RString = parts.entry(i as isize)?;
-            let data = unsafe { part.as_slice() }.to_vec();
+            let part = rb::array_entry(parts, i)?;
+            let data = rb::value_to_bytes(part)?;
             frames.push(Bytes::from(data));
         }
         Ok(omq_tokio::Message::multipart(frames))
     }
 }
 
-fn message_to_ruby_parts(ruby: &Ruby, msg: omq_tokio::Message) -> Result<RArray, Error> {
-    let arr = ruby.ary_new();
+fn message_to_ruby_parts(msg: omq_tokio::Message) -> RbResult<VALUE> {
+    let arr = rb::array_new()?;
     for part in msg.iter() {
-        let s = ruby.str_from_slice(&part);
-        s.freeze();
-        arr.push(s)?;
+        let s = rb::new_binary_string(&part)?;
+        rb::array_push(arr, s)?;
     }
     Ok(arr)
 }
 
-pub fn register(ruby: &Ruby) -> Result<(), Error> {
-    let omq = ruby.define_module("OMQ")?;
-    let rust = omq.define_module("Rust")?;
-    let native = rust.define_module("Native")?;
+pub fn register(native: VALUE) -> RbResult<()> {
+    let class = unsafe { rb::define_class_under(native, c"RustSocket", rb_sys::rb_cObject)? };
 
-    let class = native.define_class("RustSocket", ruby.class_object())?;
-    class.define_singleton_method("new", function!(rust_socket_new, 1))?;
-    class.define_method("set_options", method!(rust_socket_set_options, 1))?;
-    class.define_method("materialize", method!(rust_socket_materialize, 0))?;
-    class.define_method("bind", method!(rust_socket_bind, 1))?;
-    class.define_method("connect", method!(rust_socket_connect, 1))?;
-    class.define_method("disconnect", method!(rust_socket_disconnect, 1))?;
-    class.define_method("unbind", method!(rust_socket_unbind, 1))?;
-    class.define_method("enqueue_send", method!(rust_socket_enqueue_send, 1))?;
-    class.define_method("try_recv", method!(rust_socket_try_recv, 0))?;
-    class.define_method("try_recv_batch", method!(rust_socket_try_recv_batch, 0))?;
-    class.define_method("wake_recv", method!(rust_socket_wake_recv, 0))?;
-    class.define_method("recv_fd", method!(rust_socket_recv_fd, 0))?;
-    class.define_method("send_fd", method!(rust_socket_send_fd, 0))?;
-    class.define_method(
-        "peer_connected_fd",
-        method!(rust_socket_peer_connected_fd, 0),
-    )?;
-    class.define_method(
-        "all_peers_gone_fd",
-        method!(rust_socket_all_peers_gone_fd, 0),
-    )?;
-    class.define_method(
-        "subscriber_joined_fd",
-        method!(rust_socket_subscriber_joined_fd, 0),
-    )?;
-    class.define_method("monitor_fd", method!(rust_socket_monitor_fd, 0))?;
-    class.define_method("try_recv_monitor", method!(rust_socket_try_recv_monitor, 0))?;
-    class.define_method("subscribe", method!(rust_socket_subscribe, 1))?;
-    class.define_method("unsubscribe", method!(rust_socket_unsubscribe, 1))?;
-    class.define_method("join", method!(rust_socket_join, 1))?;
-    class.define_method("leave", method!(rust_socket_leave, 1))?;
-    class.define_method("close", method!(rust_socket_close, 0))?;
-    class.define_method("closed?", method!(rust_socket_closed, 0))?;
-    class.define_method("socket_type_name", method!(rust_socket_type_name, 0))?;
+    unsafe {
+        rb::undef_alloc_func(class)?;
+        rb::define_singleton_method_1(class, c"new", rust_socket_new)?;
+        rb::define_method_1(class, c"set_options", rust_socket_set_options)?;
+        rb::define_method_0(class, c"materialize", rust_socket_materialize)?;
+        rb::define_method_1(class, c"bind", rust_socket_bind)?;
+        rb::define_method_1(class, c"connect", rust_socket_connect)?;
+        rb::define_method_1(class, c"disconnect", rust_socket_disconnect)?;
+        rb::define_method_1(class, c"unbind", rust_socket_unbind)?;
+        rb::define_method_1(class, c"enqueue_send", rust_socket_enqueue_send)?;
+        rb::define_method_0(class, c"try_recv", rust_socket_try_recv)?;
+        rb::define_method_0(class, c"try_recv_batch", rust_socket_try_recv_batch)?;
+        rb::define_method_0(class, c"wake_recv", rust_socket_wake_recv)?;
+        rb::define_method_0(class, c"recv_fd", rust_socket_recv_fd)?;
+        rb::define_method_0(class, c"send_fd", rust_socket_send_fd)?;
+        rb::define_method_0(class, c"peer_connected_fd", rust_socket_peer_connected_fd)?;
+        rb::define_method_0(class, c"all_peers_gone_fd", rust_socket_all_peers_gone_fd)?;
+        rb::define_method_0(
+            class,
+            c"subscriber_joined_fd",
+            rust_socket_subscriber_joined_fd,
+        )?;
+        rb::define_method_0(class, c"monitor_fd", rust_socket_monitor_fd)?;
+        rb::define_method_0(class, c"try_recv_monitor", rust_socket_try_recv_monitor)?;
+        rb::define_method_1(class, c"subscribe", rust_socket_subscribe)?;
+        rb::define_method_1(class, c"unsubscribe", rust_socket_unsubscribe)?;
+        rb::define_method_1(class, c"join", rust_socket_join)?;
+        rb::define_method_1(class, c"leave", rust_socket_leave)?;
+        rb::define_method_0(class, c"close", rust_socket_close)?;
+        rb::define_method_0(class, c"closed?", rust_socket_closed)?;
+        rb::define_method_0(class, c"socket_type_name", rust_socket_type_name)?;
+    }
 
     Ok(())
 }

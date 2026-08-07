@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "async"
+require_relative "fd_watcher"
 
 module OMQ
   module Rust
@@ -14,18 +15,18 @@ module OMQ
 
 
       def initialize(socket_type, options)
-        @socket_type    = socket_type
-        @options        = options
-        @peer_connected = Async::Promise.new
-        @all_peers_gone = Async::Promise.new
-        @subscriber_joined = Async::Promise.new
-        @connections    = {}
-        @closed         = false
-        @parent_task    = nil
-        @on_io_thread   = false
-        @materialized   = false
-        @recv_sentinels = 0
-        @compression_options = {}
+        @socket_type          = socket_type
+        @options              = options
+        @peer_connected       = Async::Promise.new
+        @all_peers_gone       = Async::Promise.new
+        @subscriber_joined    = Async::Promise.new
+        @connections          = {}
+        @closed               = false
+        @parent_task          = nil
+        @on_io_thread         = false
+        @materialized         = false
+        @recv_sentinels       = 0
+        @compression_options  = {}
 
         @native = Native::RustSocket.new(socket_type.to_s)
 
@@ -40,6 +41,8 @@ module OMQ
           @parent_task = parent
         elsif Async::Task.current?
           @parent_task = Async::Task.current
+        elsif !Reactor.native_fiber_scheduler?
+          @parent_task = nil
         else
           @parent_task  = Reactor.root_task
           @on_io_thread = true
@@ -81,7 +84,7 @@ module OMQ
         result = @native.enqueue_send(parts)
         return if result == :ok
 
-        @send_signal_r ||= IO.for_fd(@native.send_fd, autoclose: false)
+        @send_signal_r ||= io_for_native_fd(@native.send_fd)
         loop do
           result = @native.enqueue_send(parts)
           return if result == :ok
@@ -130,7 +133,10 @@ module OMQ
         @peer_connected.resolve(nil) unless @peer_connected.resolved?
         @all_peers_gone.resolve(nil) unless @all_peers_gone.resolved?
         @subscriber_joined.resolve(nil) unless @subscriber_joined.resolved?
+        FdWatcher.unwatch_owner(self) unless Reactor.native_fiber_scheduler?
         @native.close
+        close_io_wrapper(@recv_signal_r)
+        close_io_wrapper(@send_signal_r)
       end
 
 
@@ -176,7 +182,7 @@ module OMQ
         Native.send(:io_threads=, OMQ::Rust.io_threads)
         @native.set_options(extract_options)
         @native.materialize
-        @recv_signal_r = IO.for_fd(@native.recv_fd, autoclose: false)
+        @recv_signal_r = io_for_native_fd(@native.recv_fd)
         @materialized  = true
 
         @routing.replay_pending(@native)
@@ -206,27 +212,61 @@ module OMQ
 
 
       def spawn_lifecycle_watcher(fd, promise)
-        io = IO.for_fd(fd, autoclose: false)
-        @parent_task.async(transient: true) do
-          io.wait_readable
-          promise.resolve(true) unless promise.resolved? || @closed
-        rescue IOError, Errno::EBADF
+        if Reactor.native_fiber_scheduler?
+          io = io_for_native_fd(fd)
+          @parent_task.async(transient: true) do
+            io.wait_readable
+            promise.resolve(true) unless promise.resolved? || @closed
+          rescue IOError, Errno::EBADF
+          ensure
+            close_io_wrapper(io)
+          end
+        else
+          FdWatcher.watch_once(fd, owner: self) do
+            promise.resolve(true) unless promise.resolved? || @closed
+          end
         end
       end
 
 
       def start_monitor_forwarder
-        monitor_io = IO.for_fd(@native.monitor_fd, autoclose: false)
-        @parent_task.async(transient: true, annotation: "rust-monitor") do
-          loop do
-            monitor_io.wait_readable
-            monitor_io.read_nonblock(256, exception: false)
+        if Reactor.native_fiber_scheduler?
+          monitor_io = io_for_native_fd(@native.monitor_fd)
+          @parent_task.async(transient: true, annotation: "rust-monitor") do
+            until @closed
+              monitor_io.wait_readable
+              monitor_io.read_nonblock(256, exception: false)
+              while (data = @native.try_recv_monitor)
+                track_connection_event(data)
+                @monitor_queue.enqueue(MonitorEvent.new(**data))
+              end
+            end
+          rescue IOError, Errno::EBADF
+          ensure
+            close_io_wrapper(monitor_io)
+          end
+        else
+          FdWatcher.watch_loop(@native.monitor_fd, owner: self) do |io|
+            io.read_nonblock(256, exception: false)
             while (data = @native.try_recv_monitor)
               track_connection_event(data)
               @monitor_queue.enqueue(MonitorEvent.new(**data))
             end
           end
         end
+      end
+
+
+      def io_for_native_fd(fd)
+        IO.for_fd(fd, autoclose: false)
+      end
+
+
+      def close_io_wrapper(io)
+        return unless io && !io.closed?
+
+        io.close
+      rescue IOError, SystemCallError
       end
 
 

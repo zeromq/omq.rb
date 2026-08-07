@@ -202,6 +202,10 @@ module OMQ
     #   task.stop
     #
     def monitor(verbose: false, &block)
+      unless Reactor.native_fiber_scheduler?
+        raise NotImplementedError, "Socket#monitor requires native Fiber.scheduler"
+      end
+
       ensure_parent_task
 
       queue                   = Async::LimitedQueue.new(64)
@@ -242,6 +246,12 @@ module OMQ
     def close
       Reactor.run { @engine.close } # TODO: use timeout?
       nil
+    end
+
+
+    # @return [Boolean] true once the underlying engine is closed.
+    def closed?
+      @engine.closed?
     end
 
 
@@ -316,6 +326,10 @@ module OMQ
       @options.conflate     = conflate
       @options.on_mute      = on_mute      if on_mute
       backend_name = (backend || :ruby).to_sym
+      if backend_name == :ruby && !Reactor.native_fiber_scheduler?
+        raise NotImplementedError, "Ruby backend requires native Fiber.scheduler; use backend: :rust"
+      end
+
       require_backend(backend_name) unless Backend.registered?(backend_name)
 
       engine_class = Backend.fetch(backend_name)
