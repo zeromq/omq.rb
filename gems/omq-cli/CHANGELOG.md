@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.19.1 - 2026-08-08
+
+- Added `OMQ_BACKEND` support for choosing `ruby`, `rust`, or `libzmq`
+  as the default socket backend.
+- Made `omq -v` print the effective socket backend at startup.
+
 ## 0.19.0 — 2026-08-03
 
 - **Rust backend selection via `--backend rust`.** Loads

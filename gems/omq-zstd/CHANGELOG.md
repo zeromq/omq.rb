@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## 0.4.5 - 2026-08-08
+
 ### Changed
 
 - Require `zrip ~> 0.2.0`.
