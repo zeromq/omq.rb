@@ -22,13 +22,13 @@ gem "omq-qos",            require: false, path: "gems/omq-qos"
 gem "omq-websocket",      require: false, path: "gems/omq-websocket"
 
 if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new("4.0")
-  gem "lz4rip",     "~> 0.1.1", path: ENV["OMQ_DEV"] ? "../lz4rip" : nil
+  gem "lz4rip",     "~> 0.2.0", path: ENV["OMQ_DEV"] ? "../lz4rip" : nil
   gem "omq-backend-libzmq", require: false, path: "gems/omq-backend-libzmq"
   gem "omq-cli",            require: false, path: "gems/omq-cli"
   gem "omq-lz4",    require: false, path: "gems/omq-lz4"
   gem "omq-ractor", require: false, path: "gems/omq-ractor"
   gem "omq-zstd",   require: false, path: "gems/omq-zstd"
-  gem "zrip",       "~> 0.1.1", path: ENV["OMQ_DEV"] ? "../zrip" : nil
+  gem "zrip",       "~> 0.2.0", path: ENV["OMQ_DEV"] ? "../zrip" : nil
 end
 
 if ENV["OMQ_DEV"]

@@ -19,5 +19,5 @@ Gem::Specification.new do |s|
   s.files = Dir["lib/**/*.rb", "README.md", "RFC.md", "DESIGN.md", "LICENSE"]
 
   s.add_dependency "omq",  "~> 0.28"
-  s.add_dependency "zrip", "~> 0.1.1"
+  s.add_dependency "zrip", "~> 0.2.0"
 end

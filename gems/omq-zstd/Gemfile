@@ -9,7 +9,7 @@ SIBLINGS = File.expand_path("../../..", __dir__)
 
 gem "omq",           path: ROOT
 gem "protocol-zmtp", path: File.join(ROOT, "gems/protocol-zmtp")
-gem "zrip",          "~> 0.1.1", path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "zrip") : nil
+gem "zrip",          "~> 0.2.0", path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "zrip") : nil
 
 gem "async"
 gem "io-stream"

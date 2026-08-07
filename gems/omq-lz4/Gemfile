@@ -9,13 +9,13 @@ SIBLINGS = File.expand_path("../../..", __dir__)
 
 gem "omq",           path: ROOT
 gem "protocol-zmtp", path: File.join(ROOT, "gems/protocol-zmtp")
-gem "lz4rip",        "~> 0.1.1", path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "lz4rip") : nil
+gem "lz4rip",        "~> 0.2.0", path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "lz4rip") : nil
 
 # Optional: bench/head_to_head.rb compares omq-lz4 vs omq-zstd
 # side-by-side. Only loaded when that bench is run.
 group :bench do
   gem "omq-zstd", path: File.join(ROOT, "gems/omq-zstd")
-  gem "zrip",     "~> 0.1.1", path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "zrip") : nil
+  gem "zrip",     "~> 0.2.0", path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "zrip") : nil
 end
 
 gem "async"
