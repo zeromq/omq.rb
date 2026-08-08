@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## 0.3.4 - 2026-08-08
+
 ### Changed
 
 - Require `lz4rip ~> 0.2.0`.

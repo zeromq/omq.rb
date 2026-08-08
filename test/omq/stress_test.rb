@@ -109,33 +109,64 @@ describe "Stress tests" do
         OMQ::SUB.connect("ruby://stress-pubsub", subscribe: "")
       end
 
-      # Wait for subscriptions to propagate
-      pub.subscriber_joined.wait
+      # Wait until every subscriber has received from this PUB.
+      # #subscriber_joined only means the first subscription reached PUB.
+      ready = Array.new(n_subs, false)
+      sync_barrier = Async::Barrier.new
 
-      # Publish messages and receive in parallel
+      subs.each_with_index do |sub, i|
+        sub.read_timeout = 0.02
+        sync_barrier.async do
+          until ready[i]
+            begin
+              ready[i] = sub.receive == ["__omq_sync__"]
+            rescue IO::TimeoutError
+            end
+          end
+        end
+      end
+
+      begin
+        Async::Task.current.with_timeout(0.5) do
+          until ready.all?
+            pub.send("__omq_sync__")
+            sleep 0.001
+          end
+          sync_barrier.wait
+        end
+      ensure
+        sync_barrier.stop
+      end
+
+      # Start receivers first, then publish the real batch.
       barrier = Async::Barrier.new
-      barrier.async { n_msgs.times { |i| pub.send("msg-#{i}") } }
 
       counts = Array.new(n_subs)
       subs.each_with_index do |sub, i|
-        sub.read_timeout = 0.02
+        sub.read_timeout = nil
         barrier.async do
           count = 0
-          loop do
-            sub.receive
-            count += 1
-          rescue IO::TimeoutError
-            break
+          begin
+            Async::Task.current.with_timeout(0.5) do
+              until count == n_msgs
+                msg = sub.receive
+                count += 1 if msg.first.start_with?("msg-")
+              end
+            end
+          rescue Async::TimeoutError
+          ensure
+            counts[i] = count
           end
-          counts[i] = count
         end
       end
+
+      sleep 0
+      n_msgs.times { |i| pub.send("msg-#{i}") }
       barrier.wait
 
-      counts.each do |count|
-        assert_operator count, :>, 0, "subscriber received no messages"
+      counts.each_with_index do |count, i|
+        assert_equal n_msgs, count, "subscriber #{i} received #{count}/#{n_msgs}"
       end
-      assert_equal n_msgs * n_subs, counts.sum
     ensure
       subs&.each(&:close)
       pub&.close

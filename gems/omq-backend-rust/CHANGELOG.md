@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-08
+
+### Added
+
+- Added TruffleRuby support for the Rust backend.
+- Added a shared fallback file descriptor watcher for Rubies without a
+  native `Fiber.scheduler`.
+- Added TruffleRuby CI coverage for the Rust backend.
+
+### Changed
+
+- Updated to `omq-tokio` 0.21.1 and `omq-proto` 0.25.1.
+- Replaced Magnus with a small `rb-sys` helper layer that uses public
+  Ruby C API calls.
+
+### Fixed
+
+- Raised Ruby exceptions through public C API entry points for
+  TruffleRuby compatibility.
+- Rejected invalid negative numeric options before they can overflow Rust
+  sizes or panic on invalid durations.
+
 ## [0.1.7] - 2026-08-02
 
 ### Added

@@ -2,13 +2,22 @@
 
 ## [Unreleased]
 
+## [0.28.8] - 2026-08-08
+
 ### Added
 
 - Imported `omq-cli` under `gems/omq-cli` and wired it into monorepo
   test and release tasks.
 - Added `OMQ_BACKEND` support to `omq-cli` for choosing `ruby`, `rust`,
   or `libzmq` as the default socket backend.
-- Made `omq-cli -v` print the effective socket backend at startup.
+- Made `omq -v` print the effective socket backend at startup.
+- Added `Socket#closed?`.
+
+### Changed
+
+- Removed TruffleRuby Async compatibility shims. The pure Ruby backend now
+  requires a native `Fiber.scheduler`.
+- Made `Socket#monitor` require native scheduler support.
 
 ## [0.28.7] - 2026-08-02
 

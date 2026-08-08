@@ -11,8 +11,8 @@
 >
 > Ruby 4.0 + YJIT on a Linux VM. See [`bench/`](bench/) for full results
 
-`gem install omq` and you're done. No libzmq, no compiler, no system packages,
-just Ruby talking to every other ZeroMQ peer out there.
+`gem install omq` and you're done on MRI Ruby. No libzmq, no compiler, no
+system packages, just Ruby talking to every other ZeroMQ peer out there.
 
 ØMQ gives your Ruby processes a way to talk to each other, and to anything
 else speaking ZeroMQ, without a broker in the middle. Same API whether they
@@ -26,7 +26,7 @@ walkthrough of every major pattern with working code.
 ## Highlights
 
 - **Zero dependencies on C**: no extensions, no FFI, no libzmq. `gem install`
-  just works everywhere
+  just works on supported MRI Rubies
 - **Fast**: YJIT-optimized hot paths, batched sends, GC-tuned allocations,
   buffered I/O via [io-stream](https://github.com/socketry/io-stream),
   direct-pipe inproc bypass
@@ -58,6 +58,12 @@ gem install omq
 # or in Gemfile
 gem 'omq'
 ```
+
+### Ruby Engines
+
+MRI Ruby 3.3 and 4.0 can use the pure Ruby backend. TruffleRuby should use
+the Rust backend with `backend: :rust`; the pure Ruby backend is not supported
+there because OMQ needs native `Fiber.scheduler` behavior.
 
 ## Quick Start
 
@@ -219,6 +225,10 @@ See the [omq-cli README](https://github.com/paddor/omq-cli) for full documentati
 
 Install `omq-backend-rust` for a Rust/omq-tokio backend. Same socket API,
 but connection handling runs in native code on a Tokio runtime.
+
+The Rust backend also supports TruffleRuby. The pure Ruby backend currently
+requires MRI-style native `Fiber.scheduler` support, so use `backend: :rust`
+on TruffleRuby.
 
 ```ruby
 require "omq/backend/rust"
