@@ -131,9 +131,9 @@ describe "Rust backend" do
   end
 
 
-  describe "TruffleRuby fallback" do
+  describe "non-native Fiber scheduler fallback" do
     it "rejects the pure Ruby backend without a native Fiber scheduler" do
-      skip unless TRUFFLERUBY_WITHOUT_ASYNC
+      skip unless NON_NATIVE_WITHOUT_ASYNC
 
       err = assert_raises(NotImplementedError) { OMQ::PULL.new(backend: :ruby) }
       assert_equal "Ruby backend requires native Fiber.scheduler; use backend: :rust", err.message
@@ -141,7 +141,7 @@ describe "Rust backend" do
 
 
     it "rejects monitor without a native Fiber scheduler" do
-      skip unless TRUFFLERUBY_WITHOUT_ASYNC
+      skip unless NON_NATIVE_WITHOUT_ASYNC
 
       pull = OMQ::PULL.new(backend: BACKEND)
       err = assert_raises(NotImplementedError) { pull.monitor { |_| } }

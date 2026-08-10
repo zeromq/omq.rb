@@ -7,11 +7,15 @@
 
 Rust-backed engine for [OMQ](https://github.com/zeromq/omq.rb). Same socket API,
 but networking runs on a [Tokio](https://tokio.rs/) runtime inside a native
-extension compiled via [rb_sys](https://github.com/oxidize-rb/rb-sys).
+extension compiled via [rb_sys](https://github.com/oxidize-rb/rb-sys) on MRI
+and TruffleRuby, or through OMQ.java on JRuby.
 
 ## Install
 
-Requires a Rust toolchain (stable) at gem install time.
+Requires a Rust toolchain (stable) at gem install time on MRI and
+TruffleRuby. JRuby uses OMQ.java on Java 25 or newer. The Java gem selects
+the matching OMQ.java artifact on Linux x86_64, macOS aarch64, macOS x86_64,
+and Windows x86_64.
 
 ```ruby
 # Gemfile

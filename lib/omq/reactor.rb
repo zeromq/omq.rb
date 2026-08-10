@@ -17,7 +17,9 @@ module OMQ
   #
   module Reactor
     THREAD_NAME = 'omq-io'
-    NATIVE_FIBER_SCHEDULER = Fiber.respond_to?(:scheduler) && Fiber.method(:scheduler).source_location.nil?
+    NATIVE_FIBER_SCHEDULER = RUBY_ENGINE != "jruby" &&
+                             Fiber.respond_to?(:scheduler) &&
+                             Fiber.method(:scheduler).source_location.nil?
 
     @mutex      = Mutex.new
     @pid        = nil
