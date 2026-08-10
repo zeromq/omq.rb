@@ -2,7 +2,11 @@
 
 source "https://rubygems.org"
 
-gemspec
+if RUBY_ENGINE == "jruby"
+  gemspec glob: "omq-backend-rust-java.gemspec"
+else
+  gemspec glob: "omq-backend-rust.gemspec"
+end
 
 ROOT     = File.expand_path("../..", __dir__)
 SIBLINGS = File.expand_path("../../..", __dir__)
@@ -13,4 +17,4 @@ gem "nuckle",        path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "nuckle") : nil
 
 gem "minitest"
 gem "rake"
-gem "rake-compiler"
+gem "rake-compiler" unless RUBY_ENGINE == "jruby"

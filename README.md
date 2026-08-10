@@ -61,9 +61,12 @@ gem 'omq'
 
 ### Ruby Engines
 
-MRI Ruby 3.3 and 4.0 can use the pure Ruby backend. TruffleRuby should use
-the Rust backend with `backend: :rust`; the pure Ruby backend is not supported
-there because OMQ needs native `Fiber.scheduler` behavior.
+MRI Ruby 3.3 and 4.0 can use the pure Ruby backend. TruffleRuby and JRuby
+should use the Rust backend with `backend: :rust`; the pure Ruby backend is
+not supported there because OMQ needs native `Fiber.scheduler` behavior.
+JRuby support uses OMQ.java on Java 25 or newer. The Java gem selects the
+matching OMQ.java artifact on Linux x86_64, macOS aarch64, macOS x86_64, and
+Windows x86_64.
 
 ## Quick Start
 

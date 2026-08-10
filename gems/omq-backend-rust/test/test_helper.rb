@@ -11,7 +11,8 @@ Console.logger = Console::Logger.new(Console::Output::Null.new)
 Warning[:experimental] = false
 
 BACKEND = :rust
-TRUFFLERUBY_WITHOUT_ASYNC = RUBY_ENGINE == "truffleruby" && !OMQ::Reactor.native_fiber_scheduler?
+NON_NATIVE_WITHOUT_ASYNC = !OMQ::Reactor.native_fiber_scheduler?
+TRUFFLERUBY_WITHOUT_ASYNC = RUBY_ENGINE == "truffleruby" && NON_NATIVE_WITHOUT_ASYNC
 
 class ThreadTestTask
   def async
@@ -48,7 +49,7 @@ class CompletedTestTask
 end
 
 def run_backend
-  if TRUFFLERUBY_WITHOUT_ASYNC
+  if NON_NATIVE_WITHOUT_ASYNC
     CompletedTestTask.new(yield ThreadTestTask.new)
   else
     Async { |task| yield task }
@@ -56,7 +57,7 @@ def run_backend
 end
 
 def skip_without_ruby_backend
-  skip "Ruby backend requires native Fiber.scheduler" if TRUFFLERUBY_WITHOUT_ASYNC
+  skip "Ruby backend requires native Fiber.scheduler" if NON_NATIVE_WITHOUT_ASYNC
 end
 
 # Default linger to 0 in tests so close() doesn't block.

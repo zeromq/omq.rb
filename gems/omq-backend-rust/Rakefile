@@ -3,20 +3,47 @@
 require "rake/clean"
 CLOBBER.include "pkg"
 
-require "bundler/gem_helper"
-Bundler::GemHelper.new.tap do |gem_helper|
-  gem_helper.tag_prefix = "omq-backend-rust-"
-  gem_helper.install
+unless RUBY_ENGINE == "jruby"
+  require "bundler/gem_helper"
+  Bundler::GemHelper.new(__dir__, "omq-backend-rust").tap do |gem_helper|
+    gem_helper.tag_prefix = "omq-backend-rust-"
+    gem_helper.install
+  end
 end
 
-require "rb_sys/extensiontask"
 require "minitest/test_task"
+require_relative "lib/omq/rust/version"
 
-GEMSPEC = Gem::Specification.load("omq-backend-rust.gemspec") ||
-          abort("Could not load omq-backend-rust.gemspec")
+GEMSPEC_FILE = RUBY_ENGINE == "jruby" ? "omq-backend-rust-java.gemspec" : "omq-backend-rust.gemspec"
+GEMSPEC = Gem::Specification.load(GEMSPEC_FILE) ||
+          abort("Could not load #{GEMSPEC_FILE}")
 
-RbSys::ExtensionTask.new("omq_backend_rust", GEMSPEC) do |ext|
-  ext.lib_dir = "lib/omq/rust"
+JAVA_GEMSPEC_FILE = "omq-backend-rust-java.gemspec"
+JAVA_GEM_PATH = File.join("pkg", "omq-backend-rust-#{OMQ::Rust::VERSION}-java.gem")
+
+if RUBY_ENGINE == "jruby"
+  task :compile
+else
+  require "rb_sys/extensiontask"
+
+  RbSys::ExtensionTask.new("omq_backend_rust", GEMSPEC) do |ext|
+    ext.lib_dir = "lib/omq/rust"
+  end
+end
+
+desc "Build omq-backend-rust Java platform gem into pkg"
+task "build:java" do
+  mkdir_p "pkg"
+  sh Gem.ruby, "-S", "gem", "build", JAVA_GEMSPEC_FILE, "--output", JAVA_GEM_PATH
+end
+
+if RUBY_ENGINE == "jruby"
+  task build: ["build:java"]
+else
+  Rake::Task["build"].enhance(["build:java"])
+  Rake::Task["release:rubygem_push"].enhance(["build:java"]) do
+    sh Gem.ruby, "-S", "gem", "push", JAVA_GEM_PATH
+  end
 end
 
 Minitest::TestTask.create(:test) do |t|

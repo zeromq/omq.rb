@@ -43,6 +43,7 @@ module OMQ
     IO::Stream::ConnectionResetError,
   ]
 
+  RESOLUTION_ERROR = defined?(Socket::ResolutionError) ? Socket::ResolutionError : SocketError
 
   # Errors raised when a peer cannot be reached.
   CONNECTION_FAILED = [
@@ -52,7 +53,7 @@ module OMQ
     Errno::EHOSTUNREACH,
     Errno::ENETUNREACH,
     Errno::EPROTOTYPE, # IPC: existing socket file is SOCK_DGRAM, not SOCK_STREAM
-    Socket::ResolutionError,
+    RESOLUTION_ERROR,
   ]
 
 

@@ -172,6 +172,7 @@ jobs:
 
           package  = ENV.fetch("PACKAGE")
           version  = ENV.fetch("VERSION")
+          required_platforms = package == "omq-backend-rust" ? ["ruby", "java"] : [nil]
           endpoint = URI("https://rubygems.org/api/v1/versions/#{package}.json")
           deadline = Time.now + 180
 
@@ -179,7 +180,14 @@ jobs:
             response = Net::HTTP.get_response(endpoint)
             if response.is_a?(Net::HTTPSuccess)
               versions = JSON.parse(response.body)
-              if versions.any? { |entry| entry["number"] == version }
+              matches = versions.select { |entry| entry["number"] == version }
+              if package == "omq-backend-rust"
+                platforms = matches.map { |entry| entry["platform"] }.uniq
+                if (required_platforms - platforms).empty?
+                  puts "#{package} #{version} is available on RubyGems.org for #{platforms.sort.join(", ")}"
+                  break
+                end
+              elsif matches.any?
                 puts "#{package} #{version} is available on RubyGems.org"
                 break
               end
