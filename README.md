@@ -226,8 +226,8 @@ See the [omq-cli README](https://github.com/paddor/omq-cli) for full documentati
 
 ## Optional Rust backend
 
-Install `omq-backend-rust` for a Rust/omq-tokio backend. Same socket API,
-but connection handling runs in native code on a Tokio runtime.
+Install `omq-backend-rust` for an OMQ.rs backend through the first-class
+`omq-rs` binding. Same socket API, with connection handling on a Tokio runtime.
 
 The Rust backend also supports TruffleRuby. The pure Ruby backend currently
 requires MRI-style native `Fiber.scheduler` support, so use `backend: :rust`

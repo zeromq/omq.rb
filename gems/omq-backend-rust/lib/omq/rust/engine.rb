@@ -27,8 +27,10 @@ module OMQ
         @materialized         = false
         @recv_sentinels       = 0
         @compression_options  = {}
-
-        @native = Native::RustSocket.new(socket_type.to_s)
+        @socket               = nil
+        @monitor_task         = nil
+        @monitor_watching     = false
+        @had_peer             = false
 
         @routing = RoutingStub.new(self)
       end
@@ -55,7 +57,7 @@ module OMQ
         capture_parent_task(parent: parent)
         apply_endpoint_options!(opts)
         ensure_materialized
-        resolved = @native.bind(endpoint)
+        resolved = @socket.bind(endpoint)
         URI.parse(resolved)
       end
 
@@ -64,54 +66,39 @@ module OMQ
         capture_parent_task(parent: parent)
         apply_endpoint_options!(opts)
         ensure_materialized
-        @native.connect(endpoint)
+        @socket.connect(endpoint)
         URI.parse(endpoint)
       end
 
 
       def disconnect(endpoint)
-        @native.disconnect(endpoint)
+        @socket.disconnect(endpoint)
       end
 
 
       def unbind(endpoint)
-        @native.unbind(endpoint)
+        @socket.unbind(endpoint)
       end
 
 
       def enqueue_send(parts)
         ensure_materialized
-        result = @native.enqueue_send(parts)
-        return if result == :ok
-
-        @send_signal_r ||= io_for_native_fd(@native.send_fd)
-        loop do
-          result = @native.enqueue_send(parts)
-          return if result == :ok
-
-          @send_signal_r.wait_readable
-          @send_signal_r.read_nonblock(256, exception: false)
-        end
+        @socket.send(normalize_outgoing(parts))
+        nil
       end
 
 
       def dequeue_recv
         ensure_materialized
 
-        if @recv_batch && !@recv_batch.empty?
-          return @recv_batch.shift
-        end
-
-        msg = try_recv_batch
+        msg = try_recv
         return msg if msg
 
         return take_recv_sentinel if @recv_sentinels.positive?
 
         loop do
-          @recv_signal_r.wait_readable
-          @recv_signal_r.read_nonblock(256, exception: false)
-
-          msg = try_recv_batch
+          @socket.wait_readable
+          msg = try_recv
           return msg if msg
 
           return take_recv_sentinel if @recv_sentinels.positive?
@@ -121,7 +108,7 @@ module OMQ
 
       def dequeue_recv_sentinel
         @recv_sentinels += 1
-        @native.wake_recv if @materialized
+        @socket.wake_recv if @materialized
         nil
       end
 
@@ -134,9 +121,8 @@ module OMQ
         @all_peers_gone.resolve(nil) unless @all_peers_gone.resolved?
         @subscriber_joined.resolve(nil) unless @subscriber_joined.resolved?
         FdWatcher.unwatch_owner(self) unless Reactor.native_fiber_scheduler?
-        @native.close
-        close_io_wrapper(@recv_signal_r)
-        close_io_wrapper(@send_signal_r)
+        @socket&.close
+        @monitor_task&.stop
       end
 
 
@@ -179,19 +165,10 @@ module OMQ
         return if @materialized
 
         capture_parent_task unless @parent_task
-        Native.send(:io_threads=, OMQ::Rust.io_threads)
-        @native.set_options(extract_options)
-        @native.materialize
-        @recv_signal_r = io_for_native_fd(@native.recv_fd)
-        @materialized  = true
-
-        @routing.replay_pending(@native)
-
-        spawn_lifecycle_watcher(@native.peer_connected_fd, @peer_connected)
-        spawn_lifecycle_watcher(@native.all_peers_gone_fd, @all_peers_gone)
-        spawn_lifecycle_watcher(@native.subscriber_joined_fd, @subscriber_joined)
-
-        start_monitor_forwarder if @monitor_queue
+        @socket = OMQ::Rust.socket(@socket_type, **extract_options.transform_keys(&:to_sym))
+        @materialized = true
+        @routing.replay_pending(@socket)
+        start_monitor_forwarder
       end
 
 
@@ -201,89 +178,82 @@ module OMQ
       end
 
 
-      def try_recv_batch
-        batch = @native.try_recv_batch
-        return unless batch
+      def try_recv
+        message = @socket.try_recv
+        return unless message
+        return message unless @socket_type.to_sym == :SERVER
 
-        msg = batch.shift
-        @recv_batch = batch unless batch.empty?
-        msg
+        routing_id, *parts = message
+        [[routing_id].pack("N"), *parts]
       end
 
 
-      def spawn_lifecycle_watcher(fd, promise)
-        if Reactor.native_fiber_scheduler?
-          io = io_for_native_fd(fd)
-          @parent_task.async(transient: true) do
-            io.wait_readable
-            promise.resolve(true) unless promise.resolved? || @closed
-          rescue IOError, Errno::EBADF
-          ensure
-            close_io_wrapper(io)
-          end
-        else
-          FdWatcher.watch_once(fd, owner: self) do
-            promise.resolve(true) unless promise.resolved? || @closed
-          end
+      def normalize_outgoing(parts)
+        return parts unless @socket_type.to_sym == :SERVER
+
+        routing_id, *body = parts
+        unless routing_id.is_a?(String) && routing_id.bytesize == 4
+          raise ArgumentError, "SERVER routing ID must be a 4-byte String"
         end
+        [routing_id.unpack1("N"), *body]
       end
 
 
       def start_monitor_forwarder
+        return if @monitor_task || @monitor_watching
+
         if Reactor.native_fiber_scheduler?
-          monitor_io = io_for_native_fd(@native.monitor_fd)
-          @parent_task.async(transient: true, annotation: "rust-monitor") do
-            until @closed
-              monitor_io.wait_readable
-              monitor_io.read_nonblock(256, exception: false)
-              while (data = @native.try_recv_monitor)
-                track_connection_event(data)
-                @monitor_queue.enqueue(MonitorEvent.new(**data))
-              end
-            end
-          rescue IOError, Errno::EBADF
-          ensure
-            close_io_wrapper(monitor_io)
+          @monitor_task = @parent_task.async(transient: true, annotation: "rust-monitor") do
+            monitor_loop
           end
         else
-          FdWatcher.watch_loop(@native.monitor_fd, owner: self) do |io|
+          @monitor_watching = true
+          FdWatcher.watch_loop(@socket.monitor_fd, owner: self) do |io|
             io.read_nonblock(256, exception: false)
-            while (data = @native.try_recv_monitor)
-              track_connection_event(data)
-              @monitor_queue.enqueue(MonitorEvent.new(**data))
+            while (data = @socket.try_monitor_event)
+              handle_monitor_event(data)
             end
+            @socket.monitor_fd unless @closed
           end
         end
       end
 
 
-      def io_for_native_fd(fd)
-        IO.for_fd(fd, autoclose: false)
+      def monitor_loop
+        until @closed
+          data = @socket.monitor.recv
+          break unless data
+
+          handle_monitor_event(data)
+        end
+      rescue IOError, Errno::EBADF
+        raise unless @closed
       end
 
 
-      def close_io_wrapper(io)
-        return unless io && !io.closed?
+      def handle_monitor_event(data)
+        type          = data.fetch(:event)
+        endpoint      = data[:endpoint]
+        connection_id = data[:connection_id]
 
-        io.close
-      rescue IOError, SystemCallError
-      end
-
-
-      def track_connection_event(data)
-        detail = data[:detail] || {}
-        connection_id = detail[:connection_id]
-
-        case data[:type]
+        case type
         when :handshake_succeeded
+          @had_peer = true
           @connections[connection_id || Object.new] = true
+          @peer_connected.resolve(true) unless @peer_connected.resolved?
         when :disconnected
-          if connection_id
-            @connections.delete(connection_id)
-          else
-            @connections.shift
+          connection_id ? @connections.delete(connection_id) : @connections.shift
+          if @had_peer && @connections.empty? && !@all_peers_gone.resolved?
+            @all_peers_gone.resolve(true)
           end
+        when :subscribe_received
+          @subscriber_joined.resolve(true) unless @subscriber_joined.resolved?
         end
+
+        return unless @monitor_queue
+
+        detail = data.except(:event, :endpoint)
+        @monitor_queue.enqueue(MonitorEvent.new(type:, endpoint:, detail: detail.empty? ? nil : detail))
       end
 
 
@@ -444,9 +414,9 @@ module OMQ
 
 
         def subscribe(prefix)
-          native = @engine.instance_variable_get(:@native)
+          socket = @engine.instance_variable_get(:@socket)
           if @engine.instance_variable_get(:@materialized)
-            native.subscribe(prefix.b)
+            socket.subscribe(prefix.b)
           else
             @pending_subscribe << prefix.b
           end
@@ -454,14 +424,14 @@ module OMQ
 
 
         def unsubscribe(prefix)
-          @engine.instance_variable_get(:@native).unsubscribe(prefix.b)
+          @engine.instance_variable_get(:@socket).unsubscribe(prefix.b)
         end
 
 
         def join(group)
-          native = @engine.instance_variable_get(:@native)
+          socket = @engine.instance_variable_get(:@socket)
           if @engine.instance_variable_get(:@materialized)
-            native.join(group)
+            socket.join(group)
           else
             @pending_join << group
           end
@@ -469,14 +439,14 @@ module OMQ
 
 
         def leave(group)
-          @engine.instance_variable_get(:@native).leave(group)
+          @engine.instance_variable_get(:@socket).leave(group)
         end
 
 
-        def replay_pending(native)
-          @pending_subscribe.each { |p| native.subscribe(p) }
+        def replay_pending(socket)
+          @pending_subscribe.each { |p| socket.subscribe(p) }
           @pending_subscribe.clear
-          @pending_join.each { |g| native.join(g) }
+          @pending_join.each { |g| socket.join(g) }
           @pending_join.clear
         end
       end

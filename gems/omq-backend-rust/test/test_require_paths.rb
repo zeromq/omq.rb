@@ -14,6 +14,28 @@ class RequirePathsTest < Minitest::Test
   end
 
 
+  def test_mri_backend_uses_omq_rs
+    skip "MRI/TruffleRuby only" if RUBY_ENGINE == "jruby"
+
+    code = <<~RUBY
+      require "omq/backend/rust"
+      abort "omq-rs not loaded" unless defined?(OMQ::Rust::Socket)
+    RUBY
+
+    assert system(RbConfig.ruby, "-I#{ROOT}/lib", "-I#{GEM_ROOT}/lib", "-e", code),
+           "MRI backend did not load omq-rs"
+  end
+
+
+  def test_mri_gemspec_depends_on_omq_rs_without_native_extension
+    spec = Gem::Specification.load(File.join(GEM_ROOT, "omq-backend-rust.gemspec"))
+
+    assert_includes spec.runtime_dependencies.map(&:name), "omq-rs"
+    assert_empty spec.extensions
+    refute spec.files.any? { |path| path.start_with?("ext/") }
+  end
+
+
   def test_old_rust_require_path_is_not_available
     code = <<~RUBY
       begin

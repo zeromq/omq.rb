@@ -12,9 +12,9 @@ ROOT     = File.expand_path("../..", __dir__)
 SIBLINGS = File.expand_path("../../..", __dir__)
 
 gem "omq",           path: ROOT
+gem "omq-rs",        path: ENV["OMQ_RS_PATH"]
 gem "protocol-zmtp", path: File.join(ROOT, "gems/protocol-zmtp")
 gem "nuckle",        path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "nuckle") : nil
 
 gem "minitest"
 gem "rake"
-gem "rake-compiler" unless RUBY_ENGINE == "jruby"
