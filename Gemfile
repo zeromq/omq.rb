@@ -18,6 +18,7 @@ gem "nuckle",        path: ENV["OMQ_DEV"] ? "../nuckle" : nil
 gem "protocol-zmtp", path: "gems/protocol-zmtp"
 
 gem "omq-backend-rust",   require: false, path: "gems/omq-backend-rust"
+gem "omq-rs",             require: false, path: ENV["OMQ_RS_PATH"]
 gem "omq-qos",            require: false, path: "gems/omq-qos"
 gem "omq-websocket",      require: false, path: "gems/omq-websocket"
 

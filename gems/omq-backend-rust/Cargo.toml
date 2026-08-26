@@ -1,3 +1,0 @@
-[workspace]
-members = ["ext/omq_backend_rust"]
-resolver = "3"

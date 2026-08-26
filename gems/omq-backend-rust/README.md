@@ -6,16 +6,16 @@
 [![Ruby](https://img.shields.io/badge/Ruby-%3E%3D%203.3-CC342D?logo=ruby&logoColor=white)](https://www.ruby-lang.org)
 
 Rust-backed engine for [OMQ](https://github.com/zeromq/omq.rb). Same socket API,
-but networking runs on a [Tokio](https://tokio.rs/) runtime inside a native
-extension compiled via [rb_sys](https://github.com/oxidize-rb/rb-sys) on MRI
-and TruffleRuby, or through OMQ.java on JRuby.
+but networking runs through the first-class
+[omq-rs](https://github.com/paddor/omq.rs/tree/main/bindings/ruby) binding on
+MRI and TruffleRuby, or through OMQ.java on JRuby.
 
 ## Install
 
-Requires a Rust toolchain (stable) at gem install time on MRI and
-TruffleRuby. JRuby uses OMQ.java on Java 25 or newer. The Java gem selects
-the matching OMQ.java artifact on Linux x86_64, macOS aarch64, macOS x86_64,
-and Windows x86_64.
+The `omq-rs` dependency compiles OMQ.rs during installation on MRI and
+TruffleRuby. JRuby uses OMQ.java on Java 25 or newer. The Java gem selects the
+matching OMQ.java artifact on Linux x86_64, macOS aarch64, macOS x86_64, and
+Windows x86_64.
 
 ```ruby
 # Gemfile
@@ -77,8 +77,8 @@ the first `bind` or `connect` for a Rust-backed socket.
 ## Development
 
 ```sh
-OMQ_DEV=1 bundle install
-OMQ_DEV=1 bundle exec rake
+OMQ_RS_PATH=/path/to/omq.rs/bindings/ruby bundle install
+OMQ_RS_PATH=/path/to/omq.rs/bindings/ruby bundle exec rake
 ```
 
 ## License

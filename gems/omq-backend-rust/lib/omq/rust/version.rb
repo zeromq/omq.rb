@@ -1,8 +1,13 @@
 # frozen_string_literal: true
 
 module OMQ
+  module Backend
+    module Rust
+      VERSION = "0.2.0"
+    end
+  end
+
   module Rust
-    VERSION = "0.2.0"
     OMQ_JAVA_VERSION = "0.3.0"
     OMQ_JAVA_CLASSIFIERS = [
       "linux-x86_64",

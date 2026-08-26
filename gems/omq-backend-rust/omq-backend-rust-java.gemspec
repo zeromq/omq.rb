@@ -4,7 +4,7 @@ require_relative "lib/omq/rust/version"
 
 Gem::Specification.new do |s|
   s.name     = "omq-backend-rust"
-  s.version  = OMQ::Rust::VERSION
+  s.version  = OMQ::Backend::Rust::VERSION
   s.authors  = ["Patrik Wenger"]
   s.email    = ["paddor@gmail.com"]
   s.summary  = "Rust-backed engine for OMQ using OMQ.java on JRuby"
