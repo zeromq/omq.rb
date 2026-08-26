@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.28.9] - 2026-08-26
+
+### Fixed
+
+- Used `SocketError` when `Socket::ResolutionError` is unavailable, so
+  `require "omq"` works on JRuby.
+
 ## [0.28.8] - 2026-08-08
 
 ### Added
