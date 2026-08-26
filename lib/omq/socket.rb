@@ -325,7 +325,7 @@ module OMQ
       @options.recv_timeout = recv_timeout if recv_timeout
       @options.conflate     = conflate
       @options.on_mute      = on_mute      if on_mute
-      backend_name = (backend || :ruby).to_sym
+      backend_name = backend ? backend.to_sym : default_backend
       if backend_name == :ruby && !Reactor.native_fiber_scheduler?
         raise NotImplementedError, "Ruby backend requires native Fiber.scheduler; use backend: :rust"
       end
@@ -340,6 +340,23 @@ module OMQ
 
 
     private
+
+
+    def default_backend
+      return :ruby if Reactor.native_fiber_scheduler?
+      return :rust if Backend.registered?(:rust)
+
+      begin
+        require_backend(:rust)
+      rescue LoadError => error
+        raise error if error.path && error.path != "omq/backend/rust"
+
+        raise NotImplementedError,
+              "Ruby backend requires native Fiber.scheduler; install omq-backend-rust or use backend: :rust"
+      end
+
+      :rust if Backend.registered?(:rust)
+    end
 
 
     def require_backend(name)
