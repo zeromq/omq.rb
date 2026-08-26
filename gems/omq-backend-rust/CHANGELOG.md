@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-26
+
 ### Added
 
 - Added JRuby support through OMQ.java Maven artifacts for Linux x86_64,
