@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.28.10] - 2026-08-26
+
+### Changed
+
+- Default to `omq-backend-rust` when no backend is specified and native
+  `Fiber.scheduler` is unavailable.
+
 ## [0.28.9] - 2026-08-26
 
 ### Fixed
