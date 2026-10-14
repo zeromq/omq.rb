@@ -10,6 +10,8 @@
   their requests across disconnects. Replies to muted REP peers are discarded.
 - Applied in-process receive transforms to buffered messages and discarded
   filtered messages without delivering close sentinels.
+- Removed in-process peer connections when the opposite pipe closes, including
+  connections that bypass the receive pump.
 
 ### Removed
 

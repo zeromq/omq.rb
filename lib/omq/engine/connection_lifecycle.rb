@@ -133,6 +133,9 @@ module OMQ
       # @param pipe [Transport::Inproc::Pipe]
       #
       def ready_direct!(pipe)
+        if pipe.is_a?(Transport::Inproc::Pipe) && pipe.peer
+          @barrier.async(transient: true, annotation: "inproc peer close") { pipe.peer.wait_closed }
+        end
         ready!(pipe)
       end
 
@@ -187,9 +190,7 @@ module OMQ
         @engine.peer_connected.resolve(@conn)
         transition!(:ready)
 
-        # No supervisor if nothing to supervise: inproc Pipes
-        # wire the recv/send paths synchronously (no task-based pumps),
-        # and isolated unit tests use a FakeEngine without pumps at all.
+        # Isolated unit tests can use a FakeEngine without pumps at all.
         # Waiting on an empty barrier returns immediately and would
         # tear the connection down right after registering.
         start_supervisor unless @barrier.empty?

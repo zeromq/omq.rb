@@ -246,7 +246,7 @@ module OMQ
           if @had_peer && @connections.empty? && !@all_peers_gone.resolved?
             @all_peers_gone.resolve(true)
           end
-        when :subscribe_received
+        when :subscribe_received, :join_received
           @subscriber_joined.resolve(true) unless @subscriber_joined.resolved?
         end
 

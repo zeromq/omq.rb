@@ -398,6 +398,14 @@ module OMQ
           serialize: serialize, topic_type: topic_type }
       end
 
+      # REQ/REP input bridges must wait for the matching send before reading
+      # again. REP starts with a receive; REQ starts with a send.
+      @receive_permits = sockets.map do |socket|
+        next unless socket.is_a?(REQ) || socket.is_a?(REP)
+
+        Async::Queue.new.tap { |queue| queue.enqueue(true) if socket.is_a?(REP) }
+      end
+
 
       # Main Ractor creates output ports (one per writable socket)
       @output_ports = socket_configs.map { |cfg| cfg[:writable] ? ::Ractor::Port.new : nil }
@@ -548,9 +556,11 @@ module OMQ
 
         do_serialize = socket_configs[i][:serialize]
         topic_type   = socket_configs[i][:topic_type]
+        permit       = @receive_permits[i]
 
         @input_tasks << @parent_task.async(transient: true, annotation: "ractor input bridge") do
           loop do
+            permit&.dequeue
             msg = socket.receive
             if do_serialize && !topic_type
               msg = msg.first
@@ -607,6 +617,7 @@ module OMQ
             while (msg = queue.pop(true) rescue nil)
               parts = msg.is_a?(Array) ? msg : [msg]
               engine.enqueue_send(parts)
+              @receive_permits[i]&.enqueue(true)
             end
           rescue IOError, Async::Stop
             break

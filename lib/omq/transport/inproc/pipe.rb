@@ -62,6 +62,7 @@ module OMQ
           @peer_identity         = peer_identity || "".b
           @peer_socket_type      = peer_type
           @closed                = false
+          @closed_signal         = Async::Promise.new
           @peer                  = nil
           @direct_recv_queue     = nil
           @direct_recv_transform = nil
@@ -205,14 +206,21 @@ module OMQ
         end
 
 
-        # Closes this pipe end and sends a nil sentinel to the peer.
+        # Closes this pipe end and wakes the peer's lifecycle and command reader.
         #
         # @return [void]
         #
         def close
           return if @closed
           @closed = true
+          @closed_signal.resolve(true)
           @send_queue&.enqueue(nil) # close sentinel
+        end
+
+
+        # Lets the peer remove this link even when messages bypass recv pumps.
+        def wait_closed
+          @closed_signal.wait
         end
 
 

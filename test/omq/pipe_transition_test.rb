@@ -76,6 +76,7 @@ class OMQPipeTransitionTest < Minitest::Spec
 
         pull2.close
         pull2 = nil
+        Async::Task.current.yield while push.engine.connections.size > 1
 
         push << "back-to-direct"
         assert_equal ["back-to-direct"], pull1.receive

@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Resolve RADIO subscriber readiness on `join_received` monitor events.
 - Reject unsupported security mechanisms instead of silently using NULL.
 - Forward CURVE authenticators on MRI, TruffleRuby, and JRuby, preserving the
   Ruby `PeerInfo` and crypto public-key types.

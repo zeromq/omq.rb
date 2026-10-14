@@ -197,29 +197,27 @@ class OMQReqRepConformanceTest < Minitest::Spec
         end
       end
 
-      if transport == :tcp
-        it "REP does not send dead clients reply to next client" do
-          scenario do
-            rep      = socket(:REP)
-            endpoint = bind(rep)
-            first    = socket(:REQ)
-            first.connect(endpoint)
-            first << "first-request"
-            assert_equal ["first-request"], rep.receive
+      it "REP does not send dead clients reply to next client" do
+        scenario do
+          rep      = socket(:REP)
+          endpoint = bind(rep)
+          first    = socket(:REQ)
+          first.connect(endpoint)
+          first << "first-request"
+          assert_equal ["first-request"], rep.receive
 
-            second = socket(:REQ)
-            second.connect(endpoint)
-            connected(second)
-            second << "second-request"
-            sleep 0.02
-            first.close
-            sleep 0.05
+          second = socket(:REQ)
+          second.connect(endpoint)
+          connected(second)
+          second << "second-request"
+          sleep 0.02
+          first.close
+          sleep 0.05
 
-            rep << "private-first-reply"
-            assert_equal ["second-request"], rep.receive
-            rep << "second-reply"
-            assert_equal ["second-reply"], second.receive
-          end
+          rep << "private-first-reply"
+          assert_equal ["second-request"], rep.receive
+          rep << "second-reply"
+          assert_equal ["second-reply"], second.receive
         end
       end
 

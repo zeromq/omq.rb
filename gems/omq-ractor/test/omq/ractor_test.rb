@@ -92,6 +92,29 @@ class OMQRactorRactorTest < Minitest::Spec
     end
 
 
+    it "raw REQ in a worker waits for each send before receiving" do
+      Async do
+        rep = OMQ::REP.bind("ruby://r-worker-req")
+        req = OMQ::REQ.connect("ruby://r-worker-req")
+
+        worker = OMQ::Ractor.new(req, serialize: false) do |omq|
+          socket = omq.sockets.first
+          3.times.map do |i|
+            socket << ["req-#{i}"]
+            socket.receive.first
+          end
+        end
+
+        3.times { rep << rep.receive.map(&:upcase) }
+        assert_equal %w[REQ-0 REQ-1 REQ-2], worker.value
+      ensure
+        worker&.close
+        req&.close
+        rep&.close
+      end
+    end
+
+
     it "raw multiplexing with Ractor.select" do
       Async do
         pull_a = OMQ::PULL.bind("ruby://r-raw-mux-a")
