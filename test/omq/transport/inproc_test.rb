@@ -56,6 +56,24 @@ class OMQTransportInprocTest < Minitest::Spec
 
 
     describe "Pipe" do
+      it "transforms buffered messages and drops nil results before and after wiring" do
+        Async do
+          pipe  = Inproc::Pipe.new(peer_identity: "", peer_type: "DEALER")
+          queue = Async::Queue.new
+
+          pipe.send_message(["bad"])
+          pipe.send_message(["", "buffered"])
+          pipe.wire_direct_recv(queue, ->(parts) { parts[1..] if parts.first.empty? })
+          pipe.send_message(["bad"])
+          pipe.send_message(["", "live"])
+
+          assert_equal ["buffered"], queue.dequeue
+          assert_equal ["live"], queue.dequeue
+          assert queue.empty?
+        end.wait
+      end
+
+
       it "transfers messages bidirectionally" do
         Async do
           a_to_b = Async::Queue.new

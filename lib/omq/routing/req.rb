@@ -21,9 +21,11 @@ module OMQ
       # @param engine [Engine]
       #
       def initialize(engine)
-        @engine     = engine
-        @recv_queue = Routing.build_queue(engine.options.recv_hwm, :block)
-        @state      = :ready        # :ready or :waiting_reply
+        @engine           = engine
+        @recv_queue       = Routing.build_queue(engine.options.recv_hwm, :block)
+        @state            = :ready
+        @reply_connection = nil
+        @receiving        = false
         init_round_robin(engine)
       end
 
@@ -33,7 +35,19 @@ module OMQ
       # @return [Array<String>, nil]
       #
       def dequeue_recv
-        @recv_queue.dequeue
+        raise SocketError, "REQ socket expects send/recv/send/recv order" if @state == :ready || @receiving
+
+        @receiving = true
+        begin
+          msg = @recv_queue.dequeue
+          if msg
+            @state            = :ready
+            @reply_connection = nil
+          end
+          msg
+        ensure
+          @receiving = false
+        end
       end
 
 
@@ -50,8 +64,11 @@ module OMQ
       #
       def connection_added(connection)
         @engine.start_recv_pump(connection, @recv_queue) do |msg|
-          @state = :ready
-          msg.first&.empty? ? msg[1..] : msg
+          next unless @state == :waiting_reply && connection.equal?(@reply_connection)
+          next unless msg.size >= 2 && msg.first.empty?
+
+          @state = :reply_queued
+          msg[1..].freeze
         end
 
         add_round_robin_send_connection(connection)
@@ -71,17 +88,34 @@ module OMQ
       def enqueue(parts)
         raise SocketError, "REQ socket expects send/recv/send/recv order" unless @state == :ready
         @state = :waiting_reply
-        enqueue_round_robin(parts)
+        accepted = false
+        begin
+          @reply_connection = @direct_pipe if @direct_pipe&.direct_recv_queue
+          enqueue_round_robin(parts)
+          accepted = true
+        ensure
+          unless accepted
+            @state            = :ready
+            @reply_connection = nil
+          end
+        end
       end
 
 
       private
 
 
+      # The send pump selects the peer when it takes the request off the queue.
+      def write_batch(connection, batch)
+        @reply_connection = connection
+        super
+      end
+
+
       # REQ prepends empty delimiter frame on the wire.
       #
       def transform_send(parts)
-        parts.dup.unshift(EMPTY_BINARY)
+        parts.dup.unshift(EMPTY_BINARY).freeze
       end
 
     end

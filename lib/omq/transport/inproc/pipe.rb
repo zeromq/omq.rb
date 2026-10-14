@@ -88,7 +88,7 @@ module OMQ
 
           return unless @pending_direct
 
-          @pending_direct.each { |msg| queue.enqueue(msg) }
+          @pending_direct.each { |msg| deliver_direct(msg) }
           @pending_direct = nil
         end
 
@@ -115,11 +115,11 @@ module OMQ
           end
 
           if @direct_recv_queue
-            @direct_recv_queue.enqueue(apply_transform(parts))
+            deliver_direct(parts)
           elsif @send_queue
             @send_queue.enqueue(parts)
           else
-            (@pending_direct ||= []) << apply_transform(parts)
+            (@pending_direct ||= []) << parts
           end
         end
 
@@ -217,6 +217,12 @@ module OMQ
 
 
         private
+
+
+        def deliver_direct(parts)
+          transformed = apply_transform(parts)
+          @direct_recv_queue.enqueue(transformed) if transformed
+        end
 
 
         def apply_transform(parts)

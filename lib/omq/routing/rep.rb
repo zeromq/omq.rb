@@ -20,10 +20,11 @@ module OMQ
       # @param engine [Engine]
       #
       def initialize(engine)
-        @engine          = engine
-        @recv_queue      = Routing.build_queue(engine.options.recv_hwm, :block)
-        @pending_replies = []
-        @conn_queues     = {}
+        @engine        = engine
+        @recv_queue    = Routing.build_queue(engine.options.recv_hwm, :block)
+        @current_reply = nil
+        @receiving     = false
+        @conn_queues   = {}
       end
 
 
@@ -32,7 +33,19 @@ module OMQ
       # @return [Array<String>, nil]
       #
       def dequeue_recv
-        @recv_queue.dequeue
+        raise SocketError, "REP socket expects recv/send/recv/send order" if @current_reply || @receiving
+
+        @receiving = true
+        begin
+          request = @recv_queue.dequeue
+          return unless request
+
+          connection, envelope, body = request
+          @current_reply = [connection, envelope]
+          body
+        ensure
+          @receiving = false
+        end
       end
 
 
@@ -48,17 +61,23 @@ module OMQ
       # @param connection [Protocol::ZMTP::Connection]
       #
       def connection_added(connection)
-        @engine.start_recv_pump(connection, @recv_queue) do |msg|
-          delimiter = msg.index { |p| p.empty? } || msg.size
-          envelope  = msg[0, delimiter]
-          body      = msg[(delimiter + 1)..] || []
+        q = Routing.build_queue(@engine.options.send_hwm, :drop_newest)
+        @conn_queues[connection] = q
 
-          @pending_replies << [connection, envelope]
-          body
+        @engine.start_recv_pump(connection, @recv_queue) do |msg|
+          delimiter = msg.index { |p| p.empty? }
+          next unless delimiter && delimiter < msg.size - 1
+
+          envelope = msg[0, delimiter].freeze
+          body     = msg[(delimiter + 1)..].freeze
+
+          # Keep the routing information with its body until the application
+          # receives it, even if the peer disconnects in the meantime.
+          @engine.emit_verbose_msg_received(connection, body)
+          @recv_queue.enqueue([connection, envelope, body].freeze)
+          nil
         end
 
-        q = Routing.build_queue(@engine.options.send_hwm, :block)
-        @conn_queues[connection] = q
         ConnSendPump.start(@engine, connection, q)
       end
 
@@ -66,25 +85,22 @@ module OMQ
       # @param connection [Protocol::ZMTP::Connection]
       #
       def connection_removed(connection)
-        @pending_replies.reject! { |r| r[0] == connection }
         @conn_queues.delete(connection)
       end
 
 
       # Enqueues a reply. Routes to the connection that sent the matching
-      # request by consuming the next pending_reply entry.
+      # request most recently received by the application. Replies to
+      # disconnected or muted peers are discarded.
       #
       # @param parts [Array<String>]
       #
       def enqueue(parts)
-        reply_info = @pending_replies.shift
-        return unless reply_info
+        raise SocketError, "REP socket expects recv/send/recv/send order" unless @current_reply
 
-        conn, envelope = reply_info
-        msg = envelope
-        msg << EMPTY_FRAME
-        msg.concat(parts)
-        @conn_queues[conn]&.enqueue(msg)
+        conn, envelope = @current_reply
+        @conn_queues[conn]&.enqueue([*envelope, EMPTY_FRAME, *parts].freeze)
+        @current_reply = nil
       end
 
 

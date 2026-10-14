@@ -21,7 +21,7 @@ class OMQReqRepTest < Minitest::Spec
       ensure
         req&.close
         rep&.close
-      end
+      end.wait
     end
 
     it "handles multi-frame request/reply" do
@@ -39,27 +39,26 @@ class OMQReqRepTest < Minitest::Spec
       ensure
         req&.close
         rep&.close
-      end
+      end.wait
     end
 
 
     it "preserves multiple routing identity frames through REP" do
       Async do
-        router = OMQ::ROUTER.bind("ruby://reqrep-router-#{object_id}")
-        rep = OMQ::REP.new
-        rep.identity = "rep-peer"
-        rep.connect("ruby://reqrep-router-#{object_id}")
-        wait_connected(router, rep)
+        dealer = OMQ::DEALER.bind("ruby://reqrep-dealer-#{object_id}")
+        rep    = OMQ::REP.new
+        rep.connect("ruby://reqrep-dealer-#{object_id}")
+        wait_connected(dealer, rep)
 
-        router.send(["rep-peer", "client-a", "client-b", "", "request"])
+        dealer.send(["client-a", "client-b", "", "request"])
         assert_equal ["request"], rep.receive
 
         rep.send("reply")
-        assert_equal ["rep-peer", "client-a", "client-b", "", "reply"], router.receive
+        assert_equal ["client-a", "client-b", "", "reply"], dealer.receive
       ensure
         rep&.close
-        router&.close
-      end
+        dealer&.close
+      end.wait
     end
 
   end

@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Enforced REQ/REP send/receive order and rejected incomplete routing envelopes.
+- Matched REQ replies to the selected peer and kept REP reply destinations with
+  their requests across disconnects. Replies to muted REP peers are discarded.
+- Applied in-process receive transforms to buffered messages and discarded
+  filtered messages without delivering close sentinels.
+
 ### Removed
 
 - Removed `omq-qos`, its socket options, and its test and release tasks.
