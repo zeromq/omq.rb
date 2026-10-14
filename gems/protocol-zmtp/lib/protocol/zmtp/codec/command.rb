@@ -72,7 +72,7 @@ module Protocol
 
         # Builds a READY command with Socket-Type, Identity, and any
         # extra properties supplied by upper layers (e.g. an extension
-        # that injects +X-QoS+ or +X-Compression+).
+        # that injects +X-Compression+).
         #
         # @param metadata [Hash{String => String}, nil] additional READY properties
         # @return [Command]

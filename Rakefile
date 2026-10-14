@@ -38,7 +38,6 @@ end
 gem_test_task "omq-backend-libzmq", min_ruby: "4.0"
 gem_test_task "omq-cli", min_ruby: "4.0"
 gem_test_task "omq-lz4", min_ruby: "4.0"
-gem_test_task "omq-qos"
 gem_test_task "omq-ractor", min_ruby: "4.0"
 gem_test_task "omq-websocket"
 gem_test_task "omq-zstd", min_ruby: "4.0"
@@ -67,7 +66,6 @@ task test: [
   "test:omq-backend-rust",
   "test:omq-cli",
   "test:omq-lz4",
-  "test:omq-qos",
   "test:omq-ractor",
   "test:omq-websocket",
   "test:omq-zstd",

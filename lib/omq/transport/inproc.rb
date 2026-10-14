@@ -130,7 +130,7 @@ module OMQ
                   "incompatible socket types: #{client_type} cannot connect to #{server_type}"
           end
 
-          needs_cmds = needs_commands?(client_engine, server_engine, client_type, server_type)
+          needs_cmds = needs_commands?(client_type, server_type)
           client_pipe, server_pipe = make_pipe_pair client_engine, server_engine,
                                                     client_type, server_type, needs_cmds
 
@@ -142,27 +142,12 @@ module OMQ
         # Decides whether a Pipe pair needs command queues.
         # Pipe's fast path skips queues entirely; command queues
         # are only needed for socket types that exchange ZMTP commands
-        # (e.g. ROUTER/DEALER identity, PUB/SUB subscriptions) or when
-        # either side enables QoS ≥ 1.
+        # (e.g. ROUTER/DEALER identity, PUB/SUB subscriptions).
         #
         # @return [Boolean]
         #
-        def needs_commands?(ce, se, ct, st)
-          return true if COMMAND_TYPES.include?(ct) || COMMAND_TYPES.include?(st)
-          return true if qos_enabled?(ce.options) || qos_enabled?(se.options)
-          false
-        end
-
-
-        # QoS integration: core +Options#qos+ defaults to Integer +0+.
-        # When the omq-qos extension is loaded, +#qos+ holds either
-        # +nil+ (QoS 0) or an +OMQ::QoS+ instance (levels 1–3). Treat
-        # both Integer 0 and nil as disabled.
-        def qos_enabled?(options)
-          q = options.qos
-          return false if q.nil?
-          return q != 0 if q.is_a?(Integer)
-          true
+        def needs_commands?(client_type, server_type)
+          COMMAND_TYPES.include?(client_type) || COMMAND_TYPES.include?(server_type)
         end
 
 

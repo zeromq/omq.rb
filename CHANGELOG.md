@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Removed
+
+- Removed `omq-qos`, its socket options, and its test and release tasks.
+
 ## [0.28.10] - 2026-08-26
 
 ### Changed

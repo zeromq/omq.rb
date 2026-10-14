@@ -55,7 +55,7 @@ module Protocol
       # @param mechanism [Mechanism::Null, Mechanism::Curve] security mechanism
       # @param max_message_size [Integer, nil] max frame size in bytes, nil = unlimited
       # @param opts [Hash{String => String}] extra READY properties to
-      #   advertise (e.g. +"X-QoS" => "1"+). Upper-layer extensions use
+      #   advertise (e.g. +"X-Compression" => "lz4"+). Upper-layer extensions use
       #   this to inject their own negotiated properties without the
       #   codec needing to know about them.
       def initialize(io, socket_type:, identity: "", as_server: false,

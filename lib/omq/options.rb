@@ -32,7 +32,6 @@ module OMQ
       @rcvbuf                = nil   # bytes, nil = OS default
       @on_mute               = :block   # :block, :drop_newest, :drop_oldest
       @mechanism             = Protocol::ZMTP::Mechanism::Null.new
-      @qos                   = 0       # 0 = fire-and-forget, 1 = at-least-once (see omq-qos gem)
     end
 
 
@@ -71,8 +70,6 @@ module OMQ
     #   @return [Symbol] mute strategy (:block, :drop_newest, :drop_oldest)
     # @!attribute mechanism
     #   @return [Protocol::ZMTP::Mechanism::Null, Protocol::ZMTP::Mechanism::Curve] security mechanism
-    # @!attribute qos
-    #   @return [Integer] quality of service level (0 = fire-and-forget)
     #
     attr_accessor :send_hwm,  :recv_hwm,
                   :linger,    :identity,
@@ -83,8 +80,7 @@ module OMQ
                   :max_message_size,
                   :sndbuf,    :rcvbuf,
                   :on_mute,
-                  :mechanism,
-                  :qos
+                  :mechanism
 
     # @return [Boolean] true if router_mandatory is set
     alias_method :router_mandatory?, :router_mandatory
