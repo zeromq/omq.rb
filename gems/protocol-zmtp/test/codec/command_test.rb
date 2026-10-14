@@ -46,6 +46,20 @@ class ProtocolZMTPCodecCommandTest < Minitest::Spec
     end
 
     describe ".ping / .pong" do
+      it "rejects truncated TTLs and oversized contexts" do
+        ["", "\x00", "\x00\x01" + "x" * 17].each do |data|
+          assert_raises(Protocol::ZMTP::Error) { Command.new("PING", data).ping_ttl_and_context }
+        end
+        assert_raises(Protocol::ZMTP::Error) { Command.ping(context: "x" * 17) }
+        assert_raises(Protocol::ZMTP::Error) { Command.pong(context: "x" * 17) }
+      end
+
+      it "checks TTL bounds and supports the largest valid PING" do
+        assert_raises(Protocol::ZMTP::Error) { Command.ping(ttl: -1) }
+        assert_raises(Protocol::ZMTP::Error) { Command.ping(ttl: 6553.6) }
+        assert_equal [6553.5, "x" * 16], Command.ping(ttl: 6553.5, context: "x" * 16).ping_ttl_and_context
+      end
+
       it "roundtrips a PING command with TTL" do
         cmd = Command.ping(ttl: 3.0, context: "ctx")
         decoded = Command.from_body(cmd.to_body)
@@ -53,6 +67,20 @@ class ProtocolZMTPCodecCommandTest < Minitest::Spec
         ttl, context = decoded.ping_ttl_and_context
         assert_equal 3.0, ttl
         assert_equal "ctx", context
+      end
+    end
+
+    describe "handshake errors" do
+      it "raises a fatal error with the peer's reason" do
+        cmd = Command.from_body(Command.error("denied").to_body)
+        err = assert_raises(Protocol::ZMTP::FatalHandshakeError) { cmd.raise_if_error! }
+        assert_includes err.message, "denied"
+      end
+
+      it "treats malformed ERROR reasons as fatal" do
+        ["", "\x06short", "\x00extra"].each do |data|
+          assert_raises(Protocol::ZMTP::FatalHandshakeError) { Command.new("ERROR", data).raise_if_error! }
+        end
       end
     end
 
@@ -92,6 +120,16 @@ class ProtocolZMTPCodecCommandTest < Minitest::Spec
     end
 
     describe "#properties" do
+      it "looks up metadata case-insensitively without changing its spelling" do
+        props = { "sOcKeT-tYpE" => "REQ", "IDENTITY" => "peer", "x-Custom" => "value" }
+        decoded = Command.decode_properties(Command.encode_properties(props))
+        assert_equal props, decoded
+        assert_equal "REQ", Command.property(decoded, "Socket-Type")
+        assert_equal "peer", Command.property(decoded, "Identity")
+        assert_equal "value", Command.property(decoded, "X-CUSTOM")
+        assert_nil Command.property(decoded, "absent")
+      end
+
       it "parses multiple properties" do
         cmd = Command.ready(socket_type: "SUB", identity: "id-42")
         props = cmd.properties

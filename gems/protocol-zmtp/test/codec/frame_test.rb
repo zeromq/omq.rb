@@ -67,11 +67,8 @@ class ProtocolZMTPCodecFrameTest < Minitest::Spec
         refute decoded.more?
       end
 
-      it "preserves MORE + COMMAND flags together" do
-        frame = Frame.new("data".b, more: true, command: true)
-        decoded = roundtrip(frame)
-        assert decoded.more?
-        assert decoded.command?
+      it "rejects MORE on command frames" do
+        assert_raises(Protocol::ZMTP::Error) { Frame.new("data".b, more: true, command: true) }
       end
     end
 
@@ -101,6 +98,20 @@ class ProtocolZMTPCodecFrameTest < Minitest::Spec
     end
 
     describe ".read_from" do
+      it "rejects reserved flags and multipart commands before reading their bodies" do
+        [0x08, 0x80, 0x05, 0x07].each do |flags|
+          header = flags.chr.b + ((flags & 0x02).zero? ? "\xFF".b : [256].pack("Q>"))
+          assert_raises(Protocol::ZMTP::Error) { Frame.read_from(stream(header)) }
+        end
+      end
+
+      it "rejects sizes above the 63-bit limit before reading their bodies" do
+        [1 << 63, (1 << 64) - 1].each do |size|
+          header = "\x02".b + [size].pack("Q>")
+          assert_raises(Protocol::ZMTP::Error) { Frame.read_from(stream(header)) }
+        end
+      end
+
       it "raises EOFError on empty IO" do
         assert_raises(EOFError) { Frame.read_from(stream("".b)) }
       end

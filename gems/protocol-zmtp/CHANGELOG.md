@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixed
+
+- Reject invalid frame flags, lengths above 2^63-1, and malformed PING commands.
+- Match handshake metadata names case-insensitively for NULL, PLAIN, and CURVE.
+- Raise `FatalHandshakeError` on handshake ERROR responses and send ERROR when
+  PLAIN authentication rejects credentials.
+
 ## 0.10.4 - 2026-07-23
 
 ### Changed

@@ -278,12 +278,7 @@ module Protocol
       # @raise [EOFError] if connection is closed
       def read_frame
         loop do
-          begin
-            frame = Codec::Frame.read_from(@io, max_message_size: @max_message_size)
-          rescue Error
-            close
-            raise
-          end
+          frame = Codec::Frame.read_from(@io, max_message_size: @max_message_size)
 
           touch_heartbeat
 
@@ -297,12 +292,16 @@ module Protocol
               send_command(Codec::Command.pong(context: context))
               next
             when "PONG"
+              raise Error, "PONG context exceeds 16 bytes" if cmd.data.bytesize > 16
               next
             end
           end
 
           return frame
         end
+      rescue Error
+        close
+        raise
       end
 
 

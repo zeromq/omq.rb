@@ -153,6 +153,8 @@ module Protocol
         # @param command [Boolean] whether this is a command frame
         # @return [String] binary wire bytes ready for writing
         def encrypt(body, more: false, command: false)
+          raise Error, "command frames cannot have MORE set" if command && more
+
           flags = 0
           flags |= 0x01 if more
           flags |= 0x02 if command
@@ -211,6 +213,8 @@ module Protocol
           end
 
           flags = plaintext.getbyte(0)
+          raise Error, "invalid MESSAGE flags" unless flags && (flags & 0xFC).zero?
+
           body  = plaintext.byteslice(1..) || "".b
           Codec::Frame.new(body, more: (flags & 0x01) != 0, command: (flags & 0x02) != 0)
         end
@@ -255,7 +259,7 @@ module Protocol
           # --- Read WELCOME ---
           welcome_frame = Codec::Frame.read_from(io)
           raise Error, "expected command frame" unless welcome_frame.command?
-          welcome_cmd = Codec::Command.from_body(welcome_frame.body)
+          welcome_cmd = Codec::Command.from_body(welcome_frame.body).raise_if_error!
           raise Error, "expected WELCOME, got #{welcome_cmd.name}" unless welcome_cmd.name == "WELCOME"
 
           wdata = welcome_cmd.data
@@ -307,7 +311,7 @@ module Protocol
           # --- Read READY ---
           ready_frame = Codec::Frame.read_from(io)
           raise Error, "expected command frame" unless ready_frame.command?
-          ready_cmd = Codec::Command.from_body(ready_frame.body)
+          ready_cmd = Codec::Command.from_body(ready_frame.body).raise_if_error!
           raise Error, "expected READY, got #{ready_cmd.name}" unless ready_cmd.name == "READY"
 
           rdata = ready_cmd.data
@@ -324,8 +328,8 @@ module Protocol
           end
 
           props            = Codec::Command.decode_properties(r_plaintext)
-          peer_socket_type = props["Socket-Type"]
-          peer_identity    = props["Identity"] || ""
+          peer_socket_type = Codec::Command.property(props, "Socket-Type")
+          peer_identity    = Codec::Command.property(props, "Identity") || ""
 
           @session_box = session
           @send_nonce  = 1
@@ -361,7 +365,7 @@ module Protocol
           # --- Read HELLO ---
           hello_frame = Codec::Frame.read_from(io)
           raise Error, "expected command frame" unless hello_frame.command?
-          hello_cmd = Codec::Command.from_body(hello_frame.body)
+          hello_cmd = Codec::Command.from_body(hello_frame.body).raise_if_error!
           raise Error, "expected HELLO, got #{hello_cmd.name}" unless hello_cmd.name == "HELLO"
 
           hdata = hello_cmd.data
@@ -407,7 +411,7 @@ module Protocol
           # --- Read INITIATE ---
           init_frame = Codec::Frame.read_from(io)
           raise Error, "expected command frame" unless init_frame.command?
-          init_cmd = Codec::Command.from_body(init_frame.body)
+          init_cmd = Codec::Command.from_body(init_frame.body).raise_if_error!
           raise Error, "expected INITIATE, got #{init_cmd.name}" unless init_cmd.name == "INITIATE"
 
           idata = init_cmd.data
@@ -468,7 +472,7 @@ module Protocol
             peer = PeerInfo.new(public_key: client_permanent, identity: "")
             unless @authenticator.call(peer)
               send_error(io, "client key not authorized")
-              raise Error, "client key not authorized"
+              raise FatalHandshakeError, "client key not authorized"
             end
           end
 
@@ -498,8 +502,8 @@ module Protocol
           init_nonce_buffers!
 
           {
-            peer_socket_type: props["Socket-Type"],
-            peer_identity:    props["Identity"] || "",
+            peer_socket_type: Codec::Command.property(props, "Socket-Type"),
+            peer_identity:    Codec::Command.property(props, "Identity") || "",
             peer_public_key:  client_permanent,
             peer_properties:  props,
             peer_major:       @peer_major,

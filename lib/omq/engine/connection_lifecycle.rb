@@ -117,11 +117,12 @@ module OMQ
 
         conn&.close
 
-        # Full tear-down with reconnect: without this, spawn_connection's
-        # ensure-block close! sees :closed and skips maybe_reconnect,
+        # Reconnect after temporary failures. An explicit ERROR response
+        # forbids retrying with the same credentials. Without tear-down,
+        # spawn_connection's ensure-block close! skips maybe_reconnect,
         # leaving the endpoint dead. Race is exposed when a peer RSTs
         # mid-handshake (e.g. LINGER 0 close against an in-flight connect).
-        tear_down!(reconnect: true)
+        tear_down!(reconnect: !error.is_a?(Protocol::ZMTP::FatalHandshakeError))
         raise
       end
 

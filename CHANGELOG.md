@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Stop reconnecting with the same credentials after a fatal handshake ERROR.
 - Enforced REQ/REP send/receive order and rejected incomplete routing envelopes.
 - Matched REQ replies to the selected peer and kept REP reply destinations with
   their requests across disconnects. Replies to muted REP peers are discarded.

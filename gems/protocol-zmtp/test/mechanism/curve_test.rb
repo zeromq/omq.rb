@@ -128,7 +128,6 @@ class ProtocolZMTPMechanismCurveTest < Minitest::Spec
               [false, false],
               [true,  false],
               [false, true],
-              [true,  true],
             ].each do |more, command|
               wire        = client_mech.encrypt("body".b, more: more, command: command)
               header_size = (wire.getbyte(0) & 0x02) != 0 ? 9 : 2
@@ -142,10 +141,11 @@ class ProtocolZMTPMechanismCurveTest < Minitest::Spec
               assert_equal command, decrypted.command?,
                 "command flag mismatch for more=#{more}, command=#{command}"
             end
+            assert_raises(Protocol::ZMTP::Error) { client_mech.encrypt("body", more: true, command: true) }
           ensure
             sio&.close
             cio&.close
-          end
+          end.wait
         end
 
         it "is encrypted" do
@@ -430,12 +430,13 @@ class ProtocolZMTPMechanismCurveTest < Minitest::Spec
               end
             end
 
-            refute_empty errors
+            assert_equal 2, errors.size
+            errors.each { |error| assert_kind_of Protocol::ZMTP::FatalHandshakeError, error }
             assert errors.any? { |e| e.message.include?("not authorized") }
           ensure
             s1&.close
             s2&.close
-          end
+          end.wait
         end
 
         it "accepts when key is in the allowed set" do

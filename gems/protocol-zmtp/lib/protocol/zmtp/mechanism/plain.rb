@@ -92,7 +92,8 @@ module Protocol
           username, password = decode_credentials(cmd.data)
 
           if @authenticator && !@authenticator.call(username, password)
-            raise Error, "authentication failed"
+            send_command(io, Codec::Command.error("authentication failed"))
+            raise FatalHandshakeError, "authentication failed"
           end
 
           send_command(io, Codec::Command.new("WELCOME"))
@@ -143,13 +144,13 @@ module Protocol
 
         def extract_peer_info(cmd)
           props            = cmd.properties
-          peer_socket_type = props["Socket-Type"]
+          peer_socket_type = Codec::Command.property(props, "Socket-Type")
 
           raise Error, "peer command missing Socket-Type" unless peer_socket_type
 
           {
             peer_socket_type: peer_socket_type,
-            peer_identity:    props["Identity"] || "",
+            peer_identity:    Codec::Command.property(props, "Identity") || "",
             peer_properties:  props,
           }
         end
@@ -165,7 +166,7 @@ module Protocol
           frame = Codec::Frame.read_from(io)
           raise Error, "expected command frame, got data frame" unless frame.command?
 
-          Codec::Command.from_body(frame.body)
+          Codec::Command.from_body(frame.body).raise_if_error!
         end
       end
     end

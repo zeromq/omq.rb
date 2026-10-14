@@ -90,11 +90,12 @@ class ProtocolZMTPMechanismPlainTest < Minitest::Spec
           end
         end
 
-        refute_empty errors
+        assert_equal 2, errors.size
+        errors.each { |error| assert_kind_of Protocol::ZMTP::FatalHandshakeError, error }
       ensure
         sio&.close rescue nil
         cio&.close rescue nil
-      end
+      end.wait
     end
 
     it "sends and receives messages after handshake" do
