@@ -48,8 +48,7 @@ ensure
 end
 ```
 
-The `:rust` backend is fully interoperable with the default `:ruby` backend.
-Mix backends freely within the same process.
+Select a backend per socket to exchange ZMTP messages with Ruby and other peers.
 
 ## Supported socket types
 
@@ -61,6 +60,23 @@ SCATTER/GATHER, CHANNEL.
 
 - **NULL** (default)
 - **CURVE** (CurveZMQ, via [Nuckle](https://github.com/paddor/nuckle))
+
+CURVE authenticators receive `Protocol::ZMTP::PeerInfo`, including a public key
+from the configured crypto backend. As with the Ruby engine, the identity is
+empty during authentication. MRI and TruffleRuby require `omq-rs >= 0.2.3`.
+
+On JRuby, OMQ.java 0.3.0's JNI callback threads require the platform jar on the
+JVM `CLASSPATH`. For example:
+
+```sh
+CLASSPATH="$HOME/.m2/repository/io/github/paddor/omq-java/0.3.0/omq-java-0.3.0-linux-x86_64.jar" jruby app.rb
+```
+
+Without it, configuring a CURVE authenticator raises `ArgumentError` before
+opening a connection. CURVE without an authenticator does not need this workaround.
+
+PLAIN and custom mechanisms raise `ArgumentError` before binding, connecting,
+or sending. They are not supported by this adapter.
 
 ## Compressed transports
 

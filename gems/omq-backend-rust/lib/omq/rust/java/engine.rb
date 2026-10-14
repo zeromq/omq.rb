@@ -426,8 +426,11 @@ module OMQ
 
         def apply_mechanism(builder)
           mech = @options.mechanism
-          klass = mech.class.name
-          return unless klass&.include?("Curve")
+          return if mech.nil? || mech.instance_of?(Protocol::ZMTP::Mechanism::Null)
+
+          unless defined?(Protocol::ZMTP::Mechanism::Curve) && mech.instance_of?(Protocol::ZMTP::Mechanism::Curve)
+            raise ArgumentError, "Rust backend does not support security mechanism #{mech.class}"
+          end
 
           require "protocol/zmtp/z85"
 
@@ -437,10 +440,29 @@ module OMQ
           )
 
           if mech.instance_variable_get(:@as_server)
-            builder.curveServer(keypair)
+            if (authenticator = mech.instance_variable_get(:@authenticator))
+              validate_authenticator_classpath!
+              crypto = mech.instance_variable_get(:@crypto)
+              callback = lambda do |peer|
+                public_key = crypto::PublicKey.new(Protocol::ZMTP::Z85.decode(peer.publicKey.orElse(nil)))
+                !!authenticator.call(Protocol::ZMTP::PeerInfo.new(public_key: public_key, identity: ""))
+              end
+              builder.curveServer(keypair, callback)
+            else
+              builder.curveServer(keypair)
+            end
           else
             builder.curveClient(keypair, z85_key(mech.instance_variable_get(:@server_public), "server key"))
           end
+        end
+
+
+        # OMQ.java's JNI callback threads resolve PeerInfo through the JVM
+        # system class loader, which cannot see JRuby's dynamically loaded jars.
+        def validate_authenticator_classpath!
+          ::Java::JavaLang::Class.forName("io.omq.PeerInfo", false, ::Java::JavaLang::ClassLoader.getSystemClassLoader)
+        rescue ::Java::JavaLang::ClassNotFoundException
+          raise ArgumentError, "JRuby CURVE authenticators require the OMQ.java jar on the JVM CLASSPATH"
         end
 
 

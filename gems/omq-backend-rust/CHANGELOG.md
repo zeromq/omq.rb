@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Reject unsupported security mechanisms instead of silently using NULL.
+- Forward CURVE authenticators on MRI, TruffleRuby, and JRuby, preserving the
+  Ruby `PeerInfo` and crypto public-key types.
+- Reject JRuby authenticator configuration when the OMQ.java callback classes
+  are missing from the JVM classpath.
+
+### Changed
+
+- Require `omq-rs >= 0.2.3` for the native authentication callback API.
+
 ## [0.3.0] - 2026-08-26
 
 ### Added

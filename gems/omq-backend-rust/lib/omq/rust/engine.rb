@@ -372,14 +372,12 @@ module OMQ
 
       def extract_mechanism(h)
         mech = @options.mechanism
-        case mech
-        when Protocol::ZMTP::Mechanism::Null
+        if mech.nil? || mech.instance_of?(Protocol::ZMTP::Mechanism::Null)
           h["mechanism_type"] = "null"
+        elsif defined?(Protocol::ZMTP::Mechanism::Curve) && mech.instance_of?(Protocol::ZMTP::Mechanism::Curve)
+          extract_curve_mechanism(h, mech)
         else
-          klass = mech.class.name
-          if klass&.include?("Curve")
-            extract_curve_mechanism(h, mech)
-          end
+          raise ArgumentError, "Rust backend does not support security mechanism #{mech.class}"
         end
       end
 
@@ -396,6 +394,15 @@ module OMQ
         unless h["mechanism_server"]
           srv_key = mech.instance_variable_get(:@server_public)
           h["mechanism_server_key"] = srv_key.to_s.b if srv_key
+        end
+
+        if (authenticator = mech.instance_variable_get(:@authenticator))
+          require "protocol/zmtp/z85"
+          crypto = mech.instance_variable_get(:@crypto)
+          h["curve_auth"] = lambda do |peer|
+            public_key = crypto::PublicKey.new(Protocol::ZMTP::Z85.decode(peer.public_key))
+            authenticator.call(Protocol::ZMTP::PeerInfo.new(public_key: public_key, identity: ""))
+          end
         end
       end
 
