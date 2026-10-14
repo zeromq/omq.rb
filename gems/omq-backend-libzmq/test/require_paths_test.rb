@@ -3,7 +3,7 @@
 require_relative "test_helper"
 require "rbconfig"
 
-class RequirePathsTest < Minitest::Test
+class RequirePathsTest < Minitest::Spec
   ROOT     = File.expand_path("../../..", __dir__)
   GEM_ROOT = File.expand_path("..", __dir__)
 
