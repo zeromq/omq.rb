@@ -3,6 +3,7 @@
 Warning[:experimental] = false
 
 require "minitest/autorun"
+require_relative "../../../test/async_spec"
 require "json"
 require "stringio"
 require "securerandom"

@@ -20,8 +20,10 @@ class OMQErrorPathsTest < Minitest::Spec
     describe "pump crash raises SocketDeadError" do
       it "surfaces on receive with the original error as cause" do
         Async do
-          rep = OMQ::REP.bind("ruby://err-pump-recv")
-          req = OMQ::REQ.connect("ruby://err-pump-recv")
+          rep  = OMQ::REP.new(linger: 0)
+          port = rep.bind("tcp://127.0.0.1:0").port
+          req  = OMQ::REQ.connect("tcp://127.0.0.1:#{port}", linger: 0)
+          wait_connected(req, rep)
 
           # Inject a crash into REQ's send pump
           conn = req.engine.connections.first.first
@@ -31,7 +33,7 @@ class OMQErrorPathsTest < Minitest::Spec
           req << "trigger"
           sleep 0.01 # let the pump crash
 
-          err = assert_raises(OMQ::SocketDeadError) { req << "again" }
+          err = assert_raises(OMQ::SocketDeadError) { req.receive }
           assert_match(/REQ/, err.message)
           assert_kind_of RuntimeError, err.cause
           assert_equal "boom", err.cause.message
@@ -43,8 +45,10 @@ class OMQErrorPathsTest < Minitest::Spec
 
       it "bricks the socket — all subsequent calls raise" do
         Async do
-          rep = OMQ::REP.bind("ruby://err-pump-brick")
-          req = OMQ::REQ.connect("ruby://err-pump-brick")
+          rep  = OMQ::REP.new(linger: 0)
+          port = rep.bind("tcp://127.0.0.1:0").port
+          req  = OMQ::REQ.connect("tcp://127.0.0.1:#{port}", linger: 0)
+          wait_connected(req, rep)
 
           conn = req.engine.connections.first.first
           def conn.write_message(_parts) = raise("boom")

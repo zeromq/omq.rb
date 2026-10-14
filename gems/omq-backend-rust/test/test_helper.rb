@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "minitest/autorun"
+require_relative "../../../test/async_spec"
 require "omq"
 require "omq/backend/rust"
 require "async"

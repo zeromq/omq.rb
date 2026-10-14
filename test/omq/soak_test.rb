@@ -18,9 +18,12 @@ class OMQSoakTest < Minitest::Spec
     return _Async_base unless block
     return _Async_base(&block) unless Thread.current == Thread.main
 
-    _Async_base do |task|
+    root   = !::Async::Task.current?
+    result = _Async_base do |task|
       task.with_timeout(SOAK_TIMEOUT) { block.call(task) }
     end
+    result.wait if root
+    result
   end
 
 

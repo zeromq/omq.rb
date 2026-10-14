@@ -3,6 +3,7 @@
 require "minitest/autorun"
 require "omq"
 require "async"
+require_relative "async_spec"
 
 # Silence Async/Console warnings in tests (e.g. unhandled task exceptions
 # that are expected during protocol-error and disconnect tests).

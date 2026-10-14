@@ -55,7 +55,7 @@ class OMQPubSubTest < Minitest::Spec
 
         subs = 3.times.map { OMQ::SUB.connect("ruby://pubsub-fanout-inproc", subscribe: "") }
 
-        pub.send("broadcast", "payload")
+        pub.send(["broadcast", "payload"])
 
         subs.each do |sub|
           msg = sub.receive
@@ -78,7 +78,7 @@ class OMQPubSubTest < Minitest::Spec
         pub.subscriber_joined.wait
         Async::Task.current.yield
 
-        pub.send("broadcast", "payload")
+        pub.send(["broadcast", "payload"])
 
         subs.each do |sub|
           msg = sub.receive
@@ -98,7 +98,7 @@ class OMQPubSubTest < Minitest::Spec
         subs = 3.times.map { OMQ::SUB.connect("tcp://127.0.0.1:#{port}", subscribe: "") }
         wait_connected(*subs)
 
-        pub.send("broadcast", "payload")
+        pub.send(["broadcast", "payload"])
 
         subs.each do |sub|
           msg = sub.receive

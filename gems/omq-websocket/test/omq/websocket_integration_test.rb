@@ -15,7 +15,8 @@ class OMQWebsocketWebsocketIntegrationTest < Minitest::Spec
         router = OMQ::ROUTER.new
         port   = router.bind("ws://127.0.0.1:0").port
 
-        dealer = OMQ::DEALER.new(identity: "alice")
+        dealer = OMQ::DEALER.new
+        dealer.identity = "alice"
         dealer.connect("ws://127.0.0.1:#{port}")
 
         dealer.send(["hello"])
@@ -63,7 +64,8 @@ class OMQWebsocketWebsocketIntegrationTest < Minitest::Spec
         port = pull.bind("ws://127.0.0.1:0").port
 
         pushes = 3.times.map do |i|
-          push = OMQ::PUSH.new(identity: "p#{i}")
+          push = OMQ::PUSH.new
+          push.identity = "p#{i}"
           push.connect("ws://127.0.0.1:#{port}")
           push
         end

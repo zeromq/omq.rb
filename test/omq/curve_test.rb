@@ -25,11 +25,11 @@ class OMQCurveTest < Minitest::Spec
     end
 
     def curve_server(pub, sec, crypto: CRYPTO, **opts)
-      CurveMech.server(pub, sec, crypto: crypto, **opts)
+      CurveMech.server(public_key: pub, secret_key: sec, crypto: crypto, **opts)
     end
 
     def curve_client(pub, sec, server_key:, crypto: CRYPTO)
-      CurveMech.client(pub, sec, server_key: server_key, crypto: crypto)
+      CurveMech.client(public_key: pub, secret_key: sec, server_key: server_key, crypto: crypto)
     end
 
     describe "REQ/REP over TCP" do
@@ -47,7 +47,7 @@ class OMQCurveTest < Minitest::Spec
             rep << msg.map(&:upcase)
           end
 
-          req = OMQ::REQ.new
+          req = OMQ::REQ.new(linger: 0)
           req.mechanism = curve_client(client_pub, client_sec, server_key: server_pub)
           req.connect("tcp://127.0.0.1:#{port}")
 
@@ -95,7 +95,8 @@ class OMQCurveTest < Minitest::Spec
 
         Async do |task|
           rep = OMQ::REP.new
-          rep.mechanism = curve_server(server_pub, server_sec, authenticator: Set[client_pub])
+          allowed = Set[client_pub]
+          rep.mechanism = curve_server(server_pub, server_sec, authenticator: ->(peer) { allowed.include?(peer.public_key.to_s) })
           port = rep.bind("tcp://127.0.0.1:0").port
 
           task.async do
@@ -103,7 +104,7 @@ class OMQCurveTest < Minitest::Spec
             rep << msg.map(&:upcase)
           end
 
-          req = OMQ::REQ.new
+          req = OMQ::REQ.new(linger: 0)
           req.mechanism = curve_client(client_pub, client_sec, server_key: server_pub)
           req.connect("tcp://127.0.0.1:#{port}")
 
@@ -123,10 +124,11 @@ class OMQCurveTest < Minitest::Spec
 
         Async do |task|
           rep = OMQ::REP.new
-          rep.mechanism = curve_server(server_pub, server_sec, authenticator: Set[other_pub])
+          allowed = Set[other_pub]
+          rep.mechanism = curve_server(server_pub, server_sec, authenticator: ->(peer) { allowed.include?(peer.public_key.to_s) })
           port = rep.bind("tcp://127.0.0.1:0").port
 
-          req = OMQ::REQ.new
+          req = OMQ::REQ.new(linger: 0)
           req.mechanism = curve_client(client_pub, client_sec, server_key: server_pub)
           req.recv_timeout = 0.1
           req.send_timeout = 0.1
@@ -147,8 +149,8 @@ class OMQCurveTest < Minitest::Spec
 
         Async do |task|
           rep = OMQ::REP.new
-          rep.mechanism = curve_server(server_pub, server_sec, authenticator: ->(key) {
-            authenticated_keys << key
+          rep.mechanism = curve_server(server_pub, server_sec, authenticator: ->(peer) {
+            authenticated_keys << peer.public_key.to_s
             true
           })
           port = rep.bind("tcp://127.0.0.1:0").port
@@ -158,7 +160,7 @@ class OMQCurveTest < Minitest::Spec
             rep << msg.map(&:upcase)
           end
 
-          req = OMQ::REQ.new
+          req = OMQ::REQ.new(linger: 0)
           req.mechanism = curve_client(client_pub, client_sec, server_key: server_pub)
           req.connect("tcp://127.0.0.1:#{port}")
 
@@ -181,7 +183,7 @@ class OMQCurveTest < Minitest::Spec
           rep.mechanism = curve_server(server_pub, server_sec, authenticator: ->(_) { false })
           port = rep.bind("tcp://127.0.0.1:0").port
 
-          req = OMQ::REQ.new
+          req = OMQ::REQ.new(linger: 0)
           req.mechanism = curve_client(client_pub, client_sec, server_key: server_pub)
           req.recv_timeout = 0.1
           req.send_timeout = 0.1
@@ -250,7 +252,7 @@ class OMQCurveTest < Minitest::Spec
             rep << msg.map(&:upcase)
           end
 
-          req = OMQ::REQ.new
+          req = OMQ::REQ.new(linger: 0)
           req.mechanism = curve_client(client_pub, client_sec, server_key: server_pub)
           req.reconnect_interval = RECONNECT_INTERVAL
           req.connect("tcp://127.0.0.1:#{port}")
@@ -297,7 +299,7 @@ class OMQCurveTest < Minitest::Spec
               rep << msg.map(&:upcase)
             end
 
-            req = OMQ::REQ.new
+            req = OMQ::REQ.new(linger: 0)
             req.mechanism = curve_client(client_pub, client_sec, server_key: server_pub, crypto: Nuckle)
             req.connect("tcp://127.0.0.1:#{port}")
 
@@ -324,7 +326,7 @@ class OMQCurveTest < Minitest::Spec
               rep << msg.map(&:upcase)
             end
 
-            req = OMQ::REQ.new
+            req = OMQ::REQ.new(linger: 0)
             req.mechanism = curve_client(client_pub, client_sec, server_key: server_pub, crypto: RbNaCl)
             req.connect("tcp://127.0.0.1:#{port}")
 

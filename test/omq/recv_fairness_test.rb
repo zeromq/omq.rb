@@ -15,7 +15,7 @@ class OMQRecvFairnessTest < Minitest::Spec
         push_b = OMQ::PUSH.connect("ipc://@omq-test-fairness-#{$$}")
         wait_connected(push_a, push_b)
 
-        n = 200
+        n = OMQ::Engine::RecvPump::FAIRNESS_MESSAGES * 4
 
         # Pre-fill both kernel send buffers before any receive happens,
         # so both recv pumps have data ready simultaneously.
@@ -40,9 +40,9 @@ class OMQRecvFairnessTest < Minitest::Spec
         assert_equal n, received.count("B")
 
         # Fairness: both peers must appear within the first
-        # RECV_FAIRNESS_MESSAGES * 3 messages. Without the fairness
+        # FAIRNESS_MESSAGES * 3 messages. Without the fairness
         # yield one peer could monopolize the recv queue.
-        limit = OMQ::Engine::RECV_FAIRNESS_MESSAGES * 3
+        limit = OMQ::Engine::RecvPump::FAIRNESS_MESSAGES * 3
         first_window = received.first(limit)
         assert_includes first_window, "A", "peer A missing from first #{limit} messages"
         assert_includes first_window, "B", "peer B missing from first #{limit} messages"

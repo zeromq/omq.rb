@@ -133,8 +133,8 @@ class OMQZMTP30CompatTest < Minitest::Spec
 
     it "OMQ PUB accepts message-form SUBSCRIBE from a ZMTP 3.0 SUB peer" do
       Async do
-        pub = OMQ::PUB.bind("tcp://127.0.0.1:0")
-        port = pub.endpoint_port
+        pub  = OMQ::PUB.new
+        port = pub.bind("tcp://127.0.0.1:0").port
 
         received = nil
         task = Async do
