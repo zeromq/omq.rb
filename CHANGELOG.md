@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-10-15
+
+### Added
+
+- Shared bounded arena encoding and decoding for the LZ4 and Zstd transports.
+
 ### Fixed
 
 - Stop reconnecting with the same credentials after a fatal handshake ERROR.

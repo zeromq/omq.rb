@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.10.5] - 2026-10-15
+
+### Added
+
+- Allow updating `Connection#max_message_size` after the handshake so
+  compressed transports can bound wire envelopes separately from messages.
+
 ### Fixed
 
 - Reject invalid frame flags, lengths above 2^63-1, and malformed PING commands.

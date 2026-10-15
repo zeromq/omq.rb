@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-15
+
 ### Added
 
 - Decode revision 2 `LZ4A` arenas with complete validation before delivery,

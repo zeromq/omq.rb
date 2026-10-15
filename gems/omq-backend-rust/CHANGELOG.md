@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-15
+
 ### Fixed
 
 - Resolve RADIO subscriber readiness on `join_received` monitor events.
