@@ -244,11 +244,11 @@ class OMQLZ4IntegrationTest < Minitest::Spec
           # 10 KiB of 'A's compresses to ~40 bytes over the wire, but
           # declared decompressed size in the LZ4B header is 10 240 —
           # far over the 1 KiB budget. Must be caught BEFORE decoder
-          # invocation: OMQ::LZ4::ProtocolError propagates and closes
-          # the connection; pull.receive then raises SocketDeadError.
+          # invocation. The peer is disconnected; the socket remains usable.
           push << [("A" * 10_240).b]
 
-          assert_raises(OMQ::SocketDeadError) { pull.receive }
+          Async::Task.current.with_timeout(1) { pull.all_peers_gone.wait }
+          assert_empty pull.engine.connections
         ensure
           push&.close
           pull&.close
@@ -268,7 +268,8 @@ class OMQLZ4IntegrationTest < Minitest::Spec
           # Three 1 KiB parts individually under budget; sum (3072) over.
           push << [("A" * 1024).b, ("B" * 1024).b, ("C" * 1024).b]
 
-          assert_raises(OMQ::SocketDeadError) { pull.receive }
+          Async::Task.current.with_timeout(1) { pull.all_peers_gone.wait }
+          assert_empty pull.engine.connections
         ensure
           push&.close
           pull&.close

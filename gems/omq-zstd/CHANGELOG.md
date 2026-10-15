@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- Decode revision 2 `ZSTA` arenas with complete validation before delivery,
+  bounded decompression, and per-message size and queue accounting.
+
+### Fixed
+
+- Reject repeated or multipart dictionary shipments, trailing compressed data,
+  and incorrect decoded lengths. Disconnect malformed peers without killing
+  the socket.
+- Allow bounded transport envelopes independently of logical message limits.
+
 ## 0.4.5 - 2026-08-08
 
 ### Changed

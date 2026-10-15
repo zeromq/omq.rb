@@ -96,15 +96,16 @@ class OMQZstdCodecSecurityTest < Minitest::Spec
     end
 
 
-    it "allows dict overwrite" do
+    it "rejects dict overwrite" do
       c = codec
       conn = connection(c)
       samples = 400.times.map { |i| "user_#{i}|key=#{i}|val=#{i * 7}" }
       dict_bytes = train_dict(samples, capacity: 8 * 1024)
       result1 = conn.send(:decode_parts, [dict_bytes])
       assert_nil result1
-      result2 = conn.send(:decode_parts, [dict_bytes])
-      assert_nil result2
+      assert_raises(OMQ::Transport::ZstdTcp::ProtocolError) do
+        conn.send(:decode_parts, [dict_bytes])
+      end
     end
 
 

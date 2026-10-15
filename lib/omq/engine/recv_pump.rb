@@ -48,7 +48,7 @@ module OMQ
         @conn        = conn
         @recv_queue  = recv_queue
         @engine      = engine
-        @count_bytes = conn.instance_of?(Protocol::ZMTP::Connection)
+        @count_bytes = conn.instance_of?(Protocol::ZMTP::Connection) || conn.respond_to?(:last_wire_size_in)
       end
 
 

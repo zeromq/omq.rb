@@ -68,7 +68,8 @@ class OMQZstdIntegrationTest < Minitest::Spec
 
         push << ["A" * 1_048_576]
 
-        assert_raises(OMQ::SocketDeadError) { pull.receive }
+        Async::Task.current.with_timeout(1) { pull.all_peers_gone.wait }
+        assert_empty pull.engine.connections
       ensure
         push&.close
         pull&.close

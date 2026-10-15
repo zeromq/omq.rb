@@ -20,6 +20,13 @@ post-handshake message parts are compressed.
 See [RFC.md](RFC.md) for the wire-format specification and
 [DESIGN.md](DESIGN.md) for the implementation rationale.
 
+Revision 2 `ZSTA` arenas are supported, including raw and compressed modes
+and dictionaries. Each arena is validated completely before delivery and
+is limited to 64 KiB, 256 messages, and 4096 parts. `max_message_size`
+applies separately to each decoded message, charging payload bytes plus
+64 bytes per part for storage. Message order and receive HWM apply to the
+individual messages inside an arena.
+
 ## Install
 
 ```ruby

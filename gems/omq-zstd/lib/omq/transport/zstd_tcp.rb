@@ -18,7 +18,7 @@ require_relative "zstd_tcp/transport"
 module OMQ
   module Transport
     module ZstdTcp
-      class ProtocolError < StandardError; end
+      class ProtocolError < Protocol::ZMTP::Error; end
     end
   end
 end

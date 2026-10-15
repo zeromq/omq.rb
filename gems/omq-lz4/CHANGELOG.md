@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- Decode revision 2 `LZ4A` arenas with complete validation before delivery,
+  bounded decompression, and per-message size and queue accounting.
+
+### Fixed
+
+- Reject multipart dictionary shipments and disconnect malformed peers without
+  killing the socket.
+- Preserve compression on PUB/RADIO fan-out and allow bounded transport
+  envelopes independently of the logical message size limit.
+
 ## 0.3.4 - 2026-08-08
 
 ### Changed

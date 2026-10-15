@@ -47,6 +47,10 @@ module Protocol
       # @return [Float, nil] monotonic timestamp of last received frame
       attr_reader :last_received_at
 
+      # Transport wrappers may need room for bounded wire envelopes in
+      # addition to the application message limit they enforce after decoding.
+      attr_writer :max_message_size
+
 
       # @param io [#peek, #read_exactly, #write, #flush, #close] transport IO
       # @param socket_type [String] our socket type name (e.g. "REQ")

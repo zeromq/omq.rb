@@ -1,18 +1,19 @@
 # frozen_string_literal: true
 
-require "delegate"
+require "omq/transport/compressed_connection"
 
 module OMQ
   module Transport
     module ZstdTcp
-      class ZstdConnection < SimpleDelegator
+      class ZstdConnection < CompressedConnection
         # @return [Integer, nil] wire bytesize of the last received message
         #
         attr_reader :last_wire_size_in
 
 
         def initialize(conn, codec)
-          super(conn)
+          super(conn, max_message_size: codec.max_message_size,
+                arena_sentinel: Codec::ARENA_MAGIC, protocol_error: ProtocolError)
           @codec              = codec
           @dict_shipped       = false
           # FrameCodec is the decoder. Starts no-dict; when a dict
@@ -46,25 +47,16 @@ module OMQ
         end
 
 
-        def receive_message
-          loop do
-            parts   = __getobj__.receive_message
-            decoded = decode_parts(parts)
-            if decoded
-              @last_wire_size_in = parts.sum { |p| p.bytesize }
-              return decoded
-            end
-          end
-        end
-
-
-        def respond_to?(name, include_private = false)
-          return false if name == :write_wire
-          super
-        end
-
-
         private
+
+
+        def decompress_arena(data, size)
+          unless data.start_with?(Codec::ZSTD_MAGIC) && @codec.parse_frame_content_size(data) == size
+            raise ProtocolError, "arena Frame_Content_Size mismatch"
+          end
+
+          decode_zstd_frame(data, size)
+        end
 
 
         def ship_dict!
@@ -84,6 +76,10 @@ module OMQ
           all_dicts = true
 
           parts.each do |wire|
+            if wire.start_with?(Codec::ZDICT_MAGIC) && parts.size != 1
+              raise ProtocolError, "dictionary must be a single-part message"
+            end
+
             plaintext = decode_part(wire, budget)
             if plaintext
               all_dicts = false
@@ -125,10 +121,12 @@ module OMQ
             raise ProtocolError, "declared FCS #{fcs} exceeds limit #{budget}"
           end
 
-          decompress_opts = budget ? { max_output_size: budget } : {}
-
+          @codec.validate_frame!(wire)
           codec = frame_has_dict_id?(wire) ? @recv_codec : @recv_no_dict_codec
-          codec.decompress(wire, **decompress_opts)
+          plaintext = codec.decompress(wire, max_output_size: fcs)
+          raise ProtocolError, "Zstd decoded size mismatch" unless plaintext.bytesize == fcs
+
+          plaintext
         rescue Zrip::DecompressError => e
           raise ProtocolError, "decompression failed: #{e.message}"
         rescue Zrip::MissingContentSizeError => e
@@ -146,6 +144,8 @@ module OMQ
 
 
         def install_recv_dict(wire)
+          raise ProtocolError, "second dictionary shipment on the same direction" if @recv_dict_bytes
+
           if wire.bytesize < 8
             raise ProtocolError, "dict frame too short"
           end
