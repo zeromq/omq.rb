@@ -23,6 +23,7 @@ module Protocol
 
         # Short frame: 1-byte size, max body 255 bytes.
         SHORT_MAX = 255
+        LONG_MAX  = (1 << 63) - 1
 
         # Pre-computed single-byte flag strings (avoids Integer#chr + String#b per frame).
         FLAG_BYTES = Array.new(256) { |i| i.chr.b.freeze }.freeze
@@ -102,6 +103,9 @@ module Protocol
           long    = (flags & FLAGS_LONG) != 0
           command = (flags & FLAGS_COMMAND) != 0
 
+          raise Error, "reserved frame flags must be zero" unless (flags & 0xF8).zero?
+          raise Error, "command frames cannot have MORE set" if command && more
+
           if long
             raise EOFError, "Stream finished before reading long frame size" if buf.bytesize < 9
 
@@ -118,6 +122,8 @@ module Protocol
             size        = buf.getbyte(1)
             header_size = 2
           end
+
+          raise Error, "frame size exceeds ZMTP's 63-bit limit" if size > LONG_MAX
 
           if max_message_size && size > max_message_size
             raise Error, "frame size #{size} exceeds max_message_size #{max_message_size}"
@@ -141,6 +147,8 @@ module Protocol
         # @param more [Boolean] more frames follow
         # @param command [Boolean] this is a command frame
         def initialize(body, more: false, command: false)
+          raise Error, "command frames cannot have MORE set" if command && more
+
           @body    = body
           @more    = more
           @command = command

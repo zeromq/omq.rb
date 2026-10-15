@@ -48,14 +48,14 @@ module Protocol
             raise Error, "expected command frame, got data frame"
           end
 
-          peer_cmd = Codec::Command.from_body(frame.body)
+          peer_cmd = Codec::Command.from_body(frame.body).raise_if_error!
           unless peer_cmd.name == "READY"
             raise Error, "expected READY command, got #{peer_cmd.name}"
           end
 
           props            = peer_cmd.properties
-          peer_socket_type = props["Socket-Type"]
-          peer_identity    = props["Identity"] || ""
+          peer_socket_type = Codec::Command.property(props, "Socket-Type")
+          peer_identity    = Codec::Command.property(props, "Identity") || ""
 
           unless peer_socket_type
             raise Error, "peer READY missing Socket-Type"

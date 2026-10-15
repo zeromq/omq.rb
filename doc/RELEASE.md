@@ -13,7 +13,6 @@ The release workflow runs the same Ruby 3.3/4.0 test matrix before publishing.
 | `omq-backend-libzmq` | `omq-backend-libzmq-v` | `gems/omq-backend-libzmq` |
 | `omq-cli` | `omq-cli-v` | `gems/omq-cli` |
 | `omq-lz4` | `omq-lz4-v` | `gems/omq-lz4` |
-| `omq-qos` | `omq-qos-v` | `gems/omq-qos` |
 | `omq-ractor` | `omq-ractor-v` | `gems/omq-ractor` |
 | `omq-websocket` | `omq-websocket-v` | `gems/omq-websocket` |
 | `omq-zstd` | `omq-zstd-v` | `gems/omq-zstd` |

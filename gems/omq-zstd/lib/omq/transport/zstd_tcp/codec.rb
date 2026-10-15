@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "omq/transport/compression_arena"
+
 module OMQ
   module Transport
     module ZstdTcp
@@ -11,10 +13,12 @@ module OMQ
         TRAIN_MAX_SAMPLE_LEN   = 2048
         MIN_COMPRESS_NO_DICT   = 512
         MIN_COMPRESS_WITH_DICT = 64
+        ARENA_TARGET_BYTES    = 32 * 1024
 
-        NUL_PREAMBLE = ("\x00" * 4).b.freeze
+        NUL_PREAMBLE  = ("\x00" * 4).b.freeze
         ZSTD_MAGIC   = "\x28\xB5\x2F\xFD".b.freeze
         ZDICT_MAGIC  = "\x37\xA4\x30\xEC".b.freeze
+        ARENA_MAGIC  = "ZSTA".b.freeze
 
         USER_DICT_ID_RANGE = (32_768..(2**31 - 1)).freeze
 
@@ -62,6 +66,21 @@ module OMQ
         end
 
 
+        def compress_messages(messages)
+          CompressionArena.each_batch(messages, target: ARENA_TARGET_BYTES).map do |batch|
+            if batch.size == 1
+              compress_parts(batch.first)
+            else
+              batch.each { |parts| parts.each { |part| maybe_train!(part) } }
+              threshold = @send_dict_bytes ? MIN_COMPRESS_WITH_DICT : MIN_COMPRESS_NO_DICT
+              [CompressionArena.encode(batch, sentinel: ARENA_MAGIC, threshold: threshold) do |data|
+                @send_codec.compress(data)
+              end]
+            end
+          end
+        end
+
+
         def parse_frame_content_size(wire)
           return nil if wire.bytesize < 5
 
@@ -89,6 +108,33 @@ module OMQ
             lo, hi = wire.byteslice(off, 8).unpack("VV")
             (hi << 32) | lo
           end
+        end
+
+
+        # Zrip accepts unused trailing bytes. Walk the frame's block headers
+        # so each transport part contains exactly one complete Zstd frame.
+        def validate_frame!(wire)
+          raise ProtocolError, "truncated Zstd frame" if wire.bytesize < 5
+
+          descriptor = wire.getbyte(4)
+          single     = (descriptor & 0x20) != 0
+          fcs_bytes  = [single ? 1 : 0, 2, 4, 8][descriptor >> 6]
+          offset     = 5 + (single ? 0 : 1) + [0, 1, 2, 4][descriptor & 3] + fcs_bytes
+
+          loop do
+            raise ProtocolError, "truncated Zstd block header" if offset + 3 > wire.bytesize
+
+            header = wire.getbyte(offset) | (wire.getbyte(offset + 1) << 8) | (wire.getbyte(offset + 2) << 16)
+            type   = (header >> 1) & 3
+            raise ProtocolError, "reserved Zstd block type" if type == 3
+
+            offset += 3 + (type == 1 ? 1 : header >> 3)
+            raise ProtocolError, "truncated Zstd block" if offset > wire.bytesize
+            break unless (header & 1).zero?
+          end
+
+          offset += 4 unless (descriptor & 4).zero?
+          raise ProtocolError, "Zstd frame has trailing or missing bytes" unless offset == wire.bytesize
         end
 
 

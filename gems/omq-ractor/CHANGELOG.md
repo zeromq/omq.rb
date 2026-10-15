@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-10-15
+
+### Fixed
+
+- Make REQ/REP bridges wait for each send before receiving the next message,
+  preserving socket state when the worker runs in another Ractor.
+
 ## 0.1.7 - 2026-07-23
 
 ### Changed

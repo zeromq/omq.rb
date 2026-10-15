@@ -253,7 +253,7 @@ module OMQ
           send_command(ready)
 
           frame = read_command_frame!
-          cmd   = Protocol::ZMTP::Codec::Command.from_body(frame.body)
+          cmd   = Protocol::ZMTP::Codec::Command.from_body(frame.body).raise_if_error!
 
           unless cmd.name == "READY"
             raise Protocol::ZMTP::Error, "expected READY, got #{cmd.name}"
@@ -261,8 +261,8 @@ module OMQ
 
           props             = cmd.properties
           @peer_properties  = props
-          @peer_socket_type = props["Socket-Type"]
-          @peer_identity    = props["Identity"] || Codec::EMPTY_BINARY
+          @peer_socket_type = Protocol::ZMTP::Codec::Command.property(props, "Socket-Type")
+          @peer_identity    = Protocol::ZMTP::Codec::Command.property(props, "Identity") || Codec::EMPTY_BINARY
 
           unless @peer_socket_type
             raise Protocol::ZMTP::Error, "peer READY missing Socket-Type"

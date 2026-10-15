@@ -47,6 +47,10 @@ module Protocol
       # @return [Float, nil] monotonic timestamp of last received frame
       attr_reader :last_received_at
 
+      # Transport wrappers may need room for bounded wire envelopes in
+      # addition to the application message limit they enforce after decoding.
+      attr_writer :max_message_size
+
 
       # @param io [#peek, #read_exactly, #write, #flush, #close] transport IO
       # @param socket_type [String] our socket type name (e.g. "REQ")
@@ -55,7 +59,7 @@ module Protocol
       # @param mechanism [Mechanism::Null, Mechanism::Curve] security mechanism
       # @param max_message_size [Integer, nil] max frame size in bytes, nil = unlimited
       # @param opts [Hash{String => String}] extra READY properties to
-      #   advertise (e.g. +"X-QoS" => "1"+). Upper-layer extensions use
+      #   advertise (e.g. +"X-Compression" => "lz4"+). Upper-layer extensions use
       #   this to inject their own negotiated properties without the
       #   codec needing to know about them.
       def initialize(io, socket_type:, identity: "", as_server: false,
@@ -278,12 +282,7 @@ module Protocol
       # @raise [EOFError] if connection is closed
       def read_frame
         loop do
-          begin
-            frame = Codec::Frame.read_from(@io, max_message_size: @max_message_size)
-          rescue Error
-            close
-            raise
-          end
+          frame = Codec::Frame.read_from(@io, max_message_size: @max_message_size)
 
           touch_heartbeat
 
@@ -297,12 +296,16 @@ module Protocol
               send_command(Codec::Command.pong(context: context))
               next
             when "PONG"
+              raise Error, "PONG context exceeds 16 bytes" if cmd.data.bytesize > 16
               next
             end
           end
 
           return frame
         end
+      rescue Error
+        close
+        raise
       end
 
 

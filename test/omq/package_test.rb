@@ -2,7 +2,7 @@
 
 require "minitest/autorun"
 
-class PackageTest < Minitest::Test
+class PackageTest < Minitest::Spec
   ROOT = File.expand_path("../..", __dir__)
 
   def test_main_gem_does_not_package_subgems

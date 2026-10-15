@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "protocol/zmtp"
+
 module OMQ
   module LZ4
     # Raised when the peer sends bytes that violate the lz4+tcp wire
@@ -8,6 +10,6 @@ module OMQ
     # per-message size-budget overrun, or a decoder failure on a
     # compressed part. The transport closes the connection on any
     # protocol error — never silently drops the offending part.
-    class ProtocolError < StandardError; end
+    class ProtocolError < Protocol::ZMTP::Error; end
   end
 end

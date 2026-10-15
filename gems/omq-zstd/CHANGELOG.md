@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-15
+
+### Added
+
+- Decode revision 2 `ZSTA` arenas with complete validation before delivery,
+  bounded decompression, and per-message size and queue accounting.
+- Batch already queued small messages into arenas targeting 32 KiB, with raw
+  mode below the compression threshold or when compression does not save bytes.
+
+### Fixed
+
+- Reject repeated or multipart dictionary shipments, trailing compressed data,
+  and incorrect decoded lengths. Disconnect malformed peers without killing
+  the socket.
+- Allow bounded transport envelopes independently of logical message limits.
+- Reject encrypted mechanisms on compressed transports.
+
 ## 0.4.5 - 2026-08-08
 
 ### Changed

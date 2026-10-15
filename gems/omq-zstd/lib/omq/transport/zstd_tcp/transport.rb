@@ -29,6 +29,7 @@ module OMQ
         # @return [Listener]
         #
         def listener(endpoint, engine, level: -3, dict: nil, auto_dict: nil, **)
+          validate_security!(engine)
           validate_auto_dict!(auto_dict, dict)
           codec = codec_for(
             engine,
@@ -65,6 +66,7 @@ module OMQ
         # @return [Dialer]
         #
         def dialer(endpoint, engine, level: -3, dict: nil, auto_dict: nil, **)
+          validate_security!(engine)
           validate_auto_dict!(auto_dict, dict)
           codec = codec_for(
             engine,
@@ -107,6 +109,13 @@ module OMQ
 
 
         private
+
+
+        def validate_security!(engine)
+          if engine.options.mechanism&.encrypted?
+            raise ArgumentError, "compressed transports do not support encrypted mechanisms"
+          end
+        end
 
 
         # Returns the shared Codec for this engine (socket), creating one

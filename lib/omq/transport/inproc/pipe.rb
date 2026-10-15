@@ -62,6 +62,7 @@ module OMQ
           @peer_identity         = peer_identity || "".b
           @peer_socket_type      = peer_type
           @closed                = false
+          @closed_signal         = Async::Promise.new
           @peer                  = nil
           @direct_recv_queue     = nil
           @direct_recv_transform = nil
@@ -88,7 +89,7 @@ module OMQ
 
           return unless @pending_direct
 
-          @pending_direct.each { |msg| queue.enqueue(msg) }
+          @pending_direct.each { |msg| deliver_direct(msg) }
           @pending_direct = nil
         end
 
@@ -115,11 +116,11 @@ module OMQ
           end
 
           if @direct_recv_queue
-            @direct_recv_queue.enqueue(apply_transform(parts))
+            deliver_direct(parts)
           elsif @send_queue
             @send_queue.enqueue(parts)
           else
-            (@pending_direct ||= []) << apply_transform(parts)
+            (@pending_direct ||= []) << parts
           end
         end
 
@@ -205,18 +206,31 @@ module OMQ
         end
 
 
-        # Closes this pipe end and sends a nil sentinel to the peer.
+        # Closes this pipe end and wakes the peer's lifecycle and command reader.
         #
         # @return [void]
         #
         def close
           return if @closed
           @closed = true
+          @closed_signal.resolve(true)
           @send_queue&.enqueue(nil) # close sentinel
         end
 
 
+        # Lets the peer remove this link even when messages bypass recv pumps.
+        def wait_closed
+          @closed_signal.wait
+        end
+
+
         private
+
+
+        def deliver_direct(parts)
+          transformed = apply_transform(parts)
+          @direct_recv_queue.enqueue(transformed) if transformed
+        end
 
 
         def apply_transform(parts)

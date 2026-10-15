@@ -48,7 +48,7 @@ module OMQ
         @conn        = conn
         @recv_queue  = recv_queue
         @engine      = engine
-        @count_bytes = conn.instance_of?(Protocol::ZMTP::Connection)
+        @count_bytes = conn.instance_of?(Protocol::ZMTP::Connection) || conn.respond_to?(:last_wire_size_in)
       end
 
 
@@ -83,8 +83,7 @@ module OMQ
       # A transform that returns +nil+ drops the message — the recv pump
       # still counts it toward fairness (so dup-floods can't starve
       # siblings) but it is neither emitted nor enqueued to the
-      # application. omq-qos uses this at QoS >= 2 for dedup-set hits:
-      # the transform ACKs the sender and returns nil.
+      # application.
       #
       # @param parent [Async::Task, Async::Barrier]
       # @param transform [Proc]

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "lz4rip"
+require "protocol/zmtp"
 
 require_relative "errors"
 
@@ -27,6 +28,7 @@ module OMQ
       LZ4B_SENTINEL         = "LZ4B".b.freeze
       LZ4M_SENTINEL         = "LZ4M".b.freeze
       LZ4D_SENTINEL         = "LZ4D".b.freeze
+      LZ4A_SENTINEL         = "LZ4A".b.freeze
 
       LZ4M_BLOCK_SIZE = 1_073_741_824
 

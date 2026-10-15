@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-15
+
+### Fixed
+
+- Resolve RADIO subscriber readiness on `join_received` monitor events.
+- Reject unsupported security mechanisms instead of silently using NULL.
+- Forward CURVE authenticators on MRI, TruffleRuby, and JRuby, preserving the
+  Ruby `PeerInfo` and crypto public-key types.
+- Reject JRuby authenticator configuration when the OMQ.java callback classes
+  are missing from the JVM classpath.
+
+### Changed
+
+- Require `omq-rs >= 0.2.5` for native authentication callbacks and REQ/REP
+  fixes: reject unrelated REQ replies and bodyless REP requests, and preserve
+  REP reply destinations across prefetched requests and disconnects.
+
 ## [0.3.0] - 2026-08-26
 
 ### Added

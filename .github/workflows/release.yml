@@ -8,7 +8,6 @@ on:
       - 'omq-backend-libzmq-v*'
       - 'omq-cli-v*'
       - 'omq-lz4-v*'
-      - 'omq-qos-v*'
       - 'omq-ractor-v*'
       - 'omq-websocket-v*'
       - 'omq-zstd-v*'
@@ -85,12 +84,6 @@ jobs:
               package="omq-lz4"
               dir="gems/omq-lz4"
               gemspec="$dir/omq-lz4.gemspec"
-              ruby="4.0"
-              ;;
-            omq-qos-v*)
-              package="omq-qos"
-              dir="gems/omq-qos"
-              gemspec="$dir/omq-qos.gemspec"
               ruby="4.0"
               ;;
             omq-ractor-v*)

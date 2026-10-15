@@ -278,16 +278,6 @@ post-handshake message parts are compressed.
   `omq-lz4` for new compressed TCP work. The Rust backend also exposes
   `zstd+tcp://`.
 
-### Protocol extensions (RFCs)
-
-Optional plug-ins that extend the ZMTP wire protocol. Each is a separate gem.
-load the ones you need.
-
-- **[omq-qos](gems/omq-qos)**: experimental MQTT-style at-least-once
-  delivery. Receivers send an ACK command frame keyed by xxHash digest.
-  unacked messages re-enqueue to the next peer on disconnect. PUSH/PULL,
-  SCATTER/GATHER, REQ/REP only. Fan-out patterns are out of scope.
-
 ## Development
 
 ```sh

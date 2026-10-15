@@ -36,6 +36,7 @@ module OMQ
         #   with `dict:`.
         # @return [Listener]
         def listener(endpoint, engine, dict: nil, auto_dict: nil, **)
+          validate_security!(engine)
           validate_dict!(dict)
           validate_auto_dict!(auto_dict, dict)
 
@@ -65,6 +66,7 @@ module OMQ
         #   training. See `listener` for details.
         # @return [Dialer]
         def dialer(endpoint, engine, dict: nil, auto_dict: nil, **)
+          validate_security!(engine)
           validate_dict!(dict)
           validate_auto_dict!(auto_dict, dict)
           Dialer.new(endpoint, engine, dict&.b, normalize_auto_dict(auto_dict))
@@ -109,6 +111,13 @@ module OMQ
 
 
         private
+
+
+        def validate_security!(engine)
+          if engine.options.mechanism&.encrypted?
+            raise ArgumentError, "compressed transports do not support encrypted mechanisms"
+          end
+        end
 
 
         def validate_dict!(dict)

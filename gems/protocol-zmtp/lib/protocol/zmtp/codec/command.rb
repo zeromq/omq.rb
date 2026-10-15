@@ -72,7 +72,7 @@ module Protocol
 
         # Builds a READY command with Socket-Type, Identity, and any
         # extra properties supplied by upper layers (e.g. an extension
-        # that injects +X-QoS+ or +X-Compression+).
+        # that injects +X-Compression+).
         #
         # @param metadata [Hash{String => String}, nil] additional READY properties
         # @return [Command]
@@ -80,6 +80,27 @@ module Protocol
           props = { "Socket-Type" => socket_type, "Identity" => identity }
           props.merge!(metadata) if metadata && !metadata.empty?
           new("READY", encode_properties(props))
+        end
+
+
+        # Builds a fatal handshake refusal.
+        def self.error(reason)
+          raise Error, "ERROR reason exceeds 255 bytes" if reason.bytesize > 255
+
+          new("ERROR", reason.bytesize.chr.b + reason.b)
+        end
+
+
+        # ERROR is fatal even if its reason is malformed.
+        def raise_if_error!
+          return self unless @name == "ERROR"
+
+          length = @data.getbyte(0)
+          unless length && @data.bytesize == length + 1
+            raise FatalHandshakeError, "malformed ERROR command"
+          end
+
+          raise FatalHandshakeError, "peer rejected handshake: #{@data.byteslice(1, length).inspect}"
         end
 
 
@@ -125,6 +146,9 @@ module Protocol
         # @param context [String] optional context bytes (up to 16 bytes)
         # @return [Command]
         def self.ping(ttl: 0, context: EMPTY_BINARY)
+          raise Error, "PING TTL must be between 0 and 6553.5 seconds" unless (0..6553.5).cover?(ttl)
+          raise Error, "PING context exceeds 16 bytes" if context.bytesize > 16
+
           ttl_ds = (ttl * 10).to_i
           new("PING", [ttl_ds].pack("n") + (context.encoding == Encoding::BINARY ? context : context.b))
         end
@@ -135,6 +159,8 @@ module Protocol
         # @param context [String] context bytes echoed from the PING
         # @return [Command]
         def self.pong(context: EMPTY_BINARY)
+          raise Error, "PONG context exceeds 16 bytes" if context.bytesize > 16
+
           new("PONG", context.encoding == Encoding::BINARY ? context : context.b)
         end
 
@@ -143,6 +169,8 @@ module Protocol
         #
         # @return [Array(Numeric, String)] [ttl_seconds, context_bytes]
         def ping_ttl_and_context
+          raise Error, "PING data must contain a TTL and at most 16 context bytes" unless (2..18).cover?(@data.bytesize)
+
           ttl_ds  = @data.unpack1("n")
           context = @data.bytesize > 2 ? @data.byteslice(2..) : EMPTY_BINARY
           [ttl_ds / 10.0, context]
@@ -154,6 +182,16 @@ module Protocol
         # @return [Hash{String => String}] property name-value pairs
         def properties
           self.class.decode_properties(@data)
+        end
+
+
+        # Property names are case-insensitive; retain their original spelling
+        # in the public metadata hash for callers that enumerate it.
+        def self.property(props, name)
+          props.each_pair do |key, value|
+            return value if key.casecmp?(name)
+          end
+          nil
         end
 
 

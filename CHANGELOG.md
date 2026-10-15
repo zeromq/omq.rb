@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-10-15
+
+### Added
+
+- Shared bounded arena encoding and decoding for the LZ4 and Zstd transports.
+
+### Fixed
+
+- Stop reconnecting with the same credentials after a fatal handshake ERROR.
+- Enforced REQ/REP send/receive order and rejected incomplete routing envelopes.
+- Matched REQ replies to the selected peer and kept REP reply destinations with
+  their requests across disconnects. Replies to muted REP peers are discarded.
+- Applied in-process receive transforms to buffered messages and discarded
+  filtered messages without delivering close sentinels.
+- Removed in-process peer connections when the opposite pipe closes, including
+  connections that bypass the receive pump.
+
+### Removed
+
+- Removed `omq-qos`, its socket options, and its test and release tasks.
+
 ## [0.28.10] - 2026-08-26
 
 ### Changed

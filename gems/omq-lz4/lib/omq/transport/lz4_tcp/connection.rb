@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "delegate"
+require "omq/transport/compressed_connection"
 
 require_relative "../../lz4/codec"
 
@@ -11,17 +11,18 @@ module OMQ
       # the ZMTP connection so send_message / write_message /
       # receive_message route through compression, but everything else
       # (write_command, close, etc.) passes through untouched.
-      class Lz4Connection < SimpleDelegator
+      class Lz4Connection < CompressedConnection
         DEFAULT_DICT_CAPACITY = 2048
         DEFAULT_TRAIN_TRIGGER = 100
+        ARENA_TARGET_BYTES   = 16 * 1024
 
         # @return [Integer, nil] wire bytesize of the last received
         #   message (sum across parts, compressed sentinel included).
         attr_reader :last_wire_size_in
 
         def initialize(conn, send_dict_bytes:, max_message_size:, auto_dict: nil)
-          super(conn)
-          @max_message_size = max_message_size
+          super(conn, max_message_size: max_message_size,
+                arena_sentinel: LZ4::Codec::LZ4A_SENTINEL, protocol_error: LZ4::ProtocolError)
 
           @recv_codec       = build_block_codec(nil)
           @recv_dict_bytes  = nil
@@ -66,28 +67,29 @@ module OMQ
 
         def write_messages(messages)
           messages.each { |parts| maybe_train!(parts) }
-          wires = messages.map { |parts| encode_parts(parts) }
+          wires = CompressionArena.each_batch(messages, target: ARENA_TARGET_BYTES).map do |batch|
+            if batch.size == 1
+              encode_parts(batch.first)
+            else
+              threshold = @send_dict_bytes ? LZ4::Codec::MIN_COMPRESS_WITH_DICT : LZ4::Codec::MIN_COMPRESS_NO_DICT
+              [CompressionArena.encode(batch, sentinel: LZ4::Codec::LZ4A_SENTINEL, threshold: threshold) do |data|
+                @send_codec.compress(data)
+              end]
+            end
+          end
           ship_send_dict!
           __getobj__.write_messages(wires)
         end
 
 
-        def receive_message
-          # Loop: a dict shipment is consumed silently and we read the
-          # next ZMTP message. Only data messages are returned to the
-          # caller. Budget tracking happens inside decode_wire_parts.
-          loop do
-            parts   = __getobj__.receive_message
-            decoded = decode_wire_parts(parts)
-            if decoded
-              @last_wire_size_in = parts.sum(&:bytesize)
-              return decoded
-            end
-          end
-        end
-
-
         private
+
+
+        def decompress_arena(data, size)
+          @recv_codec.decompress(data, decompressed_size: size)
+        rescue Lz4rip::DecompressError => error
+          raise LZ4::ProtocolError, "LZ4 arena decode failed: #{error.message}"
+        end
 
 
         def build_block_codec(dict_bytes)
@@ -148,7 +150,7 @@ module OMQ
         # Budget tracking is per-message (sum of decompressed sizes
         # across parts). Dict shipment parts do not count against the
         # budget — they aren't messages.
-        def decode_wire_parts(parts)
+        def decode_parts(parts)
           decoded   = []
           all_dicts = true
           budget    = @max_message_size
@@ -158,6 +160,8 @@ module OMQ
 
             sentinel = wire.byteslice(0, 4)
             if sentinel == LZ4::Codec::LZ4D_SENTINEL
+              raise LZ4::ProtocolError, "dictionary must be a single-part message" unless parts.size == 1
+
               install_recv_dict!(wire)
               next
             end

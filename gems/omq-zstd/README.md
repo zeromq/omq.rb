@@ -11,14 +11,27 @@ Use [`omq-lz4`](../omq-lz4) for CPU- or memory-sensitive compressed TCP
 work. This gem remains for research, comparison, OMQ.rs parity, and cases
 where zstd ratio matters more than transport simplicity.
 
-Pick `zstd+tcp://` instead of `tcp://` and every message part on the wire is
-compressed per-part with [Zstandard](https://github.com/facebook/zstd).
+Pick `zstd+tcp://` instead of `tcp://` for individual parts or batches
+compressed with [Zstandard](https://github.com/facebook/zstd).
 Compression is intrinsic to the transport: no negotiation, no socket option,
 no payload changes. The ZMTP handshake runs over plain TCP. Only
 post-handshake message parts are compressed.
 
 See [RFC.md](RFC.md) for the wire-format specification and
 [DESIGN.md](DESIGN.md) for the implementation rationale.
+
+Revision 2 `ZSTA` arenas are supported, including raw and compressed modes
+and dictionaries. Each arena is validated completely before delivery and
+is limited to 64 KiB, 256 messages, and 4096 parts. `max_message_size`
+applies separately to each decoded message, charging payload bytes plus
+64 bytes per part for storage. Message order and receive HWM apply to the
+individual messages inside an arena.
+
+The sender batches already queued small messages, targeting 32 KiB per arena.
+It never waits to fill a batch. Subscription filtering and queue admission
+happen before batching. Isolated or larger messages use per-part encoding.
+Both peers must support revision 2; no revision negotiation is performed.
+Encrypted mechanisms such as CURVE cannot be combined with this transport.
 
 ## Install
 

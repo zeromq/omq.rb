@@ -9,7 +9,7 @@ module Protocol
     # - +identity+ is the peer's +ZMQ_IDENTITY+ string, or +""+ when no
     #   identity was advertised in the READY metadata.
     #
-    # Used as a peer key by upper layers (e.g. omq-qos levels 2/3): the
+    # Used as a peer key by upper layers: the
     # whole value object is frozen and equality-comparable, so it can be
     # stored directly in a Hash without picking one anchor over the other.
     #

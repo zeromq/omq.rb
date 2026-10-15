@@ -3,6 +3,7 @@
 $VERBOSE = nil
 
 require "minitest/autorun"
+require_relative "../../../test/async_spec"
 require "protocol/zmtp"
 require "socket"
 require "io/stream"

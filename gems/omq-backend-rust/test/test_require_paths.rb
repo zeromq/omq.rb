@@ -5,7 +5,7 @@ require "rbconfig"
 
 require_relative "../lib/omq/rust/java/platform"
 
-class RequirePathsTest < Minitest::Test
+class RequirePathsTest < Minitest::Spec
   ROOT     = File.expand_path("../../..", __dir__)
   GEM_ROOT = File.expand_path("..", __dir__)
 

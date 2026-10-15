@@ -117,11 +117,12 @@ module OMQ
 
         conn&.close
 
-        # Full tear-down with reconnect: without this, spawn_connection's
-        # ensure-block close! sees :closed and skips maybe_reconnect,
+        # Reconnect after temporary failures. An explicit ERROR response
+        # forbids retrying with the same credentials. Without tear-down,
+        # spawn_connection's ensure-block close! skips maybe_reconnect,
         # leaving the endpoint dead. Race is exposed when a peer RSTs
         # mid-handshake (e.g. LINGER 0 close against an in-flight connect).
-        tear_down!(reconnect: true)
+        tear_down!(reconnect: !error.is_a?(Protocol::ZMTP::FatalHandshakeError))
         raise
       end
 
@@ -132,6 +133,9 @@ module OMQ
       # @param pipe [Transport::Inproc::Pipe]
       #
       def ready_direct!(pipe)
+        if pipe.is_a?(Transport::Inproc::Pipe) && pipe.peer
+          @barrier.async(transient: true, annotation: "inproc peer close") { pipe.peer.wait_closed }
+        end
         ready!(pipe)
       end
 
@@ -186,9 +190,7 @@ module OMQ
         @engine.peer_connected.resolve(@conn)
         transition!(:ready)
 
-        # No supervisor if nothing to supervise: inproc Pipes
-        # wire the recv/send paths synchronously (no task-based pumps),
-        # and isolated unit tests use a FakeEngine without pumps at all.
+        # Isolated unit tests can use a FakeEngine without pumps at all.
         # Waiting on an empty barrier returns immediately and would
         # tear the connection down right after registering.
         start_supervisor unless @barrier.empty?

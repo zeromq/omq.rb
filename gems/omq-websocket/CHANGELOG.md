@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.1.1] - 2026-10-15
+
+### Fixed
+
+- Handle fatal handshake ERROR responses and match READY metadata names
+  case-insensitively.
+
 ## 0.1.0 - 2026-07-23
 
 - Initial release. Adds `ws://` and `wss://` transports to OMQ
