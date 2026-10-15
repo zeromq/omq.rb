@@ -12,8 +12,11 @@ MRI and TruffleRuby, or through OMQ.java on JRuby.
 
 ## Install
 
-The `omq-rs` dependency compiles OMQ.rs during installation on MRI and
-TruffleRuby. JRuby uses OMQ.java on Java 25 or newer. The Java gem selects the
+The `omq-rs >= 0.2.5` dependency compiles OMQ.rs during installation on MRI
+and TruffleRuby. This minimum includes the REQ/REP envelope and reply-routing
+fixes in `omq-tokio` 0.28.1 and `omq-proto` 0.32.1.
+
+JRuby uses OMQ.java on Java 25 or newer. The Java gem selects the
 matching OMQ.java artifact on Linux x86_64, macOS aarch64, macOS x86_64, and
 Windows x86_64.
 
@@ -63,7 +66,7 @@ SCATTER/GATHER, CHANNEL.
 
 CURVE authenticators receive `Protocol::ZMTP::PeerInfo`, including a public key
 from the configured crypto backend. As with the Ruby engine, the identity is
-empty during authentication. MRI and TruffleRuby require `omq-rs >= 0.2.3`.
+empty during authentication.
 
 On JRuby, OMQ.java 0.3.0's JNI callback threads require the platform jar on the
 JVM `CLASSPATH`. For example:

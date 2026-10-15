@@ -13,7 +13,9 @@
 
 ### Changed
 
-- Require `omq-rs >= 0.2.3` for the native authentication callback API.
+- Require `omq-rs >= 0.2.5` for native authentication callbacks and REQ/REP
+  fixes: reject unrelated REQ replies and bodyless REP requests, and preserve
+  REP reply destinations across prefetched requests and disconnects.
 
 ## [0.3.0] - 2026-08-26
 
