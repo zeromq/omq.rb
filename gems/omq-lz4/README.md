@@ -19,6 +19,12 @@ applies separately to each decoded message, charging payload bytes plus
 64 bytes per part for storage. Message order and receive HWM apply to the
 individual messages inside an arena.
 
+The sender batches already queued small messages, targeting 16 KiB per arena.
+It never waits to fill a batch. Subscription filtering and queue admission
+happen before batching. Isolated or larger messages use per-part encoding.
+Both peers must support revision 2; no revision negotiation is performed.
+Encrypted mechanisms such as CURVE cannot be combined with this transport.
+
 ## Why `lz4+tcp://`
 
 LZ4 has no entropy stage (no Huffman, no FSE), ~16 KiB of encoder state

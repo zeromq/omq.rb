@@ -556,7 +556,7 @@ class OMQBackendRustRustBackendTest < Minitest::Spec
 
 
       it "keeps lz4 auto_dict off by default" do
-        run_backend do
+        run_backend do |task|
           raw = OMQ::PULL.new(backend: BACKEND)
           port = bind_port(raw)
           push = OMQ::PUSH.new(backend: BACKEND)
@@ -564,7 +564,7 @@ class OMQBackendRustRustBackendTest < Minitest::Spec
           push.peer_connected.wait
 
           120.times { |i| push << json_payload(i) }
-          frames = 120.times.map { raw.receive.first }
+          frames = task.with_timeout(2) { receive_lz4_wire_messages(raw, 120) }
           refute frames.any? { |frame| frame.start_with?("LZ4D".b) }
         ensure
           push&.close
@@ -574,7 +574,7 @@ class OMQBackendRustRustBackendTest < Minitest::Spec
 
 
       it "enables lz4 auto_dict when requested" do
-        run_backend do
+        run_backend do |task|
           raw = OMQ::PULL.new(backend: BACKEND)
           port = bind_port(raw)
           push = OMQ::PUSH.new(backend: BACKEND)
@@ -582,7 +582,7 @@ class OMQBackendRustRustBackendTest < Minitest::Spec
           push.peer_connected.wait
 
           140.times { |i| push << json_payload(i) }
-          frames = 141.times.map { raw.receive.first }
+          frames = task.with_timeout(2) { receive_lz4_wire_messages(raw, 140) }
           assert frames.any? { |frame| frame.start_with?("LZ4D".b) }
         ensure
           push&.close
@@ -672,6 +672,25 @@ class OMQBackendRustRustBackendTest < Minitest::Spec
 
     def json_payload(i)
       %Q({"event":"login","user":"user_#{i}","region":"us-east-1","status":200}).b
+    end
+
+
+    # A raw TCP peer sees dictionary shipments and arenas as wire messages.
+    # Count the logical messages carried by each arena before stopping.
+    def receive_lz4_wire_messages(socket, expected)
+      frames = []
+      count  = 0
+      while count < expected
+        frame = socket.receive.first
+        frames << frame
+        if frame.start_with?("LZ4A")
+          count += frame.byteslice(12, 4).unpack1("V")
+        elsif !frame.start_with?("LZ4D")
+          count += 1
+        end
+      end
+      assert_equal expected, count
+      frames
     end
 
 

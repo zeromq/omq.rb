@@ -6,8 +6,12 @@ require_relative "../../../test/compression_arena_examples"
 class OMQZstdArenaTest < Minitest::Spec
   include CompressionArenaExamples
 
-  def wrap(raw, max_message_size: nil)
-    codec = OMQ::Transport::ZstdTcp::Codec.new(level: 1, max_message_size: max_message_size)
+  it "closes the connection when a dictionary blob cannot be loaded" do
+    reject_wire(["\x37\xA4\x30\xEC".b + "\0" * 4])
+  end
+
+  def wrap(raw, max_message_size: nil, send_dict: nil)
+    codec = OMQ::Transport::ZstdTcp::Codec.new(level: 1, max_message_size: max_message_size, dict: send_dict)
     OMQ::Transport::ZstdTcp::ZstdConnection.new(raw, codec)
   end
 

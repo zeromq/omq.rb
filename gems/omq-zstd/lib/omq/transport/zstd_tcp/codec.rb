@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "omq/transport/compression_arena"
+
 module OMQ
   module Transport
     module ZstdTcp
@@ -11,8 +13,9 @@ module OMQ
         TRAIN_MAX_SAMPLE_LEN   = 2048
         MIN_COMPRESS_NO_DICT   = 512
         MIN_COMPRESS_WITH_DICT = 64
+        ARENA_TARGET_BYTES    = 32 * 1024
 
-        NUL_PREAMBLE = ("\x00" * 4).b.freeze
+        NUL_PREAMBLE  = ("\x00" * 4).b.freeze
         ZSTD_MAGIC   = "\x28\xB5\x2F\xFD".b.freeze
         ZDICT_MAGIC  = "\x37\xA4\x30\xEC".b.freeze
         ARENA_MAGIC  = "ZSTA".b.freeze
@@ -60,6 +63,21 @@ module OMQ
           @cached_parts      = parts
           @cached_compressed = compressed.freeze
           compressed
+        end
+
+
+        def compress_messages(messages)
+          CompressionArena.each_batch(messages, target: ARENA_TARGET_BYTES).map do |batch|
+            if batch.size == 1
+              compress_parts(batch.first)
+            else
+              batch.each { |parts| parts.each { |part| maybe_train!(part) } }
+              threshold = @send_dict_bytes ? MIN_COMPRESS_WITH_DICT : MIN_COMPRESS_NO_DICT
+              [CompressionArena.encode(batch, sentinel: ARENA_MAGIC, threshold: threshold) do |data|
+                @send_codec.compress(data)
+              end]
+            end
+          end
         end
 
 

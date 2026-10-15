@@ -15,6 +15,45 @@ module OMQ
 
       module_function
 
+      # Split only messages already admitted by routing. Never wait to fill
+      # an arena, and leave isolated or oversized messages in per-part form.
+      def each_batch(messages, target:)
+        return enum_for(__method__, messages, target: target) unless block_given?
+
+        batch = []
+        bytes = 0
+        parts = 0
+        messages.each do |message|
+          size     = message.sum { |part| part.bytesize + (part.bytesize > 255 ? 9 : 2) }
+          eligible = !message.empty? && size <= target && message.size <= MAX_PARTS
+          if !batch.empty? && (!eligible || bytes + size > target ||
+                              parts + message.size > MAX_PARTS || batch.size == MAX_MESSAGES)
+            yield batch
+            batch = []
+            bytes = 0
+            parts = 0
+          end
+
+          if eligible
+            batch << message
+            bytes += size
+            parts += message.size
+          else
+            yield [message]
+          end
+        end
+        yield batch unless batch.empty?
+      end
+
+
+      def encode(messages, sentinel:, threshold:)
+        data       = messages.map { |parts| Protocol::ZMTP::Codec::Frame.encode_message(parts) }.join.b
+        compressed = yield(data) if data.bytesize >= threshold
+        mode       = compressed && compressed.bytesize < data.bytesize ? 1 : 0
+        sentinel + [mode, "\0\0\0", data.bytesize, messages.size].pack("Ca3VV") + (mode == 1 ? compressed : data)
+      end
+
+
       def decode(wire, max_message_size:, error:)
         unless wire.bytesize.between?(HEADER_SIZE, MAX_WIRE_SIZE)
           raise error, "invalid arena envelope size"

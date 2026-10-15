@@ -6,8 +6,8 @@ require_relative "../../../test/compression_arena_examples"
 class OMQLZ4ArenaTest < Minitest::Spec
   include CompressionArenaExamples
 
-  def wrap(raw, max_message_size: nil)
-    OMQ::Transport::Lz4Tcp::Lz4Connection.new(raw, send_dict_bytes: nil, max_message_size: max_message_size)
+  def wrap(raw, max_message_size: nil, send_dict: nil)
+    OMQ::Transport::Lz4Tcp::Lz4Connection.new(raw, send_dict_bytes: send_dict, max_message_size: max_message_size)
   end
 
   def sentinel

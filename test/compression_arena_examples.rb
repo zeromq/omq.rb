@@ -37,6 +37,12 @@ module CompressionArenaExamples
     end
   end
 
+  class EncryptedMechanism
+    def encrypted?
+      true
+    end
+  end
+
   def arena_data(messages)
     messages.map { |parts| Protocol::ZMTP::Codec::Frame.encode_message(parts) }.join.b
   end
@@ -168,6 +174,93 @@ module CompressionArenaExamples
         conn = wrap(WireConnection.new)
         refute conn.respond_to?(:write_wire)
         refute conn.respond_to?(:write_wire_batch)
+      end
+
+      it "batches queued messages within the wire, message and part limits" do
+        raw      = WireConnection.new
+        sender   = wrap(raw)
+        messages = Array.new(300) { |i| ["key-#{i}", "value " * 40, ""] }
+        messages.insert(150, ["large " * 12_000])
+        messages << Array.new(4097, "")
+        sender.write_messages(messages)
+        arenas = raw.sent.select { |parts| parts.first.start_with?(sentinel) }
+        assert_operator arenas.size, :>, 1
+        arenas.each do |parts|
+          assert_equal 1, parts.size
+          assert_operator parts.first.bytesize, :<=, 65_552
+          assert_operator parts.first.byteslice(8, 4).unpack1("V"), :<=, 65_536
+          assert_operator parts.first.byteslice(12, 4).unpack1("V"), :<=, 256
+        end
+
+        receiver = wrap(WireConnection.new(raw.sent.dup))
+        messages.each { |expected| assert_equal expected, receiver.receive_message }
+      end
+
+      it "uses raw arenas below threshold and compressed arenas when smaller" do
+        raw    = WireConnection.new
+        sender = wrap(raw)
+        sender.write_messages([["a"], ["b"]])
+        assert_equal sentinel, raw.sent.first.first.byteslice(0, 4)
+        assert_equal 0, raw.sent.first.first.getbyte(4)
+        sender.write_messages(Array.new(20) { ["payload " * 20] })
+        assert_equal 1, raw.sent.last.first.getbyte(4)
+      end
+
+      it "sends an isolated message immediately using per-part encoding" do
+        raw = WireConnection.new
+        wrap(raw).write_messages([["isolated"]])
+        assert_equal [["\0\0\0\0isolated".b]], raw.sent
+      end
+
+      it "ships a configured dictionary once before any encoded arenas" do
+        raw      = WireConnection.new
+        sender   = wrap(raw, send_dict: dictionary)
+        messages = Array.new(20) { ["record: value payload " * 10] }
+        2.times { sender.write_messages(messages) }
+        assert_equal [dictionary_shipment], raw.sent.first
+        assert_equal 1, raw.sent.count { |parts| parts == [dictionary_shipment] }
+
+        receiver = wrap(WireConnection.new(raw.sent.dup))
+        (messages * 2).each { |expected| assert_equal expected, receiver.receive_message }
+      end
+
+      it "filters each subscriber's logical messages before batching" do
+        Async do |task|
+          task.with_timeout(2) do
+            scheme   = sentinel == "LZ4A" ? "lz4+tcp" : "zstd+tcp"
+            pub      = OMQ::XPUB.new
+            first    = OMQ::SUB.new(subscribe: "first")
+            second   = OMQ::SUB.new(subscribe: "second")
+            endpoint = pub.bind("#{scheme}://127.0.0.1:0", dict: dictionary).to_s
+            first.connect(endpoint)
+            second.connect(endpoint)
+            assert_equal [["\x01first"], ["\x01second"]], [pub.receive, pub.receive].sort
+
+            30.times do |i|
+              pub << ["first", "payload-#{i}"]
+              pub << ["second", "payload-#{i}"]
+            end
+            30.times do |i|
+              assert_equal ["first", "payload-#{i}"], first.receive
+              assert_equal ["second", "payload-#{i}"], second.receive
+            end
+          ensure
+            first&.close
+            second&.close
+            pub&.close
+          end
+        end.wait
+      end
+
+      it "rejects encrypted mechanisms before binding or connecting" do
+        scheme = sentinel == "LZ4A" ? "lz4+tcp" : "zstd+tcp"
+        [:bind, :connect].each do |operation|
+          peer = OMQ::PUSH.new
+          peer.mechanism = EncryptedMechanism.new
+          assert_raises(ArgumentError) { peer.public_send(operation, "#{scheme}://127.0.0.1:12345") }
+        ensure
+          peer&.close
+        end
       end
 
       it "disconnects a malformed arena peer without delivering its valid prefix or killing healthy peers" do

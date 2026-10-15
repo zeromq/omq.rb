@@ -14,6 +14,7 @@ module OMQ
       class Lz4Connection < CompressedConnection
         DEFAULT_DICT_CAPACITY = 2048
         DEFAULT_TRAIN_TRIGGER = 100
+        ARENA_TARGET_BYTES   = 16 * 1024
 
         # @return [Integer, nil] wire bytesize of the last received
         #   message (sum across parts, compressed sentinel included).
@@ -66,7 +67,16 @@ module OMQ
 
         def write_messages(messages)
           messages.each { |parts| maybe_train!(parts) }
-          wires = messages.map { |parts| encode_parts(parts) }
+          wires = CompressionArena.each_batch(messages, target: ARENA_TARGET_BYTES).map do |batch|
+            if batch.size == 1
+              encode_parts(batch.first)
+            else
+              threshold = @send_dict_bytes ? LZ4::Codec::MIN_COMPRESS_WITH_DICT : LZ4::Codec::MIN_COMPRESS_NO_DICT
+              [CompressionArena.encode(batch, sentinel: LZ4::Codec::LZ4A_SENTINEL, threshold: threshold) do |data|
+                @send_codec.compress(data)
+              end]
+            end
+          end
           ship_send_dict!
           __getobj__.write_messages(wires)
         end

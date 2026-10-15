@@ -41,7 +41,7 @@ module OMQ
 
 
         def write_messages(messages)
-          compressed = messages.map { |parts| @codec.compress_parts(parts) }
+          compressed = @codec.compress_messages(messages)
           ship_dict!
           __getobj__.write_messages(compressed)
         end
@@ -154,7 +154,11 @@ module OMQ
             raise ProtocolError, "dict exceeds #{Codec::MAX_DICT_SIZE} bytes"
           end
 
-          @recv_codec      = Zrip::FrameCodec.new(dict: wire.b)
+          @recv_codec = begin
+            Zrip::FrameCodec.new(dict: wire.b)
+          rescue RuntimeError => error
+            raise ProtocolError, "invalid Zstd dictionary: #{error.message}"
+          end
           @recv_dict_bytes = wire.b
         end
 
