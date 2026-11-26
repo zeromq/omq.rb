@@ -10,6 +10,9 @@
 - ROUTER without `router_mandatory` drops a message whose peer is at HWM, like
   libzmq, instead of blocking the sender. With `router_mandatory` it still
   blocks.
+- REQ accepts a new request once the peer holding the unanswered one
+  disconnects, so a lazy pirate retry works without recreating the socket.
+  libzmq needs `ZMQ_REQ_RELAXED` for this.
 
 ### Fixed
 

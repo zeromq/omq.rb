@@ -81,6 +81,13 @@ module OMQ
       def connection_removed(connection)
         @connections.delete(connection)
         remove_round_robin_send_connection(connection)
+
+        # The peer holding our request is gone and will never reply.
+        # Allow the next send (lazy pirate retry) instead of wedging.
+        if @state == :waiting_reply && connection.equal?(@reply_connection)
+          @state            = :ready
+          @reply_connection = nil
+        end
       end
 
 

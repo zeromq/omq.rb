@@ -61,5 +61,28 @@ class OMQReqRepTest < Minitest::Spec
       end.wait
     end
 
+
+    it "allows a new request after the peer holding the last one disconnects" do
+      Async do |task|
+        rep = OMQ::REP.bind("inproc://reqrep-lost-peer")
+        req = OMQ::REQ.new
+        req.reconnect_interval = RECONNECT_INTERVAL
+        req.connect("inproc://reqrep-lost-peer")
+
+        req << "lost request"
+        assert_equal ["lost request"], rep.receive
+        rep.close
+        task.yield until req.connection_count == 0
+
+        rep = OMQ::REP.bind("inproc://reqrep-lost-peer")
+        req << "retry"
+        assert_equal ["retry"], rep.receive
+        rep << "reply"
+        assert_equal ["reply"], req.receive
+      ensure
+        req&.close
+        rep&.close
+      end
+    end
   end
 end
