@@ -55,6 +55,32 @@ class OMQZstdCodecSecurityTest < Minitest::Spec
     end
 
 
+    it "limits a frame to just under 1 GiB when max_message_size is unset" do
+      conn  = connection(codec)
+      # Frame header: single segment, 8-byte Frame_Content_Size of 1 GiB,
+      # which omq.rs refuses too.
+      frame = OMQ::Transport::ZstdTcp::Codec::ZSTD_MAGIC + [0xE0].pack("C") + [1 << 30].pack("Q<") + "\x01\x00\x00".b
+      error = assert_raises(OMQ::Transport::ZstdTcp::ProtocolError) do
+        conn.send(:decode_parts, [frame])
+      end
+      assert_match(/exceeds limit 1073741823/, error.message)
+    end
+
+
+    it "compresses no part a receiver with the default limit refuses" do
+      assert_equal OMQ::Transport::CompressedConnection::DEFAULT_DECODE_BUDGET,
+        OMQ::Transport::ZstdTcp::Codec::MAX_COMPRESSED_PART
+    end
+
+
+    it "sends a part above the compression limit as plaintext" do
+      c = codec
+      c.define_singleton_method(:max_compressed_part) { 1_000 }
+      wire = c.compress_parts([("A" * 5_000).b]).first
+      assert_equal OMQ::Transport::ZstdTcp::Codec::NUL_PREAMBLE, wire.byteslice(0, 4)
+    end
+
+
     it "allows a frame that fits the budget" do
       c = codec(max_message_size: 10_000)
       conn = connection(c)

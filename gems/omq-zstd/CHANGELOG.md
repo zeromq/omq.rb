@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-26
+
+### Changed
+
+- Each connection adapts its send level by default, within -7..4 from -1,
+  as omq.rs does: toward ratio when writes stall or the sender idles,
+  toward speed when compression keeps the send queue full. `level:` takes
+  an Integer for a fixed level, as before, or a Range to adapt within. The
+  default was a fixed -3. Fan-out sockets (PUB, XPUB, RADIO) keep a fixed
+  level: -1, or the end of the range nearest it. 4 KiB messages over a
+  2-10 MB/s link went 5-19% faster, and 23-78% faster over loopback, where
+  the level drops to -7.
+- `bind` and `connect` raise `ArgumentError` for options the transport
+  doesn't know, and for a level zrip lacks. They were ignored, and a bad
+  level failed at the first message.
+- With `max_message_size` unset, a message may decode to just under 1 GiB,
+  plaintext parts included, as in omq.rs. A frame could declare, and
+  decode to, any size.
+- A part of 1 GiB or more is sent as plaintext, as omq-proto 0.40 does;
+  omq.rs refuses such frames. A receiver still refuses the message unless
+  its `max_message_size` allows it.
+- The listener keeps accepting after `EMFILE`, `ECONNABORTED` and similar
+  errors, as `tcp://` does. One such error stopped it for good.
+- Require `zrip ~> 0.3.0`, for its adaptive level and codec stats.
+- Require `omq ~> 0.30`, for the decode budget and the accept loop.
+
+### Fixed
+
+- The README example used `level: 9`; zrip's highest level is 4.
+
 ## [0.5.1] - 2026-11-26
 
 ### Changed

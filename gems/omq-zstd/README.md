@@ -65,15 +65,37 @@ a `zstd+tcp://` peer. They speak different transports.
 
 ### Compression level
 
-Default is **`-3`** (negative = Zstd's fast strategy). Override at bind/connect:
+By default each connection adapts its send level within -7..4, starting at
+-1, as omq.rs does. Every window of at least 100 ms and 256 KiB of input, it
+steps toward ratio when writes stall or the sender idles, and toward speed
+when compression keeps the send queue full (zrip's `AdaptiveLevel`). An
+Integer fixes the level; a Range adapts within it:
 
 ```ruby
-pull.bind("zstd+tcp://127.0.0.1:0", level: 3)
-push.connect("zstd+tcp://127.0.0.1:5555", level: 9)
+pull.bind("zstd+tcp://127.0.0.1:0", level: 3)          # fixed
+push.connect("zstd+tcp://127.0.0.1:5555", level: -5..2) # adapts within -5..2
 ```
 
+Fan-out sockets (PUB, XPUB, RADIO) compress each message once for all
+subscribers, so they keep a fixed level: -1, or the end of the range nearest
+it. An adaptive connection has its own Zstd compressor; a fixed level shares
+one per socket.
+
 Per-direction, per-side: each side picks its own send level. Receiving works
-at any level the peer chose.
+at any level the peer chose. Unknown options raise `ArgumentError`.
+
+PUSH to PULL, 4 KiB messages, receiver and link in other processes
+(`bench/adaptive.rb`, YJIT, x86_64), plaintext MB/s with `level: -3` (the
+old default) and adaptive:
+
+| Messages | Unlimited link | 10 MB/s link | 2 MB/s link |
+|---|---|---|---|
+| JSON records | 212 / 259 | 64.0 / 69.8 | 13.9 / 14.6 |
+| Silesia dickens | 274 / 487 | 17.4 / 20.2 | 3.6 / 4.3 |
+| Silesia xml | 240 / 304 | 59.2 / 63.8 | 12.5 / 13.8 |
+
+On an unlimited link the level drops to -7; on slow links it climbs as far
+as a higher level compresses better (to 3 on xml).
 
 ### Dictionaries
 
@@ -129,9 +151,9 @@ cap is rejected on the offending part.
 pull.max_message_size = 1_048_576  # 1 MiB cap on the total message
 ```
 
-If `max_message_size` is `nil` (OMQ's default, unlimited), there is no
-ceiling on decompressed message size. Set a value that matches what
-your application would tolerate over plain `tcp://`.
+If `max_message_size` is `nil` (OMQ's default), a message may decode to
+just under 1 GiB, plaintext parts included, as in omq.rs. Set a value
+that matches what your application would tolerate over plain `tcp://`.
 
 Independent of the message-size knob, the dictionary itself is capped at
 8 KiB. A peer attempting to ship a larger dictionary, or send a message
@@ -162,7 +184,7 @@ transport layer. They are not delivered to the application.
 | Uncompressed sentinel | `00 00 00 00` |
 | Zstd frame sentinel | `28 B5 2F FD` (Zstandard frame magic) |
 | Dictionary sentinel | `37 A4 30 EC` |
-| Default level | -3 |
+| Default level | adapts within -7..4 from -1 |
 | Min compress, no dict | 512 B |
 | Min compress, with dict | 64 B |
 | Max dictionary size | 8 KiB |
@@ -196,7 +218,8 @@ It is **not** worth it for:
 `require "omq/zstd"` registers the `zstd+tcp` scheme on
 `OMQ::Engine.transports`. A `zstd+tcp` socket builds a per-engine
 `Codec` (one Zstd dictionary instance shared across all the socket's
-connections. Fan-out compresses each part exactly once). Each accepted
+connections. Fan-out compresses each part exactly once; an adaptive
+connection compresses with its own codec at its own level). Each accepted
 or dialed TCP connection is wrapped in `ZstdConnection`, a
 `SimpleDelegator` over the underlying ZMTP connection that intercepts
 `#send_message` / `#write_message` / `#receive_message`. Message parts

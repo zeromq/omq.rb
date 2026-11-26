@@ -27,15 +27,15 @@ Encrypted mechanisms such as CURVE cannot be combined with this transport.
 
 ## Why `lz4+tcp://`
 
-LZ4 has no entropy stage (no Huffman, no FSE), ~16 KiB of encoder state
+LZ4 has no entropy stage (no Huffman, no FSE), 8-72 KiB of encoder state
 per connection, and trades a **worse compression ratio** for
-**~4-8x faster encode** and **~3x less memory per connection**.
+**~4-8x faster encode** and **less memory per connection**.
 
 | | `zstd+tcp://` | `lz4+tcp://` |
 |---|---|---|
 | Encode, 1 KiB, no dict | ~3 µs | ~0.4 µs |
 | Encode, 1 KiB, with dict | ~3.5 µs | ~0.5 µs |
-| Memory per connection | ~256 KiB | ~16 KiB + dict |
+| Memory per connection | ~256 KiB | 8-72 KiB + dict |
 | Ratio, 1 KiB JSON no dict | ~45% | ~65% |
 | Ratio, 1 KiB JSON with dict | ~20% | ~35% |
 | Auto-trained dictionaries | yes | yes |
@@ -100,6 +100,27 @@ the first outgoing message. The receiver installs the dictionary
 and decompresses subsequent messages against it. Dictionary size
 is capped at **8 KiB** (same cap as `omq-zstd`).
 
+### Compression profile
+
+The sender compresses with lz4rip's ratio profile: smaller output for more
+compression time, which Ruby's per-message work and the copies across the
+binding make small. Any LZ4 decoder reads it, so peers on older versions
+decode it unchanged.
+
+JSON log records, `bench/codec_micro.rb` (YJIT, x86_64), against lz4rip's
+fast profile:
+
+| Message | Fast output | Ratio output | Ratio compress time |
+|---|---|---|---|
+| 1 KiB | 39.6% | 39.3% | -12% |
+| 16 KiB, an arena | 27.0% | 26.4% | +7% |
+| 1 MiB | 24.5% | 22.0% | +11% |
+
+The sending side of a connection holds an 8 KiB table, plus 64 KiB from its
+first message above 4 KiB. With a dictionary it holds 16 KiB of tables, plus
+64 KiB once message and dictionary pass 4 KiB and another 128 KiB from 64 KiB.
+The receiving side holds only its copies of the dictionary.
+
 ### Compression thresholds
 
 To avoid pessimizing tiny frames, the sender skips compression below:
@@ -115,8 +136,10 @@ sentinel + plaintext).
 ### Security limits
 
 The receiver bounds decompression by the socket's `max_message_size`
-(the same knob you'd use on a plain `tcp://` socket). It caps the
-**total decompressed size of all parts in a single message**. A peer
+(the same knob you'd use on a plain `tcp://` socket), or just under 1 GiB
+when it is unset, as in omq.rs. It caps the
+**total decompressed size of all parts in a single message**, and is checked
+against sizes a peer declares before anything is allocated for them. A peer
 attempting to send an over-budget message drops the connection.
 `OMQ::SocketDeadError` surfaces on the next `receive`.
 

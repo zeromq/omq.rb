@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-26
+
+### Changed
+
+- The sender compresses with lz4rip's ratio profile: on JSON records, 2%
+  smaller at 16 KiB and 10% at 1 MiB, for 7-11% more compression time (12%
+  less at 1 KiB). A sending connection holds 8-72 KiB of encoder state, up
+  to ~210 KiB with a dictionary and messages from 64 KiB, instead of 0, or
+  16 KiB with a dictionary. A receiving side holds only its dictionary
+  copies. Peers decode it unchanged.
+- `bind` and `connect` raise `ArgumentError` for options the transport
+  doesn't know. They were ignored.
+- With `max_message_size` unset, a message may decode to just under 1 GiB,
+  as in omq.rs. An LZ4M part reserves no more than its blocks can decode to.
+  A 12-byte part declaring a huge size raised `NoMemoryError`, which escaped
+  the connection's error handling.
+- The listener keeps accepting after `EMFILE`, `ECONNABORTED` and similar
+  errors, as `tcp://` does. One such error stopped it for good.
+- Require `lz4rip ~> 0.3.0`, for its ratio profile.
+- Require `omq ~> 0.30`, for the decode budget and the accept loop.
+
 ## [0.4.1] - 2026-11-26
 
 ### Changed

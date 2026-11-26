@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-11-26
+
 ### Added
 
 - Added `max_message_parts` (default 1024, like omq.rs; `nil` = unlimited). A

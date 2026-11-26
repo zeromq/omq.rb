@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.11.0] - 2026-11-26
+
 ### Added
 
 - Added `Connection#pause_reading` and `#reading_paused?` so a reader blocked on

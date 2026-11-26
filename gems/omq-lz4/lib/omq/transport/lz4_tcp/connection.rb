@@ -16,6 +16,11 @@ module OMQ
         DEFAULT_TRAIN_TRIGGER = 100
         ARENA_TARGET_BYTES   = 16 * 1024
 
+        # The sender compresses with lz4rip's ratio profile: smaller output,
+        # for compression time that Ruby's per-message work and the copies
+        # across the binding make small. Any LZ4 decoder reads it.
+        SEND_PROFILE = :ratio
+
         # @return [Integer, nil] wire bytesize of the last received
         #   message (sum across parts, compressed sentinel included).
         attr_reader :last_wire_size_in
@@ -24,7 +29,7 @@ module OMQ
           super(conn, max_message_size: max_message_size,
                 arena_sentinel: LZ4::Codec::LZ4A_SENTINEL, protocol_error: LZ4::ProtocolError)
 
-          @recv_codec       = build_block_codec(nil)
+          @recv_codec       = Lz4rip::BlockCodec.new
           @recv_dict_bytes  = nil
           @last_wire_size_in = nil
 
@@ -93,11 +98,7 @@ module OMQ
 
 
         def build_block_codec(dict_bytes)
-          if dict_bytes
-            Lz4rip::BlockCodec.new(dict: dict_bytes)
-          else
-            Lz4rip::BlockCodec.new
-          end
+          Lz4rip::BlockCodec.new(dict: dict_bytes, profile: SEND_PROFILE)
         end
 
 
@@ -153,7 +154,7 @@ module OMQ
         def decode_parts(parts)
           decoded   = []
           all_dicts = true
-          budget    = @max_message_size
+          budget    = @decode_budget
 
           parts.each do |wire|
             raise LZ4::ProtocolError, "wire part too short (< 4 bytes)" if wire.bytesize < 4

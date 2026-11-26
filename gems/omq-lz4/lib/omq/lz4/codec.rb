@@ -193,7 +193,10 @@ module OMQ
           decompressed_size = wire_bytes.byteslice(4, 8).unpack1("Q<")
           check_size!(decompressed_size, max_size)
 
-          output = String.new(capacity: decompressed_size, encoding: Encoding::BINARY)
+          # The size comes from the peer: reserve no more than its blocks
+          # can decode to (a byte of an LZ4 block decodes to at most 255).
+          capacity = [decompressed_size, (wire_bytes.bytesize - 12) * 255].min
+          output   = String.new(capacity: capacity, encoding: Encoding::BINARY)
           offset = 12
           remaining = decompressed_size
 

@@ -6,12 +6,14 @@
 #   require "omq/zstd"
 #
 #   push = OMQ::PUSH.new
-#   push.connect("zstd+tcp://127.0.0.1:5555", level: -3)
+#   push.connect("zstd+tcp://127.0.0.1:5555")             # adapts in -7..4
+#   push.connect("zstd+tcp://127.0.0.1:5555", level: -3)  # fixed level
 
 require "omq"
 require "zrip"
 
 require_relative "zstd_tcp/codec"
+require_relative "zstd_tcp/adaptive_sender"
 require_relative "zstd_tcp/connection"
 require_relative "zstd_tcp/transport"
 

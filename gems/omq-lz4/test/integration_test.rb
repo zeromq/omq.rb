@@ -57,6 +57,95 @@ class OMQLZ4IntegrationTest < Minitest::Spec
     end
 
 
+    it "round-trips ratio profile output, with and without a dict" do
+      dict  = ("event=login user=alice region=eu-west payload=" * 8).b
+      words = %w[alpha bravo charlie delta echo foxtrot golf hotel india juliet]
+      text  = Array.new(2_000) { |i| words[(i * 7) % words.size] + i.to_s }.join(" ").b
+
+      Sync do
+        pull  = OMQ::PULL.new
+        push  = OMQ::PUSH.new
+        pull2 = OMQ::PULL.new
+        push2 = OMQ::PUSH.new
+        uri   = pull.bind("lz4+tcp://127.0.0.1:0")
+        uri2  = pull2.bind("lz4+tcp://127.0.0.1:0")
+        push.connect(uri.to_s)
+        push2.connect(uri2.to_s, dict: dict)
+
+        push << [text]
+        assert_equal [text], pull.receive
+        push2 << [dict + "first"]
+        assert_equal [dict + "first"], pull2.receive
+      ensure
+        [push, pull, push2, pull2].each { |s| s&.close }
+      end
+    end
+
+
+    it "sends smaller parts than the fast profile" do
+      words = %w[alpha bravo charlie delta echo foxtrot golf hotel india juliet]
+      rng   = Random.new(7)
+      text  = Array.new(3_000) { words[(rng.rand**2 * words.size).to_i] + rng.rand(50).to_s }.join(" ").b
+      conn  = OMQ::Transport::Lz4Tcp::Lz4Connection.new(Object.new, send_dict_bytes: nil, max_message_size: nil)
+      sent  = conn.send(:encode_parts, [text]).first.bytesize
+      fast  = OMQ::LZ4::Codec.encode_part(text, block_codec: Lz4rip::BlockCodec.new).bytesize
+      assert_operator sent, :<, fast
+    end
+
+
+    it "rejects unknown options" do
+      Sync do
+        pull = OMQ::PULL.new
+        push = OMQ::PUSH.new(linger: 0)
+        uri  = pull.bind("lz4+tcp://127.0.0.1:0")
+        assert_raises(ArgumentError) { push.connect(uri.to_s, profile: :ratio) }
+        assert_raises(ArgumentError) { push.connect(uri.to_s, levle: 3) }
+        assert_raises(ArgumentError) { pull.bind("lz4+tcp://127.0.0.1:0", level: 3) }
+      ensure
+        push&.close
+        pull&.close
+      end
+    end
+
+
+    it "keeps accepting after a transient accept error" do
+      Sync do
+        pull = OMQ::PULL.new
+        events = []
+        pull.monitor { |event| events << event.type }
+        uri    = pull.bind("lz4+tcp://127.0.0.1:0")
+        server = pull.instance_variable_get(:@engine).listeners.values.first.instance_variable_get(:@servers).first
+
+        # The accept after the first client fails once with EMFILE.
+        original = server.method(:accept)
+        failed   = false
+        server.define_singleton_method(:accept) do |*args|
+          unless failed
+            failed = true
+            raise Errno::EMFILE
+          end
+
+          original.call(*args)
+        end
+
+        first = OMQ::PUSH.new(linger: 0)
+        first.connect(uri.to_s)
+        first << ["first"]
+        assert_equal ["first"], pull.receive
+
+        second = OMQ::PUSH.new(linger: 0)
+        second.connect(uri.to_s)
+        second << ["second"]
+        assert_equal ["second"], pull.receive
+        assert_includes events, :accept_failed
+      ensure
+        second&.close
+        first&.close
+        pull&.close
+      end
+    end
+
+
     it "ships a configured sender-side dict once and round-trips subsequent messages" do
       dict = ("event=login user=alice payload=" * 10).b
 

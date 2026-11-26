@@ -11,10 +11,18 @@ module OMQ
         attr_reader :last_wire_size_in
 
 
-        def initialize(conn, codec)
+        # @param conn [Protocol::ZMTP::Connection]
+        # @param codec [Codec] the socket's codec
+        # @param adaptive [Boolean] adapt the send level on this connection,
+        #   within the codec's range
+        # @param send_hwm [Integer, nil] the socket's send HWM
+        # @param queued [#call, nil] whether the socket has messages queued
+        #   to send
+        def initialize(conn, codec, adaptive: false, send_hwm: nil, queued: nil)
           super(conn, max_message_size: codec.max_message_size,
                 arena_sentinel: Codec::ARENA_MAGIC, protocol_error: ProtocolError)
           @codec              = codec
+          @sender             = AdaptiveSender.new(codec, send_hwm: send_hwm, queued: queued) if adaptive && codec.level_range
           @dict_shipped       = false
           # FrameCodec is the decoder. Starts no-dict; when a dict
           # shipment arrives on this direction, we build a fresh
@@ -27,27 +35,54 @@ module OMQ
 
 
         def send_message(parts)
-          compressed = @codec.compress_parts(parts)
+          compressed = @codec.compress_parts(parts, send_codec)
           ship_dict!
-          __getobj__.send_message(compressed)
+          timed { __getobj__.send_message(compressed) }
+          @sender&.note_batch([parts])
+          @sender&.maybe_adapt
         end
 
 
         def write_message(parts)
-          compressed = @codec.compress_parts(parts)
+          compressed = @codec.compress_parts(parts, send_codec)
           ship_dict!
-          __getobj__.write_message(compressed)
+          timed { __getobj__.write_message(compressed) }
+          @sender&.note_batch([parts])
         end
 
 
         def write_messages(messages)
-          compressed = @codec.compress_messages(messages)
+          compressed = @codec.compress_messages(messages, send_codec)
           ship_dict!
-          __getobj__.write_messages(compressed)
+          timed { __getobj__.write_messages(compressed) }
+          @sender&.note_batch(messages)
+        end
+
+
+        def flush
+          timed { __getobj__.flush }
+          @sender&.maybe_adapt
         end
 
 
         private
+
+
+        def send_codec
+          @sender ? @sender.frame_codec : @codec.send_codec
+        end
+
+
+        # Counts the time a write takes toward the adaptation window. A write
+        # waits on the link when io-stream drains its buffer, past 64 KiB.
+        def timed
+          return yield unless @sender
+
+          started = Async::Clock.now
+          yield
+        ensure
+          @sender&.note_write(Async::Clock.now - started) if started
+        end
 
 
         def decompress_arena(data, size)
@@ -71,7 +106,7 @@ module OMQ
 
 
         def decode_parts(parts)
-          budget    = @codec.max_message_size
+          budget    = @decode_budget
           decoded   = []
           all_dicts = true
 
