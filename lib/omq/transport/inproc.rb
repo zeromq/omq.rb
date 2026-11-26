@@ -74,6 +74,17 @@ module OMQ
         end
 
 
+        # Creates an inproc dialer.
+        #
+        # @param endpoint [String] e.g. "ruby://my-endpoint"
+        # @param engine [Engine] the connecting engine
+        # @return [Dialer]
+        #
+        def dialer(endpoint, engine, **)
+          Dialer.new(canonical_endpoint(endpoint), engine)
+        end
+
+
         # Connects to a bound inproc endpoint.
         #
         # @param endpoint [String] e.g. "ruby://my-endpoint"
@@ -221,6 +232,39 @@ module OMQ
             end
           end
         end
+      end
+
+
+      # An inproc dialer: stateful factory for outgoing connections.
+      #
+      # Created once per {Engine#connect}, stored in +@dialers[endpoint]+.
+      # {Engine#connect} calls {#connect} synchronously; {Engine::Reconnect}
+      # calls it again after the bound peer goes away.
+      #
+      class Dialer
+        # @return [String] the endpoint this dialer connects to
+        #
+        attr_reader :endpoint
+
+
+        # @param endpoint [String] e.g. "ruby://my-endpoint"
+        # @param engine [Engine]
+        #
+        def initialize(endpoint, engine)
+          @endpoint = endpoint
+          @engine   = engine
+        end
+
+
+        # Links to the bound endpoint, or starts a background retry
+        # if nothing is bound yet.
+        #
+        # @return [void]
+        #
+        def connect
+          Inproc.connect(@endpoint, @engine)
+        end
+
       end
 
 

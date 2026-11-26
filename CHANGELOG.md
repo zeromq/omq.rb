@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Reconnected in-process (`ruby://`, `inproc://`) connect sockets after the
+  bound peer closes, instead of raising `NoMethodError` in the connection
+  supervisor. A new socket bound to the same endpoint now receives messages
+  again (#30).
+
 ## [0.29.0] - 2026-10-15
 
 ### Added

@@ -191,6 +191,33 @@ class OMQPushPullTest < Minitest::Spec
       end
     end
 
+    # -- binder closes, new binder appears (inproc) --------------------------
+
+    it "reconnects inproc after the binder closes and a new one binds" do
+      Async do
+        pull = OMQ::PULL.bind("inproc://dg-inproc-rebind")
+        push = OMQ::PUSH.new
+        push.reconnect_interval = RECONNECT_INTERVAL
+        push.connect("inproc://dg-inproc-rebind")
+
+        push << "first"
+        assert_equal ["first"], pull.receive
+
+        pull.close
+        push.all_peers_gone.wait
+        pull = OMQ::PULL.bind("inproc://dg-inproc-rebind")
+
+        push << "second"
+        msg = Async::Task.current.with_timeout(0.5) do
+          pull.receive
+        end
+        assert_equal ["second"], msg
+      ensure
+        push&.close
+        pull&.close
+      end
+    end
+
     # -- connect before bind (IPC) -------------------------------------------
 
     it "delivers messages when IPC connect happens before bind" do
