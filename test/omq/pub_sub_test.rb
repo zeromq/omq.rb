@@ -378,6 +378,20 @@ class OMQPubSubTest < Minitest::Spec
     end
 
 
+    it "reports XPUB cancels for a subscriber that disconnects" do
+      Async do
+        xpub = OMQ::XPUB.bind("inproc://xpub-lost-subscriber")
+        sub  = OMQ::SUB.connect("inproc://xpub-lost-subscriber")
+        sub.subscribe("x")
+        assert_equal ["\x01x".b], xpub.receive
+
+        sub.close
+        assert_equal ["\x00x".b], xpub.receive
+      ensure
+        xpub&.close
+      end
+    end
+
     it "sends XSUB subscriptions made before the publisher connected" do
       Async do
         port = TCPServer.open("127.0.0.1", 0) { it.addr[1] }

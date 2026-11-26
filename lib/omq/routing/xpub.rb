@@ -56,8 +56,9 @@ module OMQ
       #
       def connection_removed(connection)
         @connections.delete(connection)
-        @subscriptions.delete(connection)
+        prefixes = @subscriptions.delete(connection)
         remove_fan_out_send_connection(connection)
+        report_lost_subscriptions(prefixes)
       end
 
 
@@ -81,6 +82,27 @@ module OMQ
 
       # Expose unsubscription to application as data message.
       #
+      # A lost subscriber's subscriptions end with it. Report a cancel
+      # per prefix, as libzmq does, so a forwarder can drop them
+      # upstream. Queued from its own task: teardown must not block on a
+      # full receive queue.
+      #
+      # @param prefixes [Set<String>, nil]
+      #
+      def report_lost_subscriptions(prefixes)
+        return if prefixes.nil? || prefixes.empty?
+        return if @engine.closed?
+
+        cancels = prefixes.map { |prefix| ["\x00#{prefix}".b] }
+
+        @engine.barrier.async(transient: true, annotation: "xpub lost subscriptions") do
+          cancels.each { |msg| @recv_queue.enqueue(msg) }
+        rescue Async::Queue::ClosedError
+          # socket closed meanwhile
+        end
+      end
+
+
       def on_cancel(conn, prefix)
         super
         @recv_queue.enqueue(["\x00#{prefix}".b])

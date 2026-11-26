@@ -111,6 +111,9 @@
   or reconnects, like libzmq. Subscriptions sent before the first handshake were
   dropped, and a restarted publisher never got them back. A cancel goes out only
   when the last subscription to its prefix is gone.
+- Reported an XPUB cancel for each subscription of a subscriber that
+  disconnects, like libzmq, so forwarders drop it upstream instead of keeping it
+  forever.
 
 ## [0.29.1] - 2026-11-26
 
