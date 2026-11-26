@@ -54,9 +54,9 @@ module OMQ
 
         @engine.start_recv_pump(connection, @recv_queue)
 
-        unless connection.is_a?(Transport::Inproc::Pipe)
-          start_send_pump(connection)
-        end
+        # Inproc pipes take the direct path in #enqueue, but the pump
+        # still drains messages queued while there was no peer.
+        start_send_pump(connection)
       end
 
 
@@ -69,9 +69,13 @@ module OMQ
 
       # @param parts [Array<String>]
       #
+      # Inproc peers get messages written straight into their receive
+      # queue, unless older messages still wait in the send queue.
+      #
       def enqueue(parts)
         conn = @connection
-        if conn.is_a?(Transport::Inproc::Pipe) && conn.direct_recv_queue
+
+        if conn.is_a?(Transport::Inproc::Pipe) && conn.direct_recv_queue && @send_queue.empty?
           conn.send_message(parts)
         else
           @send_queue.enqueue(parts)

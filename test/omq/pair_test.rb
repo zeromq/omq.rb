@@ -65,5 +65,24 @@ class OMQPairTest < Minitest::Spec
         server&.close
       end
     end
+
+
+    it "delivers inproc messages sent before the peer bound" do
+      Async do
+        client = OMQ::PAIR.new.tap { it.linger = 0 }
+        client.reconnect_interval = RECONNECT_INTERVAL
+        client.connect("inproc://pair-early-send")
+        client << "early"
+
+        server = OMQ::PAIR.bind("inproc://pair-early-send")
+        assert_equal ["early"], server.receive
+
+        client << "later"
+        assert_equal ["later"], server.receive
+      ensure
+        client&.close
+        server&.close
+      end
+    end
   end
 end

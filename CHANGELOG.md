@@ -59,6 +59,8 @@
   REP, SERVER, PEER, XSUB, and PUB/XPUB with `on_mute: :block`). The queue was
   dropped but never closed, so the sender hung forever; the message is now
   dropped.
+- Delivered in-process PAIR messages sent while there was no peer. They stayed
+  in the send queue because inproc PAIR links had no send pump.
 
 ## [0.29.1] - 2026-11-26
 
