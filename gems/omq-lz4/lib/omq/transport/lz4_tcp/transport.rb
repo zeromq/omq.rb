@@ -12,6 +12,9 @@ module OMQ
     module Lz4Tcp
       SCHEME = "lz4+tcp"
 
+      # Options a listener or dialer passes to each of its connections.
+      ConnectionSettings = Data.define(:send_dict_bytes, :auto_dict)
+
       class << self
         # Called by OMQ::Engine::ConnectionLifecycle after the ZMTP
         # handshake completes; we return the default connection class
@@ -35,10 +38,9 @@ module OMQ
         #   `:capacity` and/or `:trigger` keys. Mutually exclusive
         #   with `dict:`.
         # @return [Listener]
-        def listener(endpoint, engine, dict: nil, auto_dict: nil, **)
-          validate_security!(engine)
-          validate_dict!(dict)
-          validate_auto_dict!(auto_dict, dict)
+        # @raise [ArgumentError] on an unknown option
+        def listener(endpoint, engine, dict: nil, auto_dict: nil)
+          settings = connection_settings(engine, dict, auto_dict)
 
           host, port  = parse_endpoint(endpoint)
           lookup_host = normalize_bind_host(host)
@@ -53,7 +55,7 @@ module OMQ
           host_part    = display_host.include?(":") ? "[#{display_host}]" : display_host
           resolved     = "#{SCHEME}://#{host_part}:#{actual_port}"
 
-          Listener.new(resolved, servers, actual_port, engine, dict&.b, normalize_auto_dict(auto_dict))
+          Listener.new(resolved, servers, actual_port, engine, settings)
         end
 
 
@@ -65,11 +67,9 @@ module OMQ
         # @param auto_dict [true, Hash, nil] enable automatic dictionary
         #   training. See `listener` for details.
         # @return [Dialer]
-        def dialer(endpoint, engine, dict: nil, auto_dict: nil, **)
-          validate_security!(engine)
-          validate_dict!(dict)
-          validate_auto_dict!(auto_dict, dict)
-          Dialer.new(endpoint, engine, dict&.b, normalize_auto_dict(auto_dict))
+        # @raise [ArgumentError] on an unknown option
+        def dialer(endpoint, engine, dict: nil, auto_dict: nil)
+          Dialer.new(endpoint, engine, connection_settings(engine, dict, auto_dict))
         end
 
 
@@ -111,6 +111,14 @@ module OMQ
 
 
         private
+
+
+        def connection_settings(engine, dict, auto_dict)
+          validate_security!(engine)
+          validate_dict!(dict)
+          validate_auto_dict!(auto_dict, dict)
+          ConnectionSettings.new(send_dict_bytes: dict&.b, auto_dict: normalize_auto_dict(auto_dict))
+        end
 
 
         def validate_security!(engine)
@@ -170,11 +178,10 @@ module OMQ
       class Dialer
         attr_reader :endpoint
 
-        def initialize(endpoint, engine, dict_bytes, auto_dict)
-          @endpoint  = endpoint
-          @engine    = engine
-          @dict_bytes = dict_bytes
-          @auto_dict = auto_dict
+        def initialize(endpoint, engine, settings)
+          @endpoint = endpoint
+          @engine   = engine
+          @settings = settings
         end
 
 
@@ -193,12 +200,7 @@ module OMQ
 
 
         def wrap_connection(conn)
-          Lz4Connection.new(
-            conn,
-            send_dict_bytes:  @dict_bytes,
-            max_message_size: @engine.options.max_message_size,
-            auto_dict:        @auto_dict,
-          )
+          Lz4Connection.new(conn, max_message_size: @engine.options.max_message_size, **@settings.to_h)
         end
       end
 
@@ -207,24 +209,18 @@ module OMQ
       class Listener
         attr_reader :endpoint, :port
 
-        def initialize(endpoint, servers, port, engine, dict_bytes, auto_dict)
-          @endpoint  = endpoint
-          @servers   = servers
-          @port      = port
-          @engine    = engine
-          @dict_bytes = dict_bytes
-          @auto_dict = auto_dict
-          @tasks     = []
+        def initialize(endpoint, servers, port, engine, settings)
+          @endpoint = endpoint
+          @servers  = servers
+          @port     = port
+          @engine   = engine
+          @settings = settings
+          @tasks    = []
         end
 
 
         def wrap_connection(conn)
-          Lz4Connection.new(
-            conn,
-            send_dict_bytes:  @dict_bytes,
-            max_message_size: @engine.options.max_message_size,
-            auto_dict:        @auto_dict,
-          )
+          Lz4Connection.new(conn, max_message_size: @engine.options.max_message_size, **@settings.to_h)
         end
 
 

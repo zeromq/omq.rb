@@ -57,6 +57,21 @@ class OMQLZ4IntegrationTest < Minitest::Spec
     end
 
 
+    it "rejects unknown options" do
+      Sync do
+        pull = OMQ::PULL.new
+        push = OMQ::PUSH.new(linger: 0)
+        uri  = pull.bind("lz4+tcp://127.0.0.1:0")
+        assert_raises(ArgumentError) { push.connect(uri.to_s, profile: :ratio) }
+        assert_raises(ArgumentError) { push.connect(uri.to_s, levle: 3) }
+        assert_raises(ArgumentError) { pull.bind("lz4+tcp://127.0.0.1:0", level: 3) }
+      ensure
+        push&.close
+        pull&.close
+      end
+    end
+
+
     it "keeps accepting after a transient accept error" do
       Sync do
         pull = OMQ::PULL.new
