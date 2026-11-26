@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.30.1] - 2026-11-27
+
 ### Added
 
 - `Engine.endpoint_uri(endpoint)`: the URI `#bind` and `#connect` return,

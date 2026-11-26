@@ -2,11 +2,14 @@
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-11-27
+
 ### Fixed
 
 - `#bind` and `#connect` return a URI that keeps the @ of an abstract IPC
   name, through omq's `Engine.endpoint_uri`. They returned `ipc://name` for
   `ipc://@name`, a relative file path.
+- Require `omq ~> 0.30, >= 0.30.1`, which has `Engine.endpoint_uri`.
 
 ## [0.3.4] - 2026-08-02
 

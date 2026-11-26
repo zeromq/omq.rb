@@ -2,7 +2,7 @@
 
 Gem::Specification.new do |s|
   s.name     = "omq-backend-libzmq"
-  s.version  = "0.3.4"
+  s.version  = "0.3.5"
   s.authors  = ["Patrik Wenger"]
   s.email    = ["paddor@gmail.com"]
   s.summary  = "libzmq backend for OMQ"
@@ -13,6 +13,6 @@ Gem::Specification.new do |s|
 
   s.files = Dir["lib/**/*.rb", "README.md", "LICENSE"]
 
-  s.add_dependency "omq", "~> 0.28"
+  s.add_dependency "omq", "~> 0.30", ">= 0.30.1"
   s.add_dependency "ffi"
 end

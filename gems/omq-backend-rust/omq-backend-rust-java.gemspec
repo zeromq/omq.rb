@@ -28,7 +28,7 @@ Gem::Specification.new do |s|
   ]
   s.require_paths = ["lib"]
 
-  s.add_dependency "omq", "~> 0.28"
+  s.add_dependency "omq", "~> 0.30", ">= 0.30.1"
   s.add_dependency "jar-dependencies", ">= 0.5.7"
   OMQ::Rust::OMQ_JAVA_CLASSIFIERS.each do |classifier|
     s.requirements << "jar io.github.paddor:omq-java:#{classifier}, #{OMQ::Rust::OMQ_JAVA_VERSION}"

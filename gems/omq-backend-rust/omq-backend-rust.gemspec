@@ -25,6 +25,6 @@ Gem::Specification.new do |s|
   ]
   s.require_paths = ["lib"]
 
-  s.add_dependency "omq", "~> 0.28"
+  s.add_dependency "omq", "~> 0.30", ">= 0.30.1"
   s.add_dependency "omq-rs", "~> 0.2", ">= 0.2.5"
 end

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.20.1 - 2026-11-27
+
 - `--lz4` help reads "LZ4 compression", without "(FAST)".
 
 ## 0.20.0 - 2026-11-26
