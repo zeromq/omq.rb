@@ -22,9 +22,10 @@ module OMQ
 
         USER_DICT_ID_RANGE = (32_768..(2**31 - 1)).freeze
 
-        # omq.rs decoders refuse a frame above 1 GiB, so a larger part goes
-        # as plaintext (omq-proto 0.40).
-        MAX_COMPRESSED_PART = 1 << 30
+        # omq.rs decoders refuse a frame of 1 GiB or more, so a larger part
+        # goes as plaintext (omq-proto 0.40). The decode budget without a
+        # `max_message_size` is the same.
+        MAX_COMPRESSED_PART = (1 << 30) - 1
 
 
         # @return [String, nil] the dictionary this socket sends with

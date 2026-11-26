@@ -6,10 +6,10 @@ require_relative "compression_arena"
 module OMQ
   module Transport
     class CompressedConnection < SimpleDelegator
-      # The most a message may decode to when `max_message_size` is unset,
-      # as in omq.rs. Sizes a peer declares are checked against it before
-      # anything is allocated for them.
-      DEFAULT_DECODE_BUDGET = 1 << 30
+      # The most a message may decode to when `max_message_size` is unset:
+      # just under 1 GiB, as in omq.rs. Sizes a peer declares are checked
+      # against it before anything is allocated for them.
+      DEFAULT_DECODE_BUDGET = (1 << 30) - 1
 
       attr_reader :last_wire_size_in
 
