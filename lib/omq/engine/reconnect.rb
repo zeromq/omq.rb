@@ -63,10 +63,10 @@ module OMQ
             break
           rescue Protocol::ZMTP::FatalHandshakeError
             break
-          rescue *CONNECTION_LOST, *CONNECTION_FAILED, Protocol::ZMTP::Error
+          rescue *CONNECTION_LOST, *CONNECTION_FAILED, Protocol::ZMTP::Error => error
             delay = next_delay(delay, max_delay)
             @engine.emit_monitor_event :connect_retried,
-                                       endpoint: @dialer.endpoint, detail: { interval: delay }
+                                       endpoint: @dialer.endpoint, detail: { interval: delay, error: error }
           end
         end
       end

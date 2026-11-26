@@ -35,6 +35,10 @@
   retrying and connected once a peer appeared; connect, disconnect, connect gave
   two connections. `#disconnect` now also stops a handshake in progress, and
   `#close` stops reconnect loops immediately.
+- Kept retrying an in-process connect after an incompatible socket bound the
+  endpoint first. The retry task died with an unhandled `Protocol::ZMTP::Error`,
+  so a compatible binder later never got the connection. `:connect_retried`
+  events now carry the `:error`.
 
 ## [0.29.1] - 2026-11-26
 
