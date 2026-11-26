@@ -506,10 +506,10 @@ class OMQCLICLIParserTest < Minitest::Spec
       assert opts[:ffi]
     end
 
-    it "parses -z as fast zstd compression (level -3)" do
+    it "parses -z as zstd compression at an adaptive level" do
       opts = OMQ::CLI::CliParser.parse(["push", "-c", "tcp://x:1", "-z"])
       assert_equal :zstd, opts[:compress]
-      assert_equal(-3, opts[:compress_level])
+      assert_nil opts[:compress_level]
     end
 
     it "parses -Z as better-ratio zstd compression (level 3)" do
@@ -596,7 +596,7 @@ class OMQCLICLIParserTest < Minitest::Spec
       assert_nil opts[:compress]
       assert_equal :lz4,  opts[:in_compress]
       assert_equal :zstd, opts[:out_compress]
-      assert_equal(-3, opts[:out_compress_level])
+      assert_nil opts[:out_compress_level]
     end
 
     it "treats -z before --in/--out as global compression" do

@@ -435,9 +435,9 @@ Both peers must pass `-z` (or otherwise opt into `zstd+tcp://`).
 
 | Flag | Effect |
 |------|--------|
-| `-z` | Compression at level **-3** (Zstd's fast strategy) |
-| `-Z` | Compression at level **3** (better ratio, more CPU) |
-| `--compress=LEVEL` | Custom level, e.g. `9`, `19`, `-1` |
+| `-z` | Compression at an adaptive level: each connection steps within -7..4 toward speed when compression is the limit and toward ratio when the link is |
+| `-Z` | Compression at fixed level **3** (better ratio, more CPU) |
+| `--compress=zstd:LEVEL` | Fixed level, e.g. `zstd:-1`, `zstd:4` |
 
 The sender auto-trains a dictionary from the first up-to-1000
 outgoing messages (or 100 KiB, whichever hits first), ships it inline

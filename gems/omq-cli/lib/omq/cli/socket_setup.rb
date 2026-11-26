@@ -22,10 +22,6 @@ module OMQ
       # it entirely with --recv-maxsz 0.
       DEFAULT_RECV_MAXSZ = 1 << 20
 
-      # Default zstd level when the user picks zstd without specifying one
-      # (e.g. `--compress=zstd`). Matches the `-z` shortcut.
-      DEFAULT_ZSTD_LEVEL = -3
-
       # Resolves compression state for a given pipe +side+ (:in, :out, or nil).
       # Per-side settings (in_compress / out_compress) override the global
       # +config.compress+. Returns +[codec, level]+ where codec is one of
@@ -63,14 +59,12 @@ module OMQ
 
 
       # Returns bind/connect kwargs for the chosen codec on the given
-      # +side+. Zstd accepts a +level:+; LZ4 takes no tuning knobs.
+      # +side+. Zstd takes a fixed +level:+; without one, each connection
+      # adapts its level. LZ4 takes no tuning knobs.
       #
       def self.compress_opts(config, side: nil)
         codec, level = resolve_compress(config, side)
-        case codec
-        when :zstd then { level: level || DEFAULT_ZSTD_LEVEL }
-        else            {}
-        end
+        codec == :zstd && level ? { level: level } : {}
       end
 
 

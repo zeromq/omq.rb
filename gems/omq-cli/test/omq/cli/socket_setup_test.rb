@@ -56,10 +56,9 @@ class OMQCLISocketSetupTest < Minitest::Spec
       assert_equal({ level: 3 }, OMQ::CLI::SocketSetup.compress_opts(cfg))
     end
 
-    it "defaults zstd level when unspecified" do
+    it "passes no level for zstd without one, so the level adapts" do
       cfg = make_config(type_name: "push", compress: :zstd, compress_level: nil)
-      assert_equal({ level: OMQ::CLI::SocketSetup::DEFAULT_ZSTD_LEVEL },
-                   OMQ::CLI::SocketSetup.compress_opts(cfg))
+      assert_equal({}, OMQ::CLI::SocketSetup.compress_opts(cfg))
     end
 
     it "returns empty kwargs for lz4" do
@@ -75,8 +74,8 @@ class OMQCLISocketSetupTest < Minitest::Spec
 
 
   describe "OMQ::CLI::SocketSetup.compress_flag" do
-    it "labels zstd -3 as -z" do
-      cfg = make_config(type_name: "push", compress: :zstd, compress_level: -3)
+    it "labels adaptive zstd as -z" do
+      cfg = make_config(type_name: "push", compress: :zstd, compress_level: nil)
       assert_equal "-z", OMQ::CLI::SocketSetup.compress_flag(cfg)
     end
 
