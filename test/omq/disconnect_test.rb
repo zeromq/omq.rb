@@ -11,7 +11,7 @@ class OMQDisconnectTest < Minitest::Spec
 
 
     {
-      "tcp"    => -> { "tcp://127.0.0.1:#{TCPServer.open("127.0.0.1", 0) { it.addr[1] }}" },
+      "tcp"    => -> { "tcp://127.0.0.1:#{TCPServer.open("127.0.0.1", 0) { |s| s.addr[1] }}" },
       "ipc"    => -> { "ipc://@omq-test-disconnect-#{$$}-#{rand(1 << 30)}" },
       "inproc" => -> { "inproc://disconnect-retry-#{rand(1 << 30)}" },
     }.each do |name, make_endpoint|
@@ -88,7 +88,7 @@ class OMQDisconnectTest < Minitest::Spec
 
     it "#unbind accepts the endpoint string passed to #bind" do
       Async do
-        port = TCPServer.open("127.0.0.1", 0) { it.addr[1] }
+        port = TCPServer.open("127.0.0.1", 0) { |s| s.addr[1] }
         pull = OMQ::PULL.new
         uri  = pull.bind("tcp://localhost:#{port}")
         refute_equal "tcp://localhost:#{port}", uri.to_s

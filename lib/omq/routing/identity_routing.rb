@@ -26,8 +26,8 @@ module OMQ
       #   those of dialed peers that are down
       #
       def send_queues_drained?
-        @route_by_conn.each_value.all? { it.queue.empty? } &&
-          @dial_routes.each_value.all? { it.queue.empty? }
+        @route_by_conn.each_value.all? { |route| route.queue.empty? } &&
+          @dial_routes.each_value.all? { |route| route.queue.empty? }
       end
 
 
@@ -37,7 +37,7 @@ module OMQ
       #
       def close_queues
         super
-        all_routes.each { it.queue.close }
+        all_routes.each { |route| route.queue.close }
       end
 
 

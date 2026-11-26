@@ -59,8 +59,10 @@ takes seconds, a hang is a bug.
   Blank lines between logical groups inside a method. One statement per line.
 - Constants first, then `attr_*`, then methods. Blank line before the
   closing `end` of a class.
-- Multi-line blocks use `do ... end`. On hot paths prefer `{ it.foo }` to
-  `&:foo`.
+- Multi-line blocks use `do ... end`. On hot paths prefer an explicit block
+  (`{ |c| c.foo }`) to `&:foo`.
+- No `it` block parameter in code that runs on Ruby 3.3 (core, protocol-zmtp,
+  omq-websocket, omq-backend-rust, their tests): 3.3 doesn't have it.
 - No `case/when/then` one-liners. No rubocop disable comments. No anonymous
   modules: anything that ends up in `ancestors` has a name.
 - Monotonic time is `Async::Clock.now`.

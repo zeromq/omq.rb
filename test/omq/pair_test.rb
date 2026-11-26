@@ -69,7 +69,7 @@ class OMQPairTest < Minitest::Spec
 
     it "delivers inproc messages sent before the peer bound" do
       Async do
-        client = OMQ::PAIR.new.tap { it.linger = 0 }
+        client = OMQ::PAIR.new.tap { |s| s.linger = 0 }
         client.reconnect_interval = RECONNECT_INTERVAL
         client.connect("inproc://pair-early-send")
         client << "early"
@@ -88,12 +88,12 @@ class OMQPairTest < Minitest::Spec
 
     it "refuses a second inproc peer, which takes over after the first leaves" do
       Async do |task|
-        server = OMQ::PAIR.new.tap { it.linger = 0 }
+        server = OMQ::PAIR.new.tap { |s| s.linger = 0 }
         server.bind("inproc://pair-second-peer")
-        first = OMQ::PAIR.new.tap { it.linger = 0 }
+        first = OMQ::PAIR.new.tap { |s| s.linger = 0 }
         first.connect("inproc://pair-second-peer")
 
-        second = OMQ::PAIR.new.tap { it.linger = 0 }
+        second = OMQ::PAIR.new.tap { |s| s.linger = 0 }
         second.reconnect_interval = RECONNECT_INTERVAL
         second.connect("inproc://pair-second-peer")
         task.yield until second.connection_count == 0
@@ -112,12 +112,12 @@ class OMQPairTest < Minitest::Spec
 
     it "redials a refused second endpoint once the first peer leaves" do
       Async do
-        a = OMQ::PAIR.new.tap { it.linger = 0 }
-        b = OMQ::PAIR.new.tap { it.linger = 0 }
+        a = OMQ::PAIR.new.tap { |s| s.linger = 0 }
+        b = OMQ::PAIR.new.tap { |s| s.linger = 0 }
         a_port = a.bind("tcp://127.0.0.1:0").port
         b_port = b.bind("tcp://127.0.0.1:0").port
 
-        client = OMQ::PAIR.new.tap { it.linger = 0 }
+        client = OMQ::PAIR.new.tap { |s| s.linger = 0 }
         client.reconnect_interval = RECONNECT_INTERVAL
         client.connect("tcp://127.0.0.1:#{a_port}")
         wait_connected(a)

@@ -44,7 +44,7 @@ class OMQPrefixSetTest < Minitest::Spec
 
     it "splits and merges shared labels" do
       set = PrefixSet.new
-      %w[abcd ab abx].each { set << it }
+      %w[abcd ab abx].each { |p| set << p }
 
       assert set.match?("abcdef")
       assert set.match?("abz")
@@ -76,10 +76,10 @@ class OMQPrefixSetTest < Minitest::Spec
 
     it "lists its prefixes" do
       set = PrefixSet.new
-      %w[b a ab].each { set << it }
+      %w[b a ab].each { |p| set << p }
 
       assert_equal %w[a ab b], set.to_a.sort
-      assert set.all? { it.encoding == Encoding::BINARY && it.frozen? }
+      assert set.all? { |p| p.encoding == Encoding::BINARY && p.frozen? }
     end
 
 
@@ -103,10 +103,10 @@ class OMQPrefixSetTest < Minitest::Spec
         assert_equal model.sort, set.to_a.sort
 
         topic = word.call + word.call
-        assert_equal model.any? { topic.start_with?(it) }, set.match?(topic), "topic #{topic.inspect}"
+        assert_equal model.any? { |p| topic.start_with?(p) }, set.match?(topic), "topic #{topic.inspect}"
       end
 
-      model.each { set.delete(it) }
+      model.each { |p| set.delete(p) }
       assert_nil set.instance_variable_get(:@root).children, "no nodes left behind"
     end
   end

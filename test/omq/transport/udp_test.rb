@@ -86,7 +86,7 @@ class OMQTransportUDPTest < Minitest::Spec
         second = OMQ::DISH.bind(group) # same group and port
 
         radio = OMQ::RADIO.connect(group)
-        [first, second].each { it.join("weather") }
+        [first, second].each { |dish| dish.join("weather") }
         Async::Task.current.yield
 
         radio.publish("weather", "everyone")
