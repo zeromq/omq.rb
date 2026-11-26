@@ -375,15 +375,17 @@ module Protocol
       #
       # @return [void]
       def close
-        if writing?
-          # A writer is mid-frame, maybe blocked on a peer that stopped
-          # reading. A buffered close would flush behind it and never
-          # return. Shut the socket down under it, which wakes the
-          # blocked write with an error, then close it.
-          raw = @io.respond_to?(:io) ? @io.io : @io
+        raw = @io.respond_to?(:io) ? @io.io : @io
+
+        if writing? && stalled?(raw)
+          # A writer is blocked on a peer that stopped reading. A
+          # buffered close would flush behind it and never return. Shut
+          # the socket down under it, which fails the blocked write,
+          # then close it.
           raw.shutdown if raw.respond_to?(:shutdown)
           raw.close
         else
+          # Idle, or a write still making progress: flush and close.
           @io.close
         end
       rescue IOError, SystemCallError
@@ -397,6 +399,14 @@ module Protocol
       end
 
       private
+
+
+      # @return [Boolean] true if +raw+ can't take more bytes right now
+      def stalled?(raw)
+        return false unless raw.respond_to?(:wait_writable)
+
+        !raw.wait_writable(0)
+      end
 
 
       # Per-frame wire overhead of the mechanism (0 for plaintext).
