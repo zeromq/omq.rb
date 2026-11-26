@@ -72,5 +72,31 @@ class OMQRouterDealerTest < Minitest::Spec
         router&.close
       end
     end
+
+
+    it "keeps routing to the peer that took over an identity after the old one leaves" do
+      Async do |task|
+        router = OMQ::ROUTER.bind("inproc://rd-handover")
+        router.router_mandatory = true
+
+        old_peer = OMQ::DEALER.new
+        old_peer.identity = "worker"
+        old_peer.connect("inproc://rd-handover")
+
+        new_peer = OMQ::DEALER.new
+        new_peer.identity = "worker"
+        new_peer.connect("inproc://rd-handover")
+        assert_equal 2, router.connection_count
+
+        old_peer.close
+        task.yield until router.connection_count == 1
+
+        router.send(["worker", "still routable"])
+        assert_equal ["still routable"], new_peer.receive
+      ensure
+        new_peer&.close
+        router&.close
+      end
+    end
   end
 end

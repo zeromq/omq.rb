@@ -65,7 +65,13 @@ module OMQ
       #
       def connection_removed(connection)
         identity = @identity_by_connection.delete(connection)
-        @connections_by_identity.delete(identity) if identity
+
+        # A newer peer may have taken over this identity. Only drop the
+        # route if it still points at the departing connection.
+        if identity && @connections_by_identity[identity].equal?(connection)
+          @connections_by_identity.delete(identity)
+        end
+
         @conn_queues.delete(connection)
       end
 

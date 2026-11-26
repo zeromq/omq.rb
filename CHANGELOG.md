@@ -14,6 +14,9 @@
 - Iterated snapshots of peers and subscriptions in PUB, XPUB, XSUB, SUB, RADIO
   and DISH. A peer joining while a send or subscribe was blocked raised
   `RuntimeError` inside `#connection_added`, so the new peer never registered.
+- Kept a ROUTER identity routable after a second peer took it over and the first
+  one left. The departing connection deleted the route that now pointed at the
+  new peer.
 
 ## [0.29.1] - 2026-11-26
 
