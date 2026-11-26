@@ -49,6 +49,7 @@ module OMQ
         @recv_queue  = recv_queue
         @engine      = engine
         @count_bytes = conn.instance_of?(Protocol::ZMTP::Connection) || conn.respond_to?(:last_wire_size_in)
+        @pausable    = conn.respond_to?(:pause_reading) && recv_queue.respond_to?(:limited?)
       end
 
 
@@ -125,7 +126,7 @@ module OMQ
               # async scheduler is FIFO on the ready list, so this
               # preserves log-before-stdout ordering for -vvv traces.
               engine.emit_verbose_msg_received(conn, transformed)
-              recv_queue.enqueue(transformed)
+              enqueue(transformed)
             end
 
             task.yield
@@ -137,6 +138,19 @@ module OMQ
           engine.record_disconnect_reason(conn, error)
         rescue => error
           engine.signal_fatal_error(error)
+        end
+      end
+
+
+      # Enqueues +msg+. When the queue is full, marks the connection's
+      # reading as paused while waiting, so the heartbeat doesn't take
+      # our own backpressure for a silent peer.
+      #
+      def enqueue(msg)
+        if @pausable && @recv_queue.limited?
+          @conn.pause_reading { @recv_queue.enqueue(msg) }
+        else
+          @recv_queue.enqueue(msg)
         end
       end
 
@@ -159,7 +173,7 @@ module OMQ
               msg.each { |part| part.freeze }
               msg.freeze
               engine.emit_verbose_msg_received(conn, msg)
-              recv_queue.enqueue(msg)
+              enqueue(msg)
 
               count += 1
 

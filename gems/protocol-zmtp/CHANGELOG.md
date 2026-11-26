@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- Added `Connection#pause_reading` and `#reading_paused?` so a reader blocked on
+  local backpressure can keep heartbeat expiry from treating the peer as silent.
+
 ### Fixed
 
 - Checked `max_message_size` against the decrypted frame. CURVE frames were

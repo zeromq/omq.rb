@@ -93,6 +93,10 @@
 - Expired a silent peer while a send to it was blocked. The heartbeat queued its
   PING behind the stuck write and never got to the expiry check, so a peer that
   stopped reading stayed connected forever.
+- Kept a live peer connected while the application doesn't read. With a full
+  receive queue the receive pump stops reading, so PONGs went unread and the
+  heartbeat dropped the connection, losing buffered data; it reconnected and
+  repeated.
 
 ## [0.29.1] - 2026-11-26
 

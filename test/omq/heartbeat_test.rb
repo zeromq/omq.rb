@@ -168,6 +168,34 @@ class OMQHeartbeatTest < Minitest::Spec
     end
 
 
+    it "keeps a live peer while the application doesn't read" do
+      Async do |task|
+        pull = OMQ::PULL.new.tap { |s| s.linger = 0 }
+        pull.recv_hwm           = 1
+        pull.heartbeat_interval = 0.01
+        events = []
+        pull.monitor { |event| events << event.type }
+        port = pull.bind("tcp://127.0.0.1:0").port
+
+        push = OMQ::PUSH.new.tap { |s| s.linger = 0 }
+        push.connect("tcp://127.0.0.1:#{port}")
+        flood = task.async do
+          loop { push << "x" * 1024 }
+        end
+
+        # Many heartbeat periods with the receive queue full.
+        sleep 0.15
+
+        refute_includes events, :disconnected
+        assert_equal ["x" * 1024], pull.receive
+      ensure
+        flood&.stop
+        push&.close
+        pull&.close
+      end
+    end
+
+
     it "detects dead peer via heartbeat timeout" do
       Async do
         rep = OMQ::REP.new.tap { |s| s.linger = 0 }

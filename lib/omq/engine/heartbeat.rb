@@ -77,6 +77,9 @@ module OMQ
       def expired?(now)
         return false unless @pending
 
+        # We stopped reading (full receive queue), not the peer.
+        return false if @conn.respond_to?(:reading_paused?) && @conn.reading_paused?
+
         last = @conn.last_received_at
 
         if last && last >= @pending

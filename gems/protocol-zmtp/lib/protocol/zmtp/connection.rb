@@ -83,6 +83,7 @@ module Protocol
         @metadata         = opts.empty? ? nil : opts.transform_keys(&:to_s)
         @mutex            = Mutex.new
         @last_received_at = nil
+        @reading_paused   = false
 
         self.max_message_size = max_message_size
 
@@ -328,6 +329,27 @@ module Protocol
       rescue Error
         close
         raise
+      end
+
+
+      # Marks a stretch where the reader stopped on purpose, e.g. while
+      # it waits for room in a full receive queue. Frames may be sitting
+      # unread, so silence from the peer means nothing then: heartbeat
+      # expiry ignores it, and the clock restarts when reading resumes.
+      #
+      # @yield the blocking step
+      def pause_reading
+        @reading_paused = true
+        yield
+      ensure
+        @reading_paused = false
+        touch_heartbeat
+      end
+
+
+      # @return [Boolean] whether the reader is paused by local backpressure
+      def reading_paused?
+        @reading_paused
       end
 
 
