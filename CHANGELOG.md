@@ -107,6 +107,10 @@
   unsubscribing once keeps the subscription, and peers get the CANCEL only when
   the last one goes. `#subscribe` and `#unsubscribe` no longer raise when a peer
   is disconnecting.
+- Recorded XSUB subscriptions and replayed them to every publisher that connects
+  or reconnects, like libzmq. Subscriptions sent before the first handshake were
+  dropped, and a restarted publisher never got them back. A cancel goes out only
+  when the last subscription to its prefix is gone.
 
 ## [0.29.1] - 2026-11-26
 

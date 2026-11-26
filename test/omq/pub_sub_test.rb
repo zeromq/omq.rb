@@ -376,6 +376,35 @@ class OMQPubSubTest < Minitest::Spec
         xpub&.close
       end
     end
+
+
+    it "sends XSUB subscriptions made before the publisher connected" do
+      Async do
+        port = TCPServer.open("127.0.0.1", 0) { it.addr[1] }
+
+        xsub = OMQ::XSUB.new.tap { it.linger = 0 }
+        xsub.reconnect_interval = RECONNECT_INTERVAL
+        xsub.connect("tcp://127.0.0.1:#{port}")
+        xsub << "\x01news".b
+
+        pub = OMQ::PUB.new.tap { it.linger = 0 }
+        pub.bind("tcp://127.0.0.1:#{port}")
+        pub.subscriber_joined.wait
+        pub << "news 1"
+        assert_equal ["news 1"], xsub.receive
+
+        # A restarted publisher gets the subscription again.
+        pub.close
+        pub = OMQ::PUB.new.tap { it.linger = 0 }
+        pub.bind("tcp://127.0.0.1:#{port}")
+        pub.subscriber_joined.wait
+        pub << "news 2"
+        assert_equal ["news 2"], xsub.receive
+      ensure
+        xsub&.close
+        pub&.close
+      end
+    end
   end
 
 
