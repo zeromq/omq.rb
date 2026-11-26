@@ -16,25 +16,41 @@ BACKENDS=${OMQ_SYSTEM_BACKENDS:-"ruby rust libzmq"}
 echo "=== omq system tests ==="
 echo
 
+# Succeeds if omq starts with +backend+; otherwise prints why not.
 backend_available() {
   backend="$1"
   case "$backend" in
     ruby)
-      (cd "$CLI_ROOT" && OMQ_DEV=1 bundle exec ruby -Ilib exe/omq --version >/dev/null 2>&1)
+      flags=""
       ;;
     rust|libzmq)
-      (cd "$CLI_ROOT" && OMQ_DEV=1 bundle exec ruby -Ilib exe/omq --backend "$backend" --version >/dev/null 2>&1)
+      flags="--backend $backend"
       ;;
     *)
+      echo "unknown backend"
       return 1
       ;;
   esac
+
+  out=$(cd "$CLI_ROOT" && OMQ_DEV=1 bundle exec ruby -Ilib exe/omq $flags --version 2>&1) && return 0
+  echo "$out" | grep -v '^[[:space:]]*from ' | head -n 3
+  return 1
 }
 
 for backend in $BACKENDS; do
-  if ! backend_available "$backend"; then
+  if ! reason=$(backend_available "$backend"); then
     echo "--- backend: $backend ---"
-    echo "SKIP: backend unavailable"
+
+    # The pure Ruby backend must always run; rust and libzmq may be
+    # missing on this machine.
+    if [ "$backend" = ruby ]; then
+      echo "FAIL: backend unavailable"
+      FAILED_FILES="$FAILED_FILES ruby/(unavailable)"
+    else
+      echo "SKIP: backend unavailable"
+    fi
+
+    echo "$reason" | sed 's/^/  /'
     echo
     continue
   fi
@@ -50,6 +66,10 @@ for backend in $BACKENDS; do
     echo
   done
 done
+
+if [ "$TOTAL_FILES" -eq 0 ]; then
+  FAILED_FILES="$FAILED_FILES (no test file ran)"
+fi
 
 if [ -z "$FAILED_FILES" ]; then
   echo "OK - $TOTAL_FILES backend test file(s) passed"

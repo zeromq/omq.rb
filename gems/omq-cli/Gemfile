@@ -20,3 +20,7 @@ gem "omq-backend-libzmq", "~> 0.3", require: false, path: File.join(ROOT, "gems/
 gem "omq-backend-rust",   "~> 0.1", require: false, path: File.join(ROOT, "gems/omq-backend-rust")
 gem "zrip",          "~> 0.2.2", path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "zrip") : nil
 gem "lz4rip",        "~> 0.2.2", path: ENV["OMQ_DEV"] ? File.join(SIBLINGS, "lz4rip") : nil
+
+# omq-backend-rust needs omq-rs. OMQ_RS_PATH is relative to the omq repo
+# root, as in its Gemfile.
+gem "omq-rs", require: false, path: ENV["OMQ_RS_PATH"] && File.expand_path(ENV["OMQ_RS_PATH"], ROOT)
