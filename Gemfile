@@ -28,7 +28,7 @@ if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new("4.0")
   gem "omq-lz4",    require: false, path: "gems/omq-lz4"
   gem "omq-ractor", require: false, path: "gems/omq-ractor"
   gem "omq-zstd",   require: false, path: "gems/omq-zstd"
-  gem "zrip",       "~> 0.2.2", path: ENV["OMQ_DEV"] ? "../zrip" : nil
+  gem "zrip",       "~> 0.3.0", path: ENV["OMQ_DEV"] ? "../zrip" : nil
 end
 
 if ENV["OMQ_DEV"]

@@ -10,6 +10,7 @@
   refuses such frames.
 - The listener keeps accepting after `EMFILE`, `ECONNABORTED` and similar
   errors, as `tcp://` does. One such error stopped it for good.
+- Require `zrip ~> 0.3.0`, for its adaptive level and codec stats.
 
 ## [0.5.1] - 2026-11-26
 
