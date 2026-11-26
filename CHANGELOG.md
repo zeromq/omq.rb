@@ -66,6 +66,9 @@
   and left ghost connections behind, and a refused TCP endpoint was never
   redialed. The extra peer is now disconnected and redialed if this side dialed,
   so it takes over once the first peer leaves.
+- Let `#unbind` take the endpoint string passed to `#bind`.
+  `unbind("tcp://localhost:5555")` was a silent no-op because the listener is
+  stored under its resolved endpoint (`tcp://[::1]:5555`).
 
 ## [0.29.1] - 2026-11-26
 

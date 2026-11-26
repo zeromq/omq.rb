@@ -86,6 +86,24 @@ class OMQDisconnectTest < Minitest::Spec
     end
 
 
+    it "#unbind accepts the endpoint string passed to #bind" do
+      Async do
+        port = TCPServer.open("127.0.0.1", 0) { it.addr[1] }
+        pull = OMQ::PULL.new
+        uri  = pull.bind("tcp://localhost:#{port}")
+        refute_equal "tcp://localhost:#{port}", uri.to_s
+
+        pull.unbind("tcp://localhost:#{port}")
+        assert_empty pull.engine.listeners
+
+        # The port is free again.
+        TCPServer.open(uri.host.delete("[]"), port).close
+      ensure
+        pull&.close
+      end
+    end
+
+
     it "#disconnect closes only connections to that endpoint" do
       Async do
         pull1 = OMQ::PULL.bind("ruby://ep1")

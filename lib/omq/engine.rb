@@ -88,6 +88,7 @@ module OMQ
       @dialers         = {} # endpoint => Dialer (reconnect intent + connect logic)
       @dialer_barriers = {} # endpoint => Async::Barrier (its reconnect + connection tasks)
       @listeners       = {} # endpoint => Listener
+      @bind_aliases    = {} # endpoint as passed to #bind => listener endpoint
       @lifecycle       = SocketLifecycle.new
       @fatal_error     = nil
       @monitor_queue   = nil
@@ -182,6 +183,7 @@ module OMQ
       start_accept_loops(listener)
 
       @listeners[listener.endpoint] = listener
+      remember_bind_alias(endpoint, listener.endpoint)
       emit_monitor_event(:listening, endpoint: listener.endpoint)
       URI.parse(listener.endpoint)
     rescue => error
@@ -230,15 +232,19 @@ module OMQ
 
 
     # Unbinds from an endpoint. Stops the listener and closes all
-    # connections that were accepted on it.
+    # connections that were accepted on it. Accepts the resolved
+    # endpoint (as returned by {#bind}) or the string passed to
+    # {#bind}, e.g. +tcp://localhost:5555+.
     #
     # @param endpoint [String]
     # @return [void]
     #
     def unbind(endpoint)
       endpoint = canonical_endpoint(endpoint)
+      endpoint = @bind_aliases.fetch(endpoint, endpoint)
       listener = @listeners.delete(endpoint) or return
 
+      @bind_aliases.delete_if { |_, bound| bound == endpoint }
       listener.stop
       close_connections_at(endpoint)
     end
@@ -821,6 +827,22 @@ module OMQ
     def stop_listeners
       @listeners.each_value(&:stop)
       @listeners.clear
+      @bind_aliases.clear
+    end
+
+
+    # Lets {#unbind} find a listener by the string the caller passed to
+    # {#bind}. Ephemeral-port requests (+:0+) can bind many listeners,
+    # so they don't get an alias.
+    #
+    # @param requested [String] canonical endpoint passed to #bind
+    # @param bound [String] the listener's resolved endpoint
+    #
+    def remember_bind_alias(requested, bound)
+      return if requested == bound
+      return if requested.end_with?(":0")
+
+      @bind_aliases[requested] = bound
     end
 
 
