@@ -441,7 +441,7 @@ module OMQ
           end
           o.on("-z",    "Zstd compression, level adapts to CPU and link (-7..4)") { set_compress.call(:zstd, nil) }
           o.on("-Z",    "Zstd compression, fixed level 3 (better ratio)")         { set_compress.call(:zstd, 3) }
-          o.on("--lz4", "LZ4 compression (FAST)")                                 { set_compress.call(:lz4, nil) }
+          o.on("--lz4", "LZ4 compression")                                        { set_compress.call(:lz4, nil) }
           o.on("--compress=SPEC", "Explicit codec[:level], e.g. zstd (adaptive), zstd:3, zstd:-1, lz4") do |v|
             codec, level = parse_compress_spec(v)
             set_compress.call(codec, level)
