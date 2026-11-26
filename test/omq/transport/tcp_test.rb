@@ -127,6 +127,25 @@ class OMQTransportTCPTest < Minitest::Spec
     end
 
 
+    it "binds the wildcard port :* like :0" do
+      Async do
+        pull = OMQ::PULL.new
+        port = pull.bind("tcp://127.0.0.1:*").port
+        assert_operator port, :>, 0
+
+        push = OMQ::PUSH.connect("tcp://127.0.0.1:#{port}")
+        push << "wildcard"
+        assert_equal ["wildcard"], pull.receive
+
+        assert_operator pull.bind("tcp://*:*").port, :>, 0
+        assert_operator pull.bind("tcp://[::1]:*").port, :>, 0 if Socket.ip_address_list.any?(&:ipv6_loopback?)
+      ensure
+        push&.close
+        pull&.close
+      end
+    end
+
+
     describe "host normalization" do
       it "normalize_bind_host maps * to nil (dual-stack wildcard)" do
         assert_nil OMQ::Transport::TCP.normalize_bind_host("*")

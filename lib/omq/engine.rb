@@ -830,15 +830,15 @@ module OMQ
 
 
     # Lets {#unbind} find a listener by the string the caller passed to
-    # {#bind}. Ephemeral-port requests (+:0+) can bind many listeners,
-    # so they don't get an alias.
+    # {#bind}. Ephemeral-port requests (+:0+, +:*+) can bind many
+    # listeners, so they don't get an alias.
     #
     # @param requested [String] canonical endpoint passed to #bind
     # @param bound [String] the listener's resolved endpoint
     #
     def remember_bind_alias(requested, bound)
       return if requested == bound
-      return if requested.end_with?(":0")
+      return if requested.end_with?(":0", ":*")
 
       @bind_aliases[requested] = bound
     end

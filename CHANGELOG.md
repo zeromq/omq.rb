@@ -12,6 +12,8 @@
   unlimited): a peer that holds more subscription prefixes (PUB, XPUB) or groups
   (RADIO) is disconnected. A peer could grow these sets without bound, and every
   message is matched against them.
+- Accepted libzmq's wildcard port in TCP binds: `tcp://host:*`, `tcp://*:*` and
+  `tcp://[::1]:*` bind any free port, like `:0`.
 
 ### Changed
 

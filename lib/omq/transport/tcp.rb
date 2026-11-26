@@ -29,6 +29,8 @@ module OMQ
         # @return [Listener]
         #
         def listener(endpoint, engine, **)
+          # libzmq's wildcard port: any free port, like :0.
+          endpoint    = endpoint.sub(/:\*\z/, ":0")
           host, port  = self.parse_endpoint(endpoint)
           lookup_host = normalize_bind_host(host)
 
