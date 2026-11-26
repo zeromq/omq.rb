@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Without a native Fiber scheduler (TruffleRuby), monitor events could stop
+  arriving: the watcher re-armed the monitor fd only after its last empty
+  check, so an event in between never woke it, and promises such as
+  `subscriber_joined` never resolved.
+
 ## [0.3.1] - 2026-10-15
 
 ### Fixed
