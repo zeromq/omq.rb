@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.29.1] - 2026-11-26
+
 ### Fixed
 
 - Reconnected in-process (`ruby://`, `inproc://`) connect sockets after the
