@@ -3,7 +3,8 @@
 # Microbenchmark: OMQ::LZ4::Codec.encode_part / decode_part.
 # Measures per-message latency and compression ratio across the size
 # buckets called out in the plan (M5 Polish): 64 B, 256 B, 1 KiB,
-# 16 KiB, 1 MiB. With and without a dictionary.
+# 16 KiB, 1 MiB. With and without a dictionary, for both profiles, on
+# repeated lorem ipsum and on JSON-like log records.
 #
 # Run:
 #   OMQ_DEV=1 bundle exec ruby --yjit bench/codec_micro.rb
@@ -24,6 +25,20 @@ def payload_of(size)
 end
 
 DICT_BYTES = (LOREM * 2).byteslice(0, 512).b
+
+# JSON log records with varying fields.
+def json_of(size)
+  rng = Random.new(size)
+  out = +""
+  i   = 0
+  while out.bytesize < size
+    out << %({"ts":"2026-11-26T12:#{format("%02d", i % 60)}:#{format("%02d", rng.rand(60))}Z","level":"#{%w[INFO WARN DEBUG][rng.rand(3)]}","user":#{rng.rand(10_000)},"path":"/v1/items/#{rng.rand(500)}","ms":#{rng.rand(900)}}\n)
+    i += 1
+  end
+  out.byteslice(0, size).b
+end
+
+JSON_DICT = json_of(4096).byteslice(0, 2048).b
 SIZES      = [64, 256, 1024, 16_384, 1_048_576]
 
 def bench(plaintext, codec)
@@ -52,9 +67,9 @@ def bench(plaintext, codec)
 end
 
 
-def fmt(label, pt, row)
-  "  %-32s  in=%8d  wire=%8d  ratio=%.3f  c=%7d ns  d=%7d ns  (%d iters)" %
-    [label, pt.bytesize, row[:wire_size], row[:ratio], row[:c_ns], row[:d_ns], row[:iters]]
+def fmt(label, pt, row, codec)
+  "  %-32s  in=%8d  wire=%8d  ratio=%.3f  c=%7d ns  d=%7d ns  heap=%6d B  (%d iters)" %
+    [label, pt.bytesize, row[:wire_size], row[:ratio], row[:c_ns], row[:d_ns], codec.size, row[:iters]]
 end
 
 
@@ -64,13 +79,17 @@ puts "dict_bytes=#{DICT_BYTES.bytesize}"
 puts "YJIT: #{RubyVM::YJIT.enabled? ? "on" : "off"}"
 puts "-" * 100
 
-no_dict_codec = Lz4rip::BlockCodec.new
-dict_codec    = Lz4rip::BlockCodec.new(dict: DICT_BYTES)
-
-SIZES.each do |size|
-  pt = payload_of(size)
-  puts
-  puts "Payload: #{size} bytes"
-  puts fmt("LZ4B (no dict)", pt, bench(pt, no_dict_codec))
-  puts fmt("LZ4B + dict",    pt, bench(pt, dict_codec))
+{ "lorem" => [method(:payload_of), DICT_BYTES], "json" => [method(:json_of), JSON_DICT] }.each do |name, (gen, dict)|
+  SIZES.each do |size|
+    pt = gen.call(size)
+    puts
+    puts "Payload: #{name} #{size} bytes"
+    %i[fast ratio].each do |profile|
+      [nil, dict].each do |d|
+        codec = Lz4rip::BlockCodec.new(dict: d, profile: profile)
+        row   = bench(pt, codec)
+        puts fmt("LZ4B #{profile}#{d ? " + dict" : ""}", pt, row, codec)
+      end
+    end
+  end
 end

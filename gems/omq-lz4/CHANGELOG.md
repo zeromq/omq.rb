@@ -4,6 +4,12 @@
 
 ### Changed
 
+- The sender compresses with lz4rip's ratio profile: on JSON records, 2%
+  smaller at 16 KiB and 10% at 1 MiB, for 7-11% more compression time (12%
+  less at 1 KiB). A sending connection holds 8-72 KiB of encoder state, up
+  to ~210 KiB with a dictionary and messages from 64 KiB, instead of 0, or
+  16 KiB with a dictionary. A receiving side holds only its dictionary
+  copies. Peers decode it unchanged.
 - `bind` and `connect` raise `ArgumentError` for options the transport
   doesn't know. They were ignored.
 - With `max_message_size` unset, a message may decode to at most 1 GiB, as
