@@ -102,7 +102,8 @@ class OMQRouterDealerTest < Minitest::Spec
     it "unblocks a send to a peer that leaves while its queue is full" do
       Async do |task|
         router = OMQ::ROUTER.bind("inproc://rd-departed-block")
-        router.send_hwm = 1
+        router.send_hwm         = 1
+        router.router_mandatory = true # block at HWM instead of dropping
 
         dealer = OMQ::DEALER.new(linger: 0)
         dealer.identity = "slow"
@@ -115,6 +116,8 @@ class OMQRouterDealerTest < Minitest::Spec
             router.send(["slow", "x"])
             sent += 1
           end
+        rescue SocketError
+          :unroutable
         end
 
         # Run the flood until it stops making progress: it is now
@@ -128,10 +131,35 @@ class OMQRouterDealerTest < Minitest::Spec
         assert_operator sent, :<, 100
         dealer.close
 
-        flood.wait
-        assert_equal 100, sent
+        # The blocked send returns; the next one finds no route.
+        assert_equal :unroutable, flood.wait
       ensure
         flood&.stop
+        router&.close
+      end
+    end
+
+    it "drops messages to a peer at HWM unless router_mandatory is set" do
+      Async do |task|
+        router = OMQ::ROUTER.bind("inproc://rd-hwm-drop")
+        router.send_hwm = 1
+
+        dealer = OMQ::DEALER.new
+        dealer.identity = "slow"
+        dealer.recv_hwm = 1
+        dealer.connect("inproc://rd-hwm-drop")
+
+        # Nobody reads: everything past the HWMs is dropped, not blocked on.
+        100.times { |i| router.send(["slow", i.to_s]) }
+
+        received = []
+        dealer.recv_timeout = 0.02
+        loop { received << dealer.receive.first }
+      rescue IO::TimeoutError
+        assert_operator received.size, :<, 100
+        assert_equal "0", received.first
+      ensure
+        dealer&.close
         router&.close
       end
     end

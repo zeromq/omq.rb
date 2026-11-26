@@ -7,6 +7,9 @@
 - In-process connects to an unbound endpoint retry through the regular reconnect
   loop: they honor `reconnect_interval` backoff and emit `:connect_delayed` and
   `:connect_retried`.
+- ROUTER without `router_mandatory` drops a message whose peer is at HWM, like
+  libzmq, instead of blocking the sender. With `router_mandatory` it still
+  blocks.
 
 ### Fixed
 

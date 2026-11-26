@@ -80,18 +80,29 @@ module OMQ
 
       # Enqueues a message for sending. The first frame is the routing identity.
       #
+      # Like libzmq, a ROUTER without +router_mandatory+ drops a message
+      # whose peer is unknown or at HWM. With +router_mandatory+ it
+      # raises for an unknown peer and blocks at HWM.
+      #
       # @param parts [Array<String>]
       #
       def enqueue(parts)
-        identity = parts.first
-        if @engine.options.router_mandatory?
+        identity  = parts.first
+        mandatory = @engine.options.router_mandatory?
+
+        if mandatory
           unless @connections_by_identity[identity]
             raise SocketError, "no route to identity #{identity.inspect}"
           end
         end
+
         conn = @connections_by_identity[identity]
         return unless conn  # silently drop if peer disconnected
-        Routing.enqueue_to_peer(@conn_queues[conn], parts[1..])
+
+        queue = @conn_queues[conn]
+        return if !mandatory && queue.is_a?(Async::LimitedQueue) && queue.limited?
+
+        Routing.enqueue_to_peer(queue, parts[1..])
       end
 
 
