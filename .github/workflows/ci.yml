@@ -52,6 +52,6 @@ jobs:
       with:
         ruby-version: jruby-10.1.1.0
     - name: Install Ruby dependencies
-      run: gem install --no-document async io-stream minitest rake console nuckle jar-dependencies
+      run: gem install --no-document async io-stream minitest rake console nuckle:0.4.0 jar-dependencies
     - run: RUBYLIB="../../lib:../protocol-zmtp/lib" timeout 240 rake test
       working-directory: gems/omq-backend-rust
