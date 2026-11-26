@@ -131,6 +131,7 @@ module OMQ
       # No handshake — inproc Pipe bypasses ZMTP entirely.
       #
       # @param pipe [Transport::Inproc::Pipe]
+      # @return [Boolean] false if the routing strategy refused the peer
       #
       def ready_direct!(pipe)
         if pipe.is_a?(Transport::Inproc::Pipe) && pipe.peer
@@ -186,7 +187,16 @@ module OMQ
         @conn = conn
         @engine.connections[@conn] = self
         @engine.emit_monitor_event(:handshake_succeeded, endpoint: @endpoint)
-        @engine.routing.connection_added(@conn)
+
+        begin
+          @engine.routing.connection_added(@conn)
+        rescue Routing::PeerRefusedError => error
+          # E.g. a second PAIR peer: drop it, and redial later if we
+          # dialed, so it can take over once the current peer leaves.
+          tear_down!(reconnect: true, reason: error)
+          return false
+        end
+
         @engine.peer_connected.resolve(@conn)
         transition!(:ready)
 
@@ -194,6 +204,7 @@ module OMQ
         # Waiting on an empty barrier returns immediately and would
         # tear the connection down right after registering.
         start_supervisor unless @barrier.empty?
+        true
       end
 
 

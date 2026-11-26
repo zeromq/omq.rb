@@ -46,10 +46,10 @@ module OMQ
 
 
       # @param connection [Protocol::ZMTP::Connection]
-      # @raise [RuntimeError] if a connection already exists
+      # @raise [PeerRefusedError] if a connection already exists
       #
       def connection_added(connection)
-        raise "PAIR allows only one peer" if @connection
+        raise PeerRefusedError, "PAIR allows only one peer" if @connection
         @connection = connection
 
         @engine.start_recv_pump(connection, @recv_queue)

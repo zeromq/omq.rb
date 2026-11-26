@@ -279,7 +279,7 @@ module OMQ
     # Skips ZMTP handshake — just registers with routing strategy.
     #
     # @param pipe [Transport::Inproc::Pipe]
-    # @return [void]
+    # @return [Boolean] false if the routing strategy refused the peer
     #
     def connection_ready(pipe, endpoint: nil)
       ConnectionLifecycle.new(self, endpoint: endpoint).ready_direct!(pipe)

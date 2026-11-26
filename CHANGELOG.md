@@ -61,6 +61,11 @@
   dropped.
 - Delivered in-process PAIR messages sent while there was no peer. They stayed
   in the send queue because inproc PAIR links had no send pump.
+- Refused a second PAIR or CHANNEL peer cleanly. The refusal raised inside the
+  connection setup after the peer was half registered: inproc `#connect` raised
+  and left ghost connections behind, and a refused TCP endpoint was never
+  redialed. The extra peer is now disconnected and redialed if this side dialed,
+  so it takes over once the first peer leaves.
 
 ## [0.29.1] - 2026-11-26
 

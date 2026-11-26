@@ -154,7 +154,8 @@ module OMQ
           client_pipe, server_pipe = make_pipe_pair client_engine, server_engine,
                                                     client_type, server_type, needs_cmds
 
-          client_engine.connection_ready(client_pipe, endpoint: endpoint)
+          # A refused client closes its pipe; don't hand the server a dead peer.
+          client_engine.connection_ready(client_pipe, endpoint: endpoint) or return
           server_engine.connection_ready(server_pipe, endpoint: endpoint)
         end
 

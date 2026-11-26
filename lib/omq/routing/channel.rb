@@ -45,7 +45,7 @@ module OMQ
       # @raise [RuntimeError] if a connection already exists
       #
       def connection_added(connection)
-        raise "CHANNEL allows only one peer" if @connection
+        raise PeerRefusedError, "CHANNEL allows only one peer" if @connection
         @connection = connection
 
         # Single-frame socket: drop multipart input from a bad peer.

@@ -14,6 +14,14 @@ module OMQ
   # the socket's send/recv queues.
   #
   module Routing
+    # Raised by #connection_added when a strategy can't take another
+    # peer (PAIR, CHANNEL). The connection is closed and, if this side
+    # dialed, redialed later.
+    #
+    class PeerRefusedError < RuntimeError
+    end
+
+
     # Errors an enqueue raises once the queue was closed: the peer it
     # belonged to is gone, or the socket closed.
     QUEUE_CLOSED_ERRORS = [Async::Queue::ClosedError, ClosedQueueError].freeze

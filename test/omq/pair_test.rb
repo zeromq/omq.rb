@@ -84,5 +84,53 @@ class OMQPairTest < Minitest::Spec
         server&.close
       end
     end
+
+
+    it "refuses a second inproc peer, which takes over after the first leaves" do
+      Async do |task|
+        server = OMQ::PAIR.new.tap { it.linger = 0 }
+        server.bind("inproc://pair-second-peer")
+        first = OMQ::PAIR.new.tap { it.linger = 0 }
+        first.connect("inproc://pair-second-peer")
+
+        second = OMQ::PAIR.new.tap { it.linger = 0 }
+        second.reconnect_interval = RECONNECT_INTERVAL
+        second.connect("inproc://pair-second-peer")
+        task.yield until second.connection_count == 0
+        assert_equal 1, server.connection_count
+
+        first.close
+        second.peer_connected.wait
+        second << "from second"
+        assert_equal ["from second"], server.receive
+      ensure
+        second&.close
+        server&.close
+      end
+    end
+
+
+    it "redials a refused second endpoint once the first peer leaves" do
+      Async do
+        a = OMQ::PAIR.new.tap { it.linger = 0 }
+        b = OMQ::PAIR.new.tap { it.linger = 0 }
+        a_port = a.bind("tcp://127.0.0.1:0").port
+        b_port = b.bind("tcp://127.0.0.1:0").port
+
+        client = OMQ::PAIR.new.tap { it.linger = 0 }
+        client.reconnect_interval = RECONNECT_INTERVAL
+        client.connect("tcp://127.0.0.1:#{a_port}")
+        wait_connected(a)
+        client.connect("tcp://127.0.0.1:#{b_port}")
+
+        a.close
+        wait_connected(b)
+        client << "to b"
+        assert_equal ["to b"], b.receive
+      ensure
+        client&.close
+        b&.close
+      end
+    end
   end
 end
