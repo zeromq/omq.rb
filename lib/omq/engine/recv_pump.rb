@@ -91,7 +91,7 @@ module OMQ
       # @return [Async::Task]
       #
       def start_with_transform(parent, transform)
-        conn, recv_queue, engine, count_bytes = @conn, @recv_queue, @engine, @count_bytes
+        conn, engine, count_bytes = @conn, @engine, @count_bytes
 
         parent.async(transient: true, annotation: "recv pump") do |task|
           loop do
@@ -161,7 +161,7 @@ module OMQ
       # @return [Async::Task]
       #
       def start_direct(parent)
-        conn, recv_queue, engine, count_bytes = @conn, @recv_queue, @engine, @count_bytes
+        conn, engine, count_bytes = @conn, @engine, @count_bytes
 
         parent.async(transient: true, annotation: "recv pump") do |task|
           loop do

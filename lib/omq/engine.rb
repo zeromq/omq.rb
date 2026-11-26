@@ -8,6 +8,9 @@ require_relative "engine/reconnect"
 require_relative "engine/connection_lifecycle"
 require_relative "engine/socket_lifecycle"
 require_relative "engine/maintenance"
+require_relative "engine/endpoints"
+require_relative "engine/monitoring"
+require_relative "engine/pump_tasks"
 
 module OMQ
   # Per-socket orchestrator.
@@ -16,6 +19,11 @@ module OMQ
   # OMQ::Socket instance. Each socket type creates one Engine.
   #
   class Engine
+    include Endpoints
+    include Monitoring
+    include PumpTasks
+
+
     # Scheme → transport module registry.
     # Plugins add entries via +Engine.transports["scheme"] = MyTransport+.
     #
@@ -97,13 +105,46 @@ module OMQ
     end
 
 
-    # Delegated to {SocketLifecycle}.
-    def peer_connected    = @lifecycle.peer_connected
-    def all_peers_gone    = @lifecycle.all_peers_gone
-    def parent_task       = @lifecycle.parent_task
-    def barrier           = @lifecycle.barrier
-    def closed?           = @lifecycle.closed?
-    def on_io_thread?     = @lifecycle.on_io_thread
+    # @return [Async::Promise] resolves with the first peer that connects
+    #
+    def peer_connected
+      @lifecycle.peer_connected
+    end
+
+
+    # @return [Async::Promise] resolves once every peer is gone
+    #
+    def all_peers_gone
+      @lifecycle.all_peers_gone
+    end
+
+
+    # @return [Async::Task, nil] the task the socket's tasks run under
+    #
+    def parent_task
+      @lifecycle.parent_task
+    end
+
+
+    # @return [Async::Barrier, nil] the socket-level barrier
+    #
+    def barrier
+      @lifecycle.barrier
+    end
+
+
+    # @return [Boolean] true once the socket is closed
+    #
+    def closed?
+      @lifecycle.closed?
+    end
+
+
+    # @return [Boolean] true if the socket runs on the shared IO thread
+    #
+    def on_io_thread?
+      @lifecycle.on_io_thread
+    end
 
 
     # Enables or disables auto-reconnect for dropped connections.
@@ -155,17 +196,6 @@ module OMQ
     #
     def record_disconnect_reason(conn, error)
       @connections[conn]&.record_disconnect_reason(error)
-    end
-
-
-    # Returns the transport object (Dialer or Listener) for an endpoint.
-    # Used by {ConnectionLifecycle#ready!} to call +#wrap_connection+.
-    #
-    # @param endpoint [String]
-    # @return [Dialer, Listener, nil]
-    #
-    def transport_object_for(endpoint)
-      @dialers[endpoint] || @listeners[endpoint]
     end
 
 
@@ -481,95 +511,6 @@ module OMQ
     end
 
 
-    # Spawns a transient pump task with error propagation.
-    #
-    # Unexpected exceptions are caught and forwarded to
-    # {#signal_fatal_error} so blocked callers (send/recv)
-    # see the real error instead of deadlocking.
-    #
-    # @param annotation [String] task annotation for debugging
-    # @param parent [Async::Task, Async::Barrier] parent for the spawned
-    #   task. Defaults to the current task. Routing strategies that own
-    #   loose pump tasks (Radio, Channel) pass their own +Async::Barrier+
-    #   so a single +barrier.stop+ tears the lot down at strategy
-    #   shutdown without per-task bookkeeping.
-    # @yield the pump loop body
-    # @return [Async::Task]
-    #
-    def spawn_pump_task(annotation:, parent: Async::Task.current, &block)
-      parent.async(transient: true, annotation: annotation) do
-        yield
-      rescue Async::Stop, Async::Cancel, Protocol::ZMTP::Error, *CONNECTION_LOST
-        # normal shutdown / expected disconnect
-      rescue => error
-        signal_fatal_error(error)
-      end
-    end
-
-
-    # Spawns a per-connection pump task on the connection's own
-    # lifecycle barrier. When any pump on the barrier exits (e.g. the
-    # send pump sees EPIPE and calls {#connection_lost}), {ConnectionLifecycle#tear_down!}
-    # calls `barrier.stop` which cancels every sibling pump for that
-    # connection — so a dead peer can no longer leave orphan send
-    # pumps blocked on `dequeue` waiting for messages that will never
-    # be written.
-    #
-    # @param conn [Protocol::ZMTP::Connection, Transport::Inproc::Pipe]
-    # @param annotation [String]
-    #
-    def spawn_conn_pump_task(conn, annotation:, &block)
-      lifecycle = @connections[conn]
-
-      unless lifecycle
-        return spawn_pump_task(annotation: annotation, &block)
-      end
-
-      lifecycle.barrier.async(transient: true, annotation: annotation) do
-        yield
-      rescue Async::Stop, Async::Cancel
-        # normal shutdown / sibling tore us down
-      rescue Protocol::ZMTP::Error, *CONNECTION_LOST => error
-        # expected disconnect — stash reason for the :disconnected
-        # monitor event, then let the lifecycle reconnect as usual
-        lifecycle.record_disconnect_reason(error)
-      rescue => error
-        signal_fatal_error(error)
-      end
-    end
-
-
-    # Wraps an unexpected pump error as {OMQ::SocketDeadError} and
-    # unblocks any callers waiting on the recv queue. The original
-    # error is preserved as +#cause+ so callers can surface the real
-    # reason.
-    #
-    # @param error [Exception]
-    #
-    def signal_fatal_error(error)
-      return unless @lifecycle.open?
-
-      @fatal_error = build_fatal_error(error)
-      routing.unblock_recv rescue nil
-      @lifecycle.peer_connected.resolve(nil) rescue nil
-    end
-
-
-    # Constructs a SocketDeadError whose +cause+ is +error+. Uses the
-    # raise-in-rescue idiom because Ruby only sets +cause+ on an
-    # exception when it is raised from inside a rescue block -- works
-    # regardless of the original caller's +$!+ state.
-    def build_fatal_error(error)
-      raise error
-    rescue
-      begin
-        raise SocketDeadError, "#{@socket_type} socket killed: #{error.message}"
-      rescue SocketDeadError => wrapped
-        wrapped
-      end
-    end
-
-
     # Captures the socket's task tree root and starts the socket-level
     # maintenance task. If +parent+ is given, it is used as the parent
     # for every task spawned under this socket (connection supervisors,
@@ -591,85 +532,6 @@ module OMQ
       return unless task
 
       Maintenance.start(@lifecycle.barrier, @options.mechanism)
-    end
-
-
-    # Emits a lifecycle event to the monitor queue, if one is attached.
-    #
-    # @param type [Symbol] event type (e.g. :listening, :connected, :disconnected)
-    # @param endpoint [String, nil] the endpoint involved
-    # @param detail [Hash, nil] extra context
-    # @return [void]
-    #
-    def emit_monitor_event(type, endpoint: nil, detail: nil)
-      return unless @monitor_queue
-
-      @monitor_queue << MonitorEvent.new(type: type, endpoint: endpoint, detail: detail)
-    end
-
-
-    # Emits a verbose-only monitor event (e.g. message traces).
-    # Only emitted when {Socket#monitor} was called with +verbose: true+.
-    # Uses +**detail+ to avoid Hash allocation when verbose is off.
-    #
-    # @param type [Symbol] event type (e.g. :message_sent, :message_received)
-    # @param detail [Hash] extra context forwarded as keyword args
-    # @return [void]
-    #
-    def emit_verbose_monitor_event(type, **detail)
-      return unless @verbose_monitor
-
-      push_verbose_event(type, detail)
-    end
-
-
-    # Emits a :message_sent verbose event and enriches it with the
-    # on-wire (post-compression) byte size if +conn+ exposes
-    # +last_wire_size_out+ (installed by ZMTP-Zstd etc.).
-    def emit_verbose_msg_sent(conn, parts)
-      return unless @verbose_monitor
-
-      detail = { parts: parts }
-
-      if conn.respond_to? :last_wire_size_out
-        detail[:wire_size] = conn.last_wire_size_out
-      end
-
-      push_verbose_event(:message_sent, detail)
-    end
-
-
-    # Emits a :message_received verbose event and enriches it with the
-    # on-wire (pre-decompression) byte size if +conn+ exposes
-    # +last_wire_size_in+.
-    def emit_verbose_msg_received(conn, parts)
-      return unless @verbose_monitor
-
-      detail = { parts: parts }
-
-      if conn.respond_to? :last_wire_size_in
-        detail[:wire_size] = conn.last_wire_size_in
-      end
-
-      push_verbose_event(:message_received, detail)
-    end
-
-
-    # Looks up the transport module for an endpoint URI.
-    #
-    # @param endpoint [String] endpoint URI (e.g. "tcp://...", "ruby://...")
-    # @return [Module] the transport module
-    # @raise [ArgumentError] if the scheme is not registered
-    #
-    def transport_for(endpoint)
-      scheme    = scheme_for(endpoint)
-      transport = registered_transport(scheme)
-
-      unless transport
-        raise ArgumentError, "unsupported transport: #{endpoint}"
-      end
-
-      transport
     end
 
 
@@ -785,72 +647,6 @@ module OMQ
     end
 
 
-    # Delegates endpoint validation to the transport if it defines one.
-    # Called from {#connect} so a bad URI fails fast instead of landing
-    # in a reconnect loop.
-    #
-    # @param endpoint [String]
-    # @raise [ArgumentError] if the transport rejects the endpoint
-    #
-    def validate_endpoint!(endpoint, transport)
-      if transport.respond_to?(:validate_endpoint!)
-        transport.validate_endpoint!(endpoint)
-      end
-    end
-
-
-    # Resolves transport aliases before the endpoint is stored in
-    # listener, dialer, or connection maps.
-    #
-    # @param endpoint [String]
-    # @return [Array(String, Module)]
-    #
-    def resolve_endpoint(endpoint)
-      transport = transport_for(endpoint)
-      if transport.respond_to?(:canonical_endpoint)
-        endpoint = transport.canonical_endpoint(endpoint)
-      end
-
-      [endpoint, transport]
-    end
-
-
-    # Best-effort normalization for disconnect/unbind. Unknown schemes
-    # stay as-is so those calls remain no-ops instead of raising.
-    #
-    # @param endpoint [String]
-    # @return [String]
-    #
-    def canonical_endpoint(endpoint)
-      transport = registered_transport(scheme_for(endpoint))
-      return endpoint unless transport&.respond_to?(:canonical_endpoint)
-
-      transport.canonical_endpoint(endpoint)
-    end
-
-
-    # Looks up a registered transport. If no real inproc transport is
-    # registered, inproc:// falls back to the Ruby in-process transport.
-    #
-    # @param scheme [String, nil]
-    # @return [Module, nil]
-    #
-    def registered_transport(scheme)
-      self.class.transports[scheme] ||
-        (scheme == "inproc" ? self.class.transports["ruby"] : nil)
-    end
-
-
-    # Extracts the URI scheme from an endpoint.
-    #
-    # @param endpoint [String]
-    # @return [String, nil]
-    #
-    def scheme_for(endpoint)
-      endpoint[/\A([^:]+):\/\//, 1]
-    end
-
-
     # Starts the listener's accept loops on the socket-level barrier
     # and routes accepted IOs through {#handle_accepted}.
     #
@@ -939,25 +735,5 @@ module OMQ
       @routing.close_queues if @routing.respond_to?(:close_queues)
     end
 
-
-    # Verbose events wait for the monitor to catch up (see
-    # {MonitorQueue#push_verbose}).
-    #
-    def push_verbose_event(type, detail)
-      queue = @monitor_queue or return
-
-      queue.push_verbose(MonitorEvent.new(type: type, detail: detail))
-    rescue Async::Stop
-    end
-
-
-    # Signals end-of-stream on the monitor queue (if any) by pushing a
-    # +nil+ sentinel, so consumers iterating with {Socket#each_event}
-    # can exit cleanly.
-    #
-    def close_monitor_queue
-      return unless @monitor_queue
-      @monitor_queue.push(nil)
-    end
   end
 end

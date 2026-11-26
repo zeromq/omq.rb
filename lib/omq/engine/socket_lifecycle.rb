@@ -80,10 +80,24 @@ module OMQ
       end
 
 
-      def open?      = @state == :open
-      def closing?   = @state == :closing
-      def closed?    = @state == :closed
-      def alive?     = @state == :new || @state == :open
+      def open?
+        @state == :open
+      end
+
+
+      def closing?
+        @state == :closing
+      end
+
+
+      def closed?
+        @state == :closed
+      end
+
+
+      def alive?
+        @state == :new || @state == :open
+      end
 
 
       # Captures the socket's task tree root. Transitions `:new → :open`.
