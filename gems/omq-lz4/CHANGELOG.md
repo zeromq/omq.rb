@@ -12,6 +12,7 @@
   the connection's error handling.
 - The listener keeps accepting after `EMFILE`, `ECONNABORTED` and similar
   errors, as `tcp://` does. One such error stopped it for good.
+- Require `lz4rip ~> 0.3.0`, for its ratio profile.
 
 ## [0.4.1] - 2026-11-26
 

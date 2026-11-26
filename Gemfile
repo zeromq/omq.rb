@@ -22,7 +22,7 @@ gem "omq-rs",             require: false, path: ENV["OMQ_RS_PATH"]
 gem "omq-websocket",      require: false, path: "gems/omq-websocket"
 
 if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new("4.0")
-  gem "lz4rip",     "~> 0.2.2", path: ENV["OMQ_DEV"] ? "../lz4rip" : nil
+  gem "lz4rip",     "~> 0.3.0", path: ENV["OMQ_DEV"] ? "../lz4rip" : nil
   gem "omq-backend-libzmq", require: false, path: "gems/omq-backend-libzmq"
   gem "omq-cli",            require: false, path: "gems/omq-cli"
   gem "omq-lz4",    require: false, path: "gems/omq-lz4"
