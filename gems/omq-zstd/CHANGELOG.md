@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-26
+
 ### Changed
 
 - Require `zrip ~> 0.2.2`. Auto-trained dictionaries now fill the
