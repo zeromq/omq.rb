@@ -208,7 +208,7 @@ module OMQ
 
       ensure_parent_task
 
-      queue                   = Async::LimitedQueue.new(64)
+      queue                   = MonitorQueue.new
       @engine.monitor_queue   = queue
       @engine.verbose_monitor = verbose
 
@@ -220,6 +220,7 @@ module OMQ
         rescue Async::Stop
         ensure
           @engine.monitor_queue = nil
+          queue.close
           block.call(MonitorEvent.new(type: :monitor_stopped))
         end
       end

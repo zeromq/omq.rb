@@ -60,7 +60,7 @@ module OMQ
 
 
     # @!attribute [w] monitor_queue
-    #   @param value [Async::Queue, nil] queue for monitor events
+    #   @param value [MonitorQueue, nil] queue for monitor events
     #
     attr_writer :monitor_queue
 
@@ -561,10 +561,7 @@ module OMQ
     def emit_monitor_event(type, endpoint: nil, detail: nil)
       return unless @monitor_queue
 
-      event = MonitorEvent.new type: type, endpoint: endpoint, detail: detail
-
-      @monitor_queue << event
-    rescue Async::Stop, ClosedQueueError
+      @monitor_queue << MonitorEvent.new(type: type, endpoint: endpoint, detail: detail)
     end
 
 
@@ -578,7 +575,8 @@ module OMQ
     #
     def emit_verbose_monitor_event(type, **detail)
       return unless @verbose_monitor
-      emit_monitor_event(type, detail: detail)
+
+      push_verbose_event(type, detail)
     end
 
 
@@ -594,7 +592,7 @@ module OMQ
         detail[:wire_size] = conn.last_wire_size_out
       end
 
-      emit_monitor_event :message_sent, detail: detail
+      push_verbose_event(:message_sent, detail)
     end
 
 
@@ -610,7 +608,7 @@ module OMQ
         detail[:wire_size] = conn.last_wire_size_in
       end
 
-      emit_monitor_event :message_received, detail: detail
+      push_verbose_event(:message_received, detail)
     end
 
 
@@ -892,6 +890,17 @@ module OMQ
     #
     def close_routing_queues
       @routing.close_queues if @routing.respond_to?(:close_queues)
+    end
+
+
+    # Verbose events wait for the monitor to catch up (see
+    # {MonitorQueue#push_verbose}).
+    #
+    def push_verbose_event(type, detail)
+      queue = @monitor_queue or return
+
+      queue.push_verbose(MonitorEvent.new(type: type, detail: detail))
+    rescue Async::Stop
     end
 
 

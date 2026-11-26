@@ -75,6 +75,10 @@
   raises `Errno::EADDRINUSE`. Closing a listener removes its socket file only if
   it is still the one it created, by absolute path, so a later `chdir` or a
   newer listener on the path is safe.
+- Stopped a slow `#monitor` block from stalling the socket. Events went through
+  a 64-slot blocking queue, so accept loops, handshakes and teardown waited on
+  the monitor. Lifecycle events no longer block; verbose message events still
+  wait for the monitor to catch up.
 
 ## [0.29.1] - 2026-11-26
 

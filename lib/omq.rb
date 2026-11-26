@@ -7,6 +7,7 @@ require "io/stream"
 # Core
 require_relative "omq/version"
 require_relative "omq/constants"
+require_relative "omq/monitor_queue"
 require_relative "omq/backend"
 require_relative "omq/reactor"
 require_relative "omq/options"
