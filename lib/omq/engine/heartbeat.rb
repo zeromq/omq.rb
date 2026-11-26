@@ -26,6 +26,9 @@ module OMQ
       # @return [Async::Task, nil]
       #
       def self.start(parent, conn, options)
+        # ZMTP 3.0 has no PING/PONG; a 3.0 peer would see a bad command.
+        return if conn.respond_to?(:peer_minor) && conn.peer_minor.to_i < 1
+
         interval = options.heartbeat_interval
         interval = nil unless interval&.positive?
         timeout  = options.heartbeat_timeout

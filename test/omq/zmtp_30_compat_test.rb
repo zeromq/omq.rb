@@ -75,6 +75,29 @@ class OMQZMTP30CompatTest < Minitest::Spec
     end
 
 
+    it "OMQ doesn't send heartbeat PINGs to a ZMTP 3.0 peer" do
+      Async do
+        port, task = serve_fake_peer(minor: 0, socket_type: "PUB") do |io|
+          # The first frame after the handshake is the subscription, not
+          # a PING command, even though the heartbeat is due first.
+          sleep 0.05
+          frame = Frame.read_from(io)
+          refute frame.command?, "got a command (PING) on a ZMTP 3.0 link"
+          assert_equal "\x01".b, frame.body
+        end
+
+        sub = OMQ::SUB.new
+        sub.heartbeat_interval = 0.01
+        sub.connect("tcp://127.0.0.1:#{port}")
+        sleep 0.03
+        sub.subscribe("")
+        task.wait
+      ensure
+        sub&.close
+      end
+    end
+
+
     it "OMQ SUB sends command-form SUBSCRIBE to a ZMTP 3.1 PUB peer" do
       Async do
         port, task = serve_fake_peer(minor: 1, socket_type: "PUB") do |io|
