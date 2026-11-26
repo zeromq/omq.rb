@@ -6,6 +6,8 @@
 
 - With `max_message_size` unset, a frame may declare at most 1 GiB, as in
   omq.rs. A declared size reserved up to 128 MiB per frame.
+- A part above 1 GiB is sent as plaintext, as omq-proto 0.40 does; omq.rs
+  refuses such frames.
 
 ## [0.5.1] - 2026-11-26
 

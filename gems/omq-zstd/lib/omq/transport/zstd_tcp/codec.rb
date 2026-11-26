@@ -22,6 +22,10 @@ module OMQ
 
         USER_DICT_ID_RANGE = (32_768..(2**31 - 1)).freeze
 
+        # omq.rs decoders refuse a frame above 1 GiB, so a larger part goes
+        # as plaintext (omq-proto 0.40).
+        MAX_COMPRESSED_PART = 1 << 30
+
 
         attr_reader :send_dict_bytes, :max_message_size
 
@@ -196,6 +200,7 @@ module OMQ
           bytes = part.is_a?(String) && part.encoding == Encoding::BINARY ? part : part.to_s.b
           threshold = @send_dict_bytes ? MIN_COMPRESS_WITH_DICT : MIN_COMPRESS_NO_DICT
           return plain(bytes) if bytes.bytesize < threshold
+          return plain(bytes) if bytes.bytesize > max_compressed_part
 
           compressed = @send_codec.compress(bytes)
 
@@ -207,6 +212,11 @@ module OMQ
 
         def plain(body)
           NUL_PREAMBLE + body
+        end
+
+
+        def max_compressed_part
+          MAX_COMPRESSED_PART
         end
 
       end

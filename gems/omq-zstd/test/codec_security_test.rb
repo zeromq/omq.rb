@@ -66,6 +66,14 @@ class OMQZstdCodecSecurityTest < Minitest::Spec
     end
 
 
+    it "sends a part above the compression limit as plaintext" do
+      c = codec
+      c.define_singleton_method(:max_compressed_part) { 1_000 }
+      wire = c.compress_parts([("A" * 5_000).b]).first
+      assert_equal OMQ::Transport::ZstdTcp::Codec::NUL_PREAMBLE, wire.byteslice(0, 4)
+    end
+
+
     it "allows a frame that fits the budget" do
       c = codec(max_message_size: 10_000)
       conn = connection(c)
