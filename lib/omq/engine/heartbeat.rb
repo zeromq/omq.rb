@@ -45,7 +45,8 @@ module OMQ
         @interval = interval
         @ping     = Protocol::ZMTP::Codec::Command.ping(ttl: ttl)
         @timeout  = timeout
-        @pending  = nil # monotonic time of the oldest unanswered PING
+        @pending  = nil   # monotonic time of the oldest unanswered PING
+        @sending  = false # a PING is still waiting to be written
       end
 
 
@@ -87,9 +88,25 @@ module OMQ
       end
 
 
+      # Sends the PING from a child fiber of the heartbeat task: the
+      # write may wait behind a send that is stuck on a peer that
+      # stopped reading, and the expiry check must keep running
+      # meanwhile. (Not on the connection barrier, where a finished
+      # task means a dead pump.)
+      #
       def ping(now)
-        @conn.send_command(@ping)
         @pending ||= now
+        return if @sending
+
+        @sending = true
+
+        Async::Task.current.async(transient: true, annotation: "heartbeat ping") do
+          @conn.send_command(@ping)
+        rescue Async::Stop, Async::Cancel, *CONNECTION_LOST
+          # connection closing
+        ensure
+          @sending = false
+        end
       end
 
     end

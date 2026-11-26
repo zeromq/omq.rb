@@ -90,6 +90,9 @@
   the timeout, so an idle healthy connection with the default
   `heartbeat_timeout` (the interval) flapped. A zero `heartbeat_timeout` now
   means the interval.
+- Expired a silent peer while a send to it was blocked. The heartbeat queued its
+  PING behind the stuck write and never got to the expiry check, so a peer that
+  stopped reading stayed connected forever.
 
 ## [0.29.1] - 2026-11-26
 

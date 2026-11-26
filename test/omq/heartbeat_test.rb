@@ -132,6 +132,42 @@ class OMQHeartbeatTest < Minitest::Spec
     end
 
 
+    it "expires a silent peer while a send is blocked on it" do
+      Async do |task|
+        server = TCPServer.new("127.0.0.1", 0)
+        port   = server.addr[1]
+
+        # Handshakes, then never reads or writes again.
+        peer = task.async do
+          sock = server.accept
+          conn = Protocol::ZMTP::Connection.new(IO::Stream::Buffered.wrap(sock), socket_type: "PULL", as_server: true)
+          conn.handshake!
+          sleep
+        ensure
+          sock&.close
+        end
+
+        push = OMQ::PUSH.new(linger: 0)
+        push.heartbeat_interval = 0.02
+        push.heartbeat_timeout  = 0.06
+        push.connect("tcp://127.0.0.1:#{port}")
+        push.peer_connected.wait
+
+        flood = task.async do
+          loop { push << "x" * 65_536 }
+        end
+
+        push.all_peers_gone.wait
+        pass
+      ensure
+        flood&.stop
+        peer&.stop
+        push&.close
+        server&.close
+      end
+    end
+
+
     it "detects dead peer via heartbeat timeout" do
       Async do
         rep = OMQ::REP.new.tap { |s| s.linger = 0 }
