@@ -134,6 +134,9 @@
   ones.
 - Rejected small-order CURVE keys from peers, which gave an all-zero shared
   secret with the nuckle backend (protocol-zmtp).
+- Yielded to other fibers while a DISH skips malformed datagrams or datagrams
+  for groups it didn't join. A flood on its UDP port kept the receive loop
+  spinning without letting anything else run.
 
 ## [0.29.1] - 2026-11-26
 

@@ -200,6 +200,10 @@ module OMQ
       # never transmitted on the wire.
       #
       class DishConnection
+        # Datagrams skipped in a row before yielding to other fibers.
+        SKIP_BUDGET = 64
+
+
         # @param socket [UDPSocket] bound socket
         #
         def initialize(socket)
@@ -216,13 +220,24 @@ module OMQ
         # @return [Array<String>] [group, body], both binary-frozen
         #
         def receive_message
+          skipped = 0
+
           loop do
             data, = @socket.recvfrom_nonblock(MAX_DATAGRAM_SIZE)
             parts = UDP.decode_datagram(data)
-            next unless parts
-            group, body = parts
-            next unless @groups.include?(group.b)
-            return [group, body]
+
+            if parts && @groups.include?(parts[0].b)
+              return parts
+            end
+
+            # Malformed or for a group we didn't join. A flood of these
+            # must not keep the reactor from running other fibers.
+            skipped += 1
+
+            if skipped >= SKIP_BUDGET
+              skipped = 0
+              Async::Task.current.yield
+            end
           rescue IO::WaitReadable
             @socket.wait_readable
             retry

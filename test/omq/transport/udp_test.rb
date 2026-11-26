@@ -37,6 +37,24 @@ class OMQTransportUDPTest < Minitest::Spec
     end
 
 
+    it "yields while skipping a flood of datagrams for other groups" do
+      Async do |task|
+        socket = Object.new
+        def socket.recvfrom_nonblock(_size)
+          [OMQ::Transport::UDP.encode_datagram("noise", "x")]
+        end
+
+        conn   = OMQ::Transport::UDP::DishConnection.new(socket)
+        reader = task.async { conn.receive_message }
+
+        # Only reached if the reader yields while it skips datagrams.
+        pass
+      ensure
+        reader&.stop
+      end
+    end
+
+
     it "filters messages to un-joined groups" do
       Sync do
         dish  = OMQ::DISH.bind("udp://127.0.0.1:15551")
