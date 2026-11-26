@@ -46,7 +46,7 @@ module OMQ
       #
       def connection_added(connection)
         @connections << connection
-        @subscriptions[connection] = Set.new
+        @subscriptions[connection] = PrefixSet.new
         start_subscription_listener(connection)
         add_fan_out_send_connection(connection)
       end
@@ -87,7 +87,7 @@ module OMQ
       # upstream. Queued from its own task: teardown must not block on a
       # full receive queue.
       #
-      # @param prefixes [Set<String>, nil]
+      # @param prefixes [PrefixSet, nil]
       #
       def report_lost_subscriptions(prefixes)
         return if prefixes.nil? || prefixes.empty?

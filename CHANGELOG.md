@@ -146,6 +146,12 @@
   destination once at connect instead of on every datagram. DISH on a multicast
   address now joins the group, and several DISH sockets can bind the same group
   and port.
+- PUB and XPUB match subscriptions with a radix trie instead of trying every
+  prefix. A subscriber at `max_peer_subscriptions` cost the publisher about 7 ms
+  per message; matching now takes well under a microsecond at any count.
+- A frozen UTF-8 topic no longer raises `Encoding::CompatibilityError` in the
+  fan-out send pump against a non-ASCII subscription prefix, so the subscriber
+  gets the message. Matching compares bytes.
 
 ## [0.29.1] - 2026-11-26
 

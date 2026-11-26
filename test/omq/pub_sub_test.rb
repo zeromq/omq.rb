@@ -243,6 +243,23 @@ class OMQPubSubTest < Minitest::Spec
         xpub&.close
       end
     end
+
+    it "matches a non-ASCII prefix against a UTF-8 topic" do
+      Async do
+        pub  = OMQ::PUB.new.tap { |s| s.linger = 0 }
+        port = pub.bind("tcp://127.0.0.1:0").port
+        sub  = OMQ::SUB.new.tap { |s| s.linger = 0 }
+        sub.connect("tcp://127.0.0.1:#{port}")
+        sub.subscribe("über")
+        pub.subscriber_joined.wait
+
+        pub << ["über.news", "x"] # frozen UTF-8 literal, sent as is
+        assert_equal ["über.news".b, "x"], sub.receive
+      ensure
+        sub&.close
+        pub&.close
+      end
+    end
   end
 
   describe "XPUB/XSUB" do

@@ -38,8 +38,7 @@ module OMQ
 
       def init_fan_out(engine)
         @connections        = Set.new
-        @subscriptions      = {} # connection => Set of prefixes
-        @subscribe_all      = Set.new # connections subscribed to "" (match-all fast path)
+        @subscriptions      = {} # connection => PrefixSet
         @conn_queues        = {} # connection => per-connection send queue
         @fan_out_queues     = [].freeze # snapshot of @conn_queues values
         @conflate           = engine.options.conflate
@@ -51,10 +50,8 @@ module OMQ
       # @return [Boolean] whether the connection is subscribed to the topic
       #
       def subscribed?(conn, topic)
-        return true if @subscribe_all.include?(conn)
         subs = @subscriptions[conn]
-        return false unless subs
-        subs.any? { |prefix| topic.start_with?(prefix) }
+        subs ? subs.match?(topic) : false
       end
 
 
@@ -68,8 +65,7 @@ module OMQ
       def on_subscribe(conn, prefix)
         Routing.check_peer_subscriptions!(@subscriptions[conn], prefix, @engine.options.max_peer_subscriptions)
 
-        @subscriptions[conn] << prefix.b.freeze
-        @subscribe_all.add(conn) if prefix.empty?
+        @subscriptions[conn] << prefix
         @subscriber_joined.resolve(conn) unless @subscriber_joined.resolved?
       end
 
@@ -82,7 +78,6 @@ module OMQ
       #
       def on_cancel(conn, prefix)
         @subscriptions[conn]&.delete(prefix)
-        @subscribe_all.delete(conn) if prefix.empty?
       end
 
 
@@ -106,7 +101,6 @@ module OMQ
       # @param conn [Protocol::ZMTP::Connection]
       #
       def remove_fan_out_send_connection(conn)
-        @subscribe_all.delete(conn)
         @conn_queues.delete(conn)&.close
         @fan_out_queues = @conn_queues.values.freeze
       end

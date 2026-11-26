@@ -41,7 +41,7 @@ Routing strategies:
 | Work-stealing both ways | `Pair`, `Dealer`, `Client`, `Channel` | `RoundRobin` |
 | Request-reply | `Req`, `Rep` | `RoundRobin` |
 | Identity routing | `Router`, `Server`, `Peer` | `ConnSendPump` |
-| Fan-out | `Pub`, `XPub`, `Radio` | `FanOut` |
+| Fan-out | `Pub`, `XPub`, `Radio` | `FanOut`, `PrefixSet` (radix trie) |
 | Subscription receive | `Sub`, `XSub`, `Dish` | |
 
 Every strategy includes `ClosableQueues`, so closing the socket closes its

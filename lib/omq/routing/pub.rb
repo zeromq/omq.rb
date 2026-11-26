@@ -41,7 +41,7 @@ module OMQ
       #
       def connection_added(connection)
         @connections << connection
-        @subscriptions[connection] = Set.new
+        @subscriptions[connection] = PrefixSet.new
         start_subscription_listener(connection)
         add_fan_out_send_connection(connection)
       end
