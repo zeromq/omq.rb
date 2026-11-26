@@ -5,6 +5,8 @@ module OMQ
     # GATHER socket routing: fair-queue receive from SCATTER peers.
     #
     class Gather
+      include ClosableQueues
+
       # @return [Async::LimitedQueue]
       #
       attr_reader :recv_queue

@@ -6,6 +6,7 @@ module OMQ
     #
     class Scatter
       include RoundRobin
+      include ClosableQueues
 
       # @param engine [Engine]
       #

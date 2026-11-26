@@ -5,6 +5,7 @@ require "async/queue"
 require "async/limited_queue"
 require_relative "drop_queue"
 require_relative "routing/conn_send_pump"
+require_relative "routing/closable_queues"
 
 module OMQ
   # Routing strategies for each ZMQ socket type.

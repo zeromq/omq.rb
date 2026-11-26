@@ -5,6 +5,8 @@ module OMQ
     # CHANNEL socket routing: exclusive 1-to-1 bidirectional.
     #
     class Channel
+      include ClosableQueues
+
       # @return [Async::LimitedQueue]
       #
       attr_reader :recv_queue

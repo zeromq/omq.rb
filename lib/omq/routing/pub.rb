@@ -10,6 +10,7 @@ module OMQ
     #
     class Pub
       include FanOut
+      include ClosableQueues
 
       # @param engine [Engine]
       #

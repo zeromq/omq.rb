@@ -10,6 +10,8 @@ module OMQ
     # the in-flight batch is dropped (matching libzmq).
     #
     class Pair
+      include ClosableQueues
+
       # @return [Async::LimitedQueue]
       #
       attr_reader :recv_queue

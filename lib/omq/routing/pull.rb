@@ -5,6 +5,8 @@ module OMQ
     # PULL socket routing: fair-queue receive from PUSH peers.
     #
     class Pull
+      include ClosableQueues
+
       # @param engine [Engine]
       #
       def initialize(engine)

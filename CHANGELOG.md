@@ -39,6 +39,12 @@
   endpoint first. The retry task died with an unhandled `Protocol::ZMTP::Error`,
   so a compatible binder later never got the connection. `:connect_retried`
   events now carry the `:error`.
+- Woke fibers blocked in `#receive` (they get `nil`) or `#send` (they raise the
+  new `OMQ::SocketClosedError`) when the socket closes. They stayed blocked
+  forever. Sending, binding or connecting after `#close` raises
+  `SocketClosedError`, and receiving returns `nil`, like a closed
+  `Thread::Queue`. `#close` on a socket that never bound or connected now closes
+  it.
 
 ## [0.29.1] - 2026-11-26
 

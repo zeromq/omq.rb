@@ -8,6 +8,7 @@ module OMQ
     #
     class Req
       include RoundRobin
+      include ClosableQueues
 
       # Shared frozen empty binary string to avoid repeated allocations.
       EMPTY_BINARY = ::Protocol::ZMTP::Codec::EMPTY_BINARY

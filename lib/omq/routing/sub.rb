@@ -7,6 +7,8 @@ module OMQ
     # Sends SUBSCRIBE/CANCEL commands to connected PUB peers.
     #
     class Sub
+      include ClosableQueues
+
 
       # @return [Async::LimitedQueue]
       #

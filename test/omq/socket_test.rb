@@ -116,6 +116,89 @@ class OMQSocketTest < Minitest::Spec
       end
     end
 
+    describe "after close" do
+      it "closes a socket that never bound or connected" do
+        socket = OMQ::PUSH.new
+        socket.close
+
+        assert socket.closed?
+        assert_raises(OMQ::SocketClosedError) { socket.bind("tcp://127.0.0.1:0") }
+        assert_raises(OMQ::SocketClosedError) { socket.connect("tcp://127.0.0.1:1") }
+        assert_raises(OMQ::SocketClosedError) { socket << "late" }
+      end
+
+
+      it "refuses bind, connect and send, and receives nil" do
+        Async do
+          pull = OMQ::PULL.bind("tcp://127.0.0.1:0")
+          push = OMQ::PUSH.new(linger: 0)
+          push.connect("tcp://127.0.0.1:1")
+          pull.close
+          push.close
+
+          assert_raises(OMQ::SocketClosedError) { pull.bind("tcp://127.0.0.1:0") }
+          assert_raises(OMQ::SocketClosedError) { push.connect("tcp://127.0.0.1:1") }
+          assert_raises(OMQ::SocketClosedError) { push << "late" }
+          assert_nil pull.receive
+        end
+      end
+
+
+      it "wakes a fiber blocked in #receive with nil" do
+        Async do |task|
+          pull   = OMQ::PULL.bind("tcp://127.0.0.1:0")
+          reader = task.async { pull.receive }
+
+          task.yield
+          pull.close
+
+          assert_nil reader.wait
+        ensure
+          reader&.stop
+        end
+      end
+
+
+      it "ends an #each loop when the socket closes" do
+        Async do |task|
+          pull   = OMQ::PULL.bind("inproc://socket-each-close")
+          push   = OMQ::PUSH.connect("inproc://socket-each-close")
+          seen   = []
+          reader = task.async { pull.each { |msg| seen << msg.first } }
+
+          push << "one"
+          task.yield until seen.size == 1
+          pull.close
+          reader.wait
+
+          assert_equal ["one"], seen
+        ensure
+          reader&.stop
+          push&.close
+        end
+      end
+
+
+      it "raises SocketClosedError in a fiber blocked in #send at HWM" do
+        Async do |task|
+          push = OMQ::PUSH.new(linger: 0)
+          push.send_hwm = 1
+          push.connect("tcp://127.0.0.1:1")
+          writer = task.async do
+            loop { push << "x" }
+          end
+
+          task.yield
+          push.close
+
+          assert_raises(OMQ::SocketClosedError) { writer.wait }
+        ensure
+          writer&.stop
+        end
+      end
+    end
+
+
     describe "empty and binary messages" do
       it "handles empty string message" do
         Async do

@@ -13,6 +13,7 @@ module OMQ
     #
     class XPub
       include FanOut
+      include ClosableQueues
 
       # @return [Async::LimitedQueue]
       #

@@ -9,6 +9,8 @@ module OMQ
     # on send.
     #
     class Rep
+      include ClosableQueues
+
       EMPTY_FRAME = "".b.freeze
 
 

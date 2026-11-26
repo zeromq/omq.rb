@@ -11,6 +11,8 @@ module OMQ
     # routing identity on send.
     #
     class Router
+      include ClosableQueues
+
       # @return [Async::LimitedQueue]
       #
       attr_reader :recv_queue

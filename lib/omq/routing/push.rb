@@ -6,6 +6,7 @@ module OMQ
     #
     class Push
       include RoundRobin
+      include ClosableQueues
 
 
       # @param engine [Engine]

@@ -9,6 +9,8 @@ module OMQ
     # queue so subscription commands are delivered independently per peer.
     #
     class XSub
+      include ClosableQueues
+
 
       # @return [Async::LimitedQueue]
       #

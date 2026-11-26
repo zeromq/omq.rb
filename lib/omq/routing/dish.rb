@@ -8,6 +8,8 @@ module OMQ
     # Receives two-frame messages (group + body) from RADIO.
     #
     class Dish
+      include ClosableQueues
+
       # @return [Async::LimitedQueue]
       #
       attr_reader :recv_queue

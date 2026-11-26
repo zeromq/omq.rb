@@ -11,6 +11,8 @@ module OMQ
     #   group (MORE=1) + body (MORE=0)
     #
     class Radio
+      include ClosableQueues
+
       # Sentinel used for UDP connections that have no group filter:
       # any group is considered a match.
       #

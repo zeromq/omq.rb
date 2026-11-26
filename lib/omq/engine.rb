@@ -288,11 +288,13 @@ module OMQ
 
     # Dequeues the next received message. Blocks until available.
     #
-    # @return [Array<String>] message parts
+    # @return [Array<String>, nil] message parts, or nil once the socket
+    #   is closed (like +Thread::Queue#pop+ on a closed queue)
     # @raise if a background pump task crashed
     #
     def dequeue_recv
       raise @fatal_error if @fatal_error
+      return if @lifecycle.closed?
 
       msg = routing.dequeue_recv
       raise @fatal_error if msg.nil? && @fatal_error
@@ -314,10 +316,16 @@ module OMQ
     # @param parts [Array<String>]
     # @return [void]
     # @raise if a background pump task crashed
+    # @raise [SocketClosedError] if the socket is closing or closed,
+    #   including while blocked at HWM
     #
     def enqueue_send(parts)
       raise @fatal_error if @fatal_error
+      raise_if_closed!
+
       routing.enqueue(parts)
+    rescue Async::Queue::ClosedError, ClosedQueueError
+      raise SocketClosedError, "#{@socket_type} socket closed while sending"
     end
 
 
@@ -377,6 +385,7 @@ module OMQ
     # @return [void]
     #
     def close
+      return close_unopened if @lifecycle.state == :new
       return unless @lifecycle.open?
 
       @lifecycle.start_closing!
@@ -394,6 +403,7 @@ module OMQ
 
       stop_listeners
       tear_down_barrier
+      close_routing_queues
       emit_monitor_event(:closed)
       close_monitor_queue
     end
@@ -416,6 +426,7 @@ module OMQ
 
       stop_listeners
       tear_down_barrier
+      close_routing_queues
       emit_monitor_event(:closed)
       close_monitor_queue
     end
@@ -524,6 +535,8 @@ module OMQ
     # @param parent [#async, nil] optional Async parent
     #
     def capture_parent_task(parent: nil)
+      raise_if_closed!
+
       task = @lifecycle.capture_parent_task(parent: parent, linger: @options.linger)
 
       return unless task
@@ -829,6 +842,34 @@ module OMQ
     #
     def tear_down_barrier
       @lifecycle.barrier&.stop
+    end
+
+
+    # @raise [SocketClosedError] once {#close} or {#stop} has started
+    #
+    def raise_if_closed!
+      return if @lifecycle.alive?
+
+      raise SocketClosedError, "#{@socket_type} socket is closed"
+    end
+
+
+    # Closes a socket that never bound or connected: there are no tasks
+    # to stop, but later calls must see it closed.
+    #
+    def close_unopened
+      @lifecycle.finish_closing!
+      close_routing_queues
+      emit_monitor_event(:closed)
+      close_monitor_queue
+    end
+
+
+    # Wakes fibers blocked in a send (they raise {SocketClosedError}) or
+    # a receive (they get +nil+).
+    #
+    def close_routing_queues
+      @routing.close_queues if @routing.respond_to?(:close_queues)
     end
 
 

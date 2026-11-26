@@ -8,6 +8,7 @@ module OMQ
     #
     class Client
       include RoundRobin
+      include ClosableQueues
 
 
       # @return [Async::LimitedQueue]

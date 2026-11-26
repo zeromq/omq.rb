@@ -11,6 +11,8 @@ module OMQ
     # routes to the identified connection.
     #
     class Server
+      include ClosableQueues
+
       # @return [Async::LimitedQueue]
       #
       attr_reader :recv_queue
