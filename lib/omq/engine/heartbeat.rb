@@ -4,12 +4,22 @@ module OMQ
   class Engine
     # ZMTP 3.1 heartbeat for one connection.
     #
-    # Sends a PING every +interval+ seconds. The connection expires when
-    # nothing arrived within +timeout+ seconds of the oldest PING still
-    # unanswered, like libzmq's ZMQ_HEARTBEAT_TIMEOUT: any traffic from
-    # the peer counts as an answer.
+    # With +heartbeat_interval+ set, sends a PING every interval. The
+    # connection expires when nothing arrived within +heartbeat_timeout+
+    # of the oldest PING still unanswered, like libzmq's
+    # ZMQ_HEARTBEAT_TIMEOUT: any traffic from the peer counts as an
+    # answer.
+    #
+    # Independently, a peer may put a TTL in its PINGs. The connection
+    # then expires when nothing arrives for that long, even without a
+    # local heartbeat (libzmq's ZMQ_HEARTBEAT_TTL on the other side).
     #
     class Heartbeat
+      # Shortest sleep between checks, so a deadline in the past doesn't
+      # spin the loop.
+      MIN_SLEEP = 0.001
+
+
       # @param parent [Async::Task, Async::Barrier] parent to spawn under
       # @param conn [Protocol::ZMTP::Connection]
       # @param options [Options]
@@ -17,36 +27,61 @@ module OMQ
       #
       def self.start(parent, conn, options)
         interval = options.heartbeat_interval
-        return unless interval&.positive?
-
-        ttl     = options.heartbeat_ttl || interval
-        timeout = options.heartbeat_timeout
-        timeout = interval unless timeout&.positive?
+        interval = nil unless interval&.positive?
+        timeout  = options.heartbeat_timeout
+        timeout  = interval unless timeout&.positive?
 
         conn.touch_heartbeat
-        heartbeat = new(conn, interval: interval, ttl: ttl, timeout: timeout)
+        heartbeat = new(conn, interval: interval, ttl: advertised_ttl(options), timeout: timeout)
 
-        parent.async(transient: true, annotation: "heartbeat") do
-          heartbeat.run
-        rescue Async::Stop, Async::Cancel
-        rescue *CONNECTION_LOST
-          # connection closed
+        if interval
+          heartbeat.spawn(parent)
+        elsif conn.respond_to?(:on_peer_ttl=)
+          # No local heartbeat: watch only once the peer asks for it.
+          conn.on_peer_ttl = -> { heartbeat.spawn(parent) }
+          nil
         end
       end
 
 
+      # TTL to put in our PINGs. Like libzmq and omq.rs, none unless
+      # +heartbeat_ttl+ is set: a TTL equal to the interval would make
+      # peers that honor it drop us whenever a PING runs late.
+      #
+      # @param options [Options]
+      # @return [Numeric] seconds, 0 = no TTL
+      #
+      def self.advertised_ttl(options)
+        options.heartbeat_ttl || 0
+      end
+
+
       # @param conn [Protocol::ZMTP::Connection]
-      # @param interval [Numeric] seconds between PINGs
+      # @param interval [Numeric, nil] seconds between PINGs, nil = don't send
       # @param ttl [Numeric] TTL advertised in each PING
-      # @param timeout [Numeric] seconds a PING may stay unanswered
+      # @param timeout [Numeric, nil] seconds a PING may stay unanswered
       #
       def initialize(conn, interval:, ttl:, timeout:)
-        @conn     = conn
-        @interval = interval
-        @ping     = Protocol::ZMTP::Codec::Command.ping(ttl: ttl)
-        @timeout  = timeout
-        @pending  = nil   # monotonic time of the oldest unanswered PING
-        @sending  = false # a PING is still waiting to be written
+        @conn      = conn
+        @interval  = interval
+        @ping      = Protocol::ZMTP::Codec::Command.ping(ttl: ttl)
+        @timeout   = timeout
+        @pending   = nil   # monotonic time of the oldest unanswered PING
+        @sending   = false # a PING is still waiting to be written
+        @next_ping = interval && Async::Clock.now + interval
+      end
+
+
+      # @param parent [Async::Task, Async::Barrier]
+      # @return [Async::Task]
+      #
+      def spawn(parent)
+        parent.async(transient: true, annotation: "heartbeat") do
+          run
+        rescue Async::Stop, Async::Cancel
+        rescue *CONNECTION_LOST
+          # connection closed
+        end
       end
 
 
@@ -57,7 +92,7 @@ module OMQ
       #
       def run
         loop do
-          sleep @interval
+          sleep wake_in(Async::Clock.now)
 
           now = Async::Clock.now
 
@@ -66,7 +101,7 @@ module OMQ
             break
           end
 
-          ping(now)
+          ping(now) if @next_ping && now >= @next_ping
         end
       end
 
@@ -74,11 +109,36 @@ module OMQ
       private
 
 
-      def expired?(now)
-        return false unless @pending
+      def wake_in(now)
+        wake = [@next_ping, ttl_deadline].compact.min
+        [wake - now, MIN_SLEEP].max
+      end
 
+
+      # @return [Float, nil] when the peer's TTL runs out without traffic
+      #
+      def ttl_deadline
+        ttl  = @conn.respond_to?(:peer_ttl) && @conn.peer_ttl
+        last = @conn.last_received_at
+        return unless ttl && last
+
+        last + ttl
+      end
+
+
+      def expired?(now)
         # We stopped reading (full receive queue), not the peer.
         return false if @conn.respond_to?(:reading_paused?) && @conn.reading_paused?
+
+        deadline = ttl_deadline
+        return true if deadline && now >= deadline
+
+        pending_expired?(now)
+      end
+
+
+      def pending_expired?(now)
+        return false unless @pending
 
         last = @conn.last_received_at
 
@@ -98,6 +158,7 @@ module OMQ
       # task means a dead pump.)
       #
       def ping(now)
+        @next_ping = now + @interval
         @pending ||= now
         return if @sending
 

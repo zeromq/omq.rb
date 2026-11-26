@@ -47,8 +47,43 @@ class OMQHeartbeatTest < Minitest::Spec
       opts   = OMQ::Options.new
       opts.heartbeat_interval = 0
 
-      assert_nil OMQ::Engine::Heartbeat.start(parent, nil, opts)
+      conn = Struct.new(:on_peer_ttl) do
+        def touch_heartbeat
+        end
+      end.new
+
+      assert_nil OMQ::Engine::Heartbeat.start(parent, conn, opts)
       assert_empty parent.tasks
+      assert conn.on_peer_ttl, "watches the peer's TTL once it sends one"
+    end
+
+
+    it "advertises no TTL unless heartbeat_ttl is set" do
+      opts = OMQ::Options.new
+      opts.heartbeat_interval = 0.1
+      assert_equal 0, OMQ::Engine::Heartbeat.advertised_ttl(opts)
+
+      opts.heartbeat_ttl = 0.5
+      assert_equal 0.5, OMQ::Engine::Heartbeat.advertised_ttl(opts)
+    end
+
+
+    it "drops a peer that goes silent past the TTL in its PING" do
+      Async do
+        pull = OMQ::PULL.new.tap { |s| s.linger = 0 }
+        port = pull.bind("tcp://127.0.0.1:0").port
+
+        raw = raw_zmtp_peer(port, "PUSH")
+        raw.send_command(Protocol::ZMTP::Codec::Command.ping(ttl: 0.1)) # deciseconds on the wire
+        pull.peer_connected.wait
+
+        # No local heartbeat: only the peer's TTL can end this.
+        pull.all_peers_gone.wait
+        pass
+      ensure
+        raw&.close
+        pull&.close
+      end
     end
 
 

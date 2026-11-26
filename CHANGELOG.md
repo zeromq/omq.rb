@@ -13,6 +13,9 @@
 - REQ accepts a new request once the peer holding the unanswered one
   disconnects, so a lazy pirate retry works without recreating the socket.
   libzmq needs `ZMQ_REQ_RELAXED` for this.
+- PINGs advertise no TTL unless `heartbeat_ttl` is set, like libzmq and omq.rs.
+  The TTL used to default to `heartbeat_interval`, which made TTL-honoring peers
+  drop the connection whenever a PING ran late.
 
 ### Fixed
 
@@ -97,6 +100,9 @@
   receive queue the receive pump stops reading, so PONGs went unread and the
   heartbeat dropped the connection, losing buffered data; it reconnected and
   repeated.
+- Honored the TTL a peer puts in its PINGs: the connection closes when nothing
+  arrives for that long, even without a local heartbeat. The TTL was parsed and
+  ignored.
 
 ## [0.29.1] - 2026-11-26
 

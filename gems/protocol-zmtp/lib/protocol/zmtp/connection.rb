@@ -47,6 +47,18 @@ module Protocol
       # @return [Float, nil] monotonic timestamp of last received frame
       attr_reader :last_received_at
 
+
+      # @return [Float, nil] TTL in seconds the peer put in its last PING,
+      #   nil if it never sent a non-zero one. The connection should be
+      #   closed when nothing arrives for that long.
+      attr_reader :peer_ttl
+
+
+      # @return [#call, nil] called once, when the peer first sends a PING
+      #   with a non-zero TTL, so a caller without its own heartbeat can
+      #   start watching {#peer_ttl}
+      attr_accessor :on_peer_ttl
+
       # @return [Integer, nil] largest frame body accepted after decryption,
       #   nil = unlimited
       attr_reader :max_message_size
@@ -84,6 +96,8 @@ module Protocol
         @mutex            = Mutex.new
         @last_received_at = nil
         @reading_paused   = false
+        @peer_ttl         = nil
+        @on_peer_ttl      = nil
 
         self.max_message_size = max_message_size
 
@@ -315,7 +329,8 @@ module Protocol
             cmd = Codec::Command.from_body(frame.body)
             case cmd.name
             when "PING"
-              _, context = cmd.ping_ttl_and_context
+              ttl, context = cmd.ping_ttl_and_context
+              note_peer_ttl(ttl)
               send_command(Codec::Command.pong(context: context))
               next
             when "PONG"
@@ -406,6 +421,15 @@ module Protocol
         return false unless raw.respond_to?(:wait_writable)
 
         !raw.wait_writable(0)
+      end
+
+
+      def note_peer_ttl(ttl)
+        return unless ttl.positive?
+
+        first     = @peer_ttl.nil?
+        @peer_ttl = ttl
+        @on_peer_ttl&.call if first
       end
 
 
