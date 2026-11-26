@@ -154,6 +154,7 @@ module OMQ
               @engine.emit_verbose_msg_sent(conn, parts)
             end
             batch.clear
+            @engine.wake_drain
 
             Async::Task.current.yield
           end

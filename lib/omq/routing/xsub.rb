@@ -135,16 +135,22 @@ module OMQ
 
           loop do
             parts = q.dequeue or break # queue closed: peer gone
-            frame = parts.first&.b
-
-            next if frame.nil? || frame.empty?
-
-            flag = frame.getbyte(0)
-            next unless flag == 0x01 || flag == 0x00
-
-            write_subscription(conn, flag, frame.byteslice(1..) || "".b)
+            forward_subscription(conn, parts.first&.b)
+            @engine.wake_drain
           end
         end
+      end
+
+
+      # Sends a queued 0x01/0x00 + prefix frame on; drops anything else.
+      #
+      def forward_subscription(conn, frame)
+        return if frame.nil? || frame.empty?
+
+        flag = frame.getbyte(0)
+        return unless flag == 0x01 || flag == 0x00
+
+        write_subscription(conn, flag, frame.byteslice(1..) || "".b)
       end
 
 

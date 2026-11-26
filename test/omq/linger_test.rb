@@ -1,9 +1,35 @@
 # frozen_string_literal: true
 
 require_relative "../test_helper"
+require "securerandom"
 
 class OMQLingerTest < Minitest::Spec
+  # Counts how often the linger drain checks the send queues.
+  module CountDrainChecks
+    attr_accessor :drain_checks
+
+
+    def send_queues_drained?
+      self.drain_checks = (drain_checks || 0) + 1
+      super
+    end
+  end
+
+
   describe "Linger" do
+    it "sleeps until something changes instead of polling" do
+      Async do
+        push = OMQ::PUSH.new(linger: 0.1)
+        push.connect("ipc://@omq-linger-#{SecureRandom.hex(4)}") # nobody binds
+        push << "queued"
+        push.engine.routing.extend(CountDrainChecks)
+
+        push.close
+        assert_operator push.engine.routing.drain_checks, :<=, 2
+      end
+    end
+
+
     it "closes the socket under a send blocked on a peer that stopped reading" do
       Async do |task|
         server = TCPServer.new("127.0.0.1", 0)

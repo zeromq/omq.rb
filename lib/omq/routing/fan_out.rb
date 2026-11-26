@@ -190,6 +190,7 @@ module OMQ
               batch.each { |parts| @engine.emit_verbose_msg_sent(conn, parts) }
             end
             batch.clear
+            @engine.wake_drain
           end
         end
       end
@@ -267,11 +268,14 @@ module OMQ
             end
 
             batch.clear
-            next unless latest
 
-            conn.write_message(latest)
-            conn.flush
-            @engine.emit_verbose_msg_sent(conn, latest)
+            if latest
+              conn.write_message(latest)
+              conn.flush
+              @engine.emit_verbose_msg_sent(conn, latest)
+            end
+
+            @engine.wake_drain
           end
         end
       end

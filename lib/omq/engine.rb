@@ -93,6 +93,7 @@ module OMQ
       @fatal_error     = nil
       @monitor_queue   = nil
       @verbose_monitor = false
+      @drain_signal    = nil # set while #close waits for send queues
     end
 
 
@@ -322,6 +323,18 @@ module OMQ
     #
     def drop_route(endpoint)
       @routing.drop_route(endpoint) if endpoint && @routing.respond_to?(:drop_route)
+      wake_drain
+    end
+
+
+    # Wakes {#drain_send_queues} to check the send queues again. Send
+    # pumps call it after each batch, teardown when a queue goes away.
+    # A no-op unless {#close} is waiting.
+    #
+    # @return [void]
+    #
+    def wake_drain
+      @drain_signal&.signal
     end
 
 
@@ -697,31 +710,35 @@ module OMQ
 
     # Blocks until the routing strategy reports all send queues drained
     # or +timeout+ seconds have elapsed. Called from the linger path on
-    # close so pending outgoing messages get a chance to flush.
+    # close so pending outgoing messages get a chance to flush. Sleeps
+    # until {#wake_drain} says something changed.
     #
     # @param timeout [Numeric, nil] max seconds to wait; nil = no limit
-    #
-    # TODO: replace the 1 ms busy-poll with a promise/condition that
-    # the send pump resolves when its queue hits empty. The loop exists
-    # because there is currently no signal for "send queue fully
-    # drained"; fixing it cleanly requires plumbing a notifier through
-    # every routing strategy, so it is flagged rather than fixed here.
     #
     def drain_send_queues(timeout)
       return unless @routing.respond_to?(:send_queues_drained?)
 
-      if timeout
-        deadline = Async::Clock.now + timeout
-      end
+      deadline      = timeout && Async::Clock.now + timeout
+      @drain_signal = Async::Notification.new
 
       until @routing.send_queues_drained?
-        break if deadline && (deadline - Async::Clock.now) <= 0
-        sleep 0.001
+        if deadline
+          remaining = deadline - Async::Clock.now
+          break if remaining <= 0
+
+          Async::Task.current.with_timeout(remaining) { @drain_signal.wait }
+        else
+          @drain_signal.wait
+        end
       end
+    rescue Async::TimeoutError
+      # linger expired
     rescue Async::Stop
       # Parent task is being cancelled — stop draining and let close
       # proceed with the rest of teardown instead of propagating the
       # cancellation out of the ensure path.
+    ensure
+      @drain_signal = nil
     end
 
 

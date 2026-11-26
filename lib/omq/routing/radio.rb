@@ -165,6 +165,7 @@ module OMQ
             end
 
             batch.clear
+            @engine.wake_drain
           end
         end
       end

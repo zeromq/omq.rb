@@ -104,6 +104,7 @@ module OMQ
             batch.each { |parts| conn.write_message(parts) }
             conn.flush
             batch.clear
+            @engine.wake_drain
           end
         end
       end

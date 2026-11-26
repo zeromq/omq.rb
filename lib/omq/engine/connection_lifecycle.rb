@@ -252,6 +252,7 @@ module OMQ
         transition!(:closed)
         @engine.connections.delete(@conn)
         @engine.routing.connection_removed(@conn) if @conn
+        @engine.wake_drain
         @conn&.close rescue nil
         detail = reason ? { error: reason, reason: reason.message } : nil
         @engine.emit_monitor_event(:disconnected, endpoint: @endpoint, detail: detail)

@@ -38,6 +38,8 @@
   dialed peer that is down no longer raises. `#disconnect` drops the queue;
   `#close` waits up to `linger` for the redial. Accepted peers still lose their
   queue with the connection.
+- `#close` no longer polls the send queues every millisecond while it lingers.
+  It sleeps until a send pump finishes a batch or a peer's queue goes away.
 
 ### Fixed
 
