@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../../test_helper"
+require "fileutils"
 require "tmpdir"
 
 class OMQTransportIPCTest < Minitest::Spec
@@ -92,6 +93,89 @@ class OMQTransportIPCTest < Minitest::Spec
         second&.close
         first&.close
         pull&.close
+      end
+    end
+
+
+    describe "socket file ownership" do
+      def sock_path(name)
+        File.join(Dir.tmpdir, "omq-test-#{name}-#{$$}.sock")
+      end
+
+
+      it "refuses to replace a regular file" do
+        path = sock_path("regular")
+        File.write(path, "keep me")
+
+        assert_raises(Errno::EADDRINUSE) { OMQ::PULL.bind("ipc://#{path}") }
+        assert_equal "keep me", File.read(path)
+      ensure
+        File.delete(path) rescue nil
+      end
+
+
+      it "refuses to steal a socket that is still listening" do
+        Async do
+          path  = sock_path("live")
+          first = OMQ::PULL.bind("ipc://#{path}")
+
+          assert_raises(Errno::EADDRINUSE) { OMQ::PULL.bind("ipc://#{path}") }
+
+          push = OMQ::PUSH.connect("ipc://#{path}")
+          push << "still first"
+          assert_equal ["still first"], first.receive
+        ensure
+          push&.close
+          first&.close
+        end
+      end
+
+
+      it "replaces a stale socket file" do
+        Async do
+          path = sock_path("stale")
+          UNIXServer.new(path).close # leaves the file behind
+          assert File.socket?(path)
+
+          pull = OMQ::PULL.bind("ipc://#{path}")
+          push = OMQ::PUSH.connect("ipc://#{path}")
+          push << "rebound"
+          assert_equal ["rebound"], pull.receive
+        ensure
+          push&.close
+          pull&.close
+        end
+      end
+
+
+      it "leaves a socket file that another listener bound since" do
+        Async do
+          path = sock_path("replaced")
+          pull = OMQ::PULL.bind("ipc://#{path}")
+
+          # Someone else unlinks and rebinds the path (libzmq does).
+          File.delete(path)
+          other = UNIXServer.new(path)
+
+          pull.close
+          assert File.socket?(path)
+        ensure
+          other&.close
+          File.delete(path) rescue nil
+        end
+      end
+
+
+      it "removes a relative socket file after a chdir" do
+        Async do
+          dir  = Dir.mktmpdir("omq-ipc-rel")
+          pull = Dir.chdir(dir) { OMQ::PULL.bind("ipc://rel.sock") }
+
+          pull.close
+          refute File.exist?(File.join(dir, "rel.sock"))
+        ensure
+          FileUtils.rm_rf(dir) if dir
+        end
       end
     end
 

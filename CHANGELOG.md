@@ -69,6 +69,12 @@
 - Let `#unbind` take the endpoint string passed to `#bind`.
   `unbind("tcp://localhost:5555")` was a silent no-op because the listener is
   stored under its resolved endpoint (`tcp://[::1]:5555`).
+- Made IPC bind replace only a stale socket file. It deleted whatever was at the
+  path, a regular file included, even when the bind then failed, and stole the
+  path from a live listener. Binding over a live socket or a non-socket file now
+  raises `Errno::EADDRINUSE`. Closing a listener removes its socket file only if
+  it is still the one it created, by absolute path, so a later `chdir` or a
+  newer listener on the path is safe.
 
 ## [0.29.1] - 2026-11-26
 

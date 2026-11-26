@@ -30,16 +30,44 @@ module OMQ
         # @param engine [Engine]
         # @return [Listener]
         #
+        # @raise [Errno::EADDRINUSE] if a live socket or a non-socket file
+        #   already occupies the path
+        #
         def listener(endpoint, engine, **)
           path      = parse_path(endpoint)
           sock_path = to_socket_path(path)
 
-          # Remove stale socket file for file-based paths
-          File.delete(sock_path) if !abstract?(path) && File.exist?(sock_path)
+          # Reject a too-long path before touching the filesystem.
+          ::Socket.sockaddr_un(sock_path)
+
+          remove_stale_socket(path) unless abstract?(path)
 
           server = UNIXServer.new(sock_path)
 
           Listener.new(endpoint, server, path, engine)
+        end
+
+
+        # Removes a socket file left behind by a process that is gone.
+        # A socket that still accepts connections, or a file that isn't
+        # a socket, is never replaced.
+        #
+        # @param path [String] filesystem path
+        # @raise [Errno::EADDRINUSE]
+        #
+        def remove_stale_socket(path)
+          return unless File.exist?(path) || File.symlink?(path)
+
+          unless File.socket?(path)
+            raise Errno::EADDRINUSE, "#{path} exists and is not a socket"
+          end
+
+          probe_socket(path)
+          raise Errno::EADDRINUSE, "#{path} is in use"
+        rescue Errno::ECONNREFUSED
+          File.delete(path)
+        rescue Errno::ENOENT
+          # vanished meanwhile
         end
 
 
@@ -93,6 +121,19 @@ module OMQ
         #
         def abstract?(path)
           path.start_with?("@")
+        end
+
+
+        private
+
+
+        # Connects to +path+ and hangs up. Raises ECONNREFUSED if nothing
+        # listens there.
+        #
+        def probe_socket(path)
+          UNIXSocket.new(path).close
+        rescue Errno::EAGAIN
+          # Backlog full: someone is listening.
         end
       end
 
@@ -152,6 +193,14 @@ module OMQ
           @path     = path
           @engine   = engine
           @task     = nil
+
+          # Remember which file we created, by absolute path and inode,
+          # so #stop never unlinks a file that another socket bound
+          # since, even after a chdir.
+          unless IPC.abstract?(path)
+            @file_path = File.expand_path(path)
+            @file_id   = file_id(@file_path)
+          end
         end
 
 
@@ -193,10 +242,20 @@ module OMQ
           @task&.stop
           @server.close rescue nil
 
-          # Clean up socket file for file-based paths
-          unless @path.start_with?("@")
-            File.delete(@path) rescue nil
+          if @file_id && file_id(@file_path) == @file_id
+            File.delete(@file_path) rescue nil
           end
+        end
+
+
+        private
+
+
+        def file_id(path)
+          stat = File.lstat(path)
+          [stat.dev, stat.ino]
+        rescue SystemCallError
+          nil
         end
 
       end
