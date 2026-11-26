@@ -80,6 +80,58 @@ class OMQHeartbeatTest < Minitest::Spec
     end
 
 
+    it "treats a zero heartbeat_timeout as the heartbeat_interval" do
+      Async do
+        rep = OMQ::REP.new.tap { |s| s.linger = 0 }
+        rep.heartbeat_interval = 0.01
+        rep.heartbeat_timeout  = 0
+        port = rep.bind("tcp://127.0.0.1:0").port
+
+        req = OMQ::REQ.new.tap { |s| s.linger = 0 }
+        req.heartbeat_interval = 0.01
+        req.heartbeat_timeout  = 0
+        events = []
+        req.monitor { |event| events << event.type }
+        req.connect("tcp://127.0.0.1:#{port}")
+        wait_connected(req, rep)
+
+        # Several heartbeat periods pass. PONGs keep the link alive.
+        sleep 0.05
+
+        req.send("still up")
+        assert_equal ["still up"], rep.receive
+        refute_includes events, :disconnected
+      ensure
+        req&.close
+        rep&.close
+      end
+    end
+
+
+    it "keeps an idle connection up when heartbeat_timeout equals the interval" do
+      Async do
+        rep = OMQ::REP.new.tap { |s| s.linger = 0 }
+        rep.heartbeat_interval = 0.01
+        port = rep.bind("tcp://127.0.0.1:0").port
+
+        req = OMQ::REQ.new.tap { |s| s.linger = 0 }
+        req.heartbeat_interval = 0.01
+        events = []
+        req.monitor { |event| events << event.type }
+        req.connect("tcp://127.0.0.1:#{port}")
+        wait_connected(req, rep)
+
+        # Only PING/PONG traffic for many heartbeat periods.
+        sleep 0.15
+
+        refute_includes events, :disconnected
+      ensure
+        req&.close
+        rep&.close
+      end
+    end
+
+
     it "detects dead peer via heartbeat timeout" do
       Async do
         rep = OMQ::REP.new.tap { |s| s.linger = 0 }

@@ -85,6 +85,11 @@
 - Released the socket of a connection whose send was blocked on a peer that
   stopped reading. A zero-linger `#close` returned, but the fd and its send pump
   stayed alive forever (protocol-zmtp).
+- Measured heartbeat expiry from the oldest unanswered PING, like libzmq. The
+  check ran right after sending a PING and compared the last receive time with
+  the timeout, so an idle healthy connection with the default
+  `heartbeat_timeout` (the interval) flapped. A zero `heartbeat_timeout` now
+  means the interval.
 
 ## [0.29.1] - 2026-11-26
 
