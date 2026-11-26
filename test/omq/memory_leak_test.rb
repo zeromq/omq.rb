@@ -18,9 +18,17 @@ class OMQMemoryLeakTest < Minitest::Spec
       !weak.weakref_alive?
     end
 
+    # Run the sockets on their own thread. GC scans live thread stacks
+    # conservatively, so a stale pointer left on this thread's stack could
+    # keep a closed Pipe alive.
+    #
+    def on_own_thread(&block)
+      Thread.new { Async(&block) }.join
+    end
+
     it "does not leak Pipe objects after close" do
       weak = nil
-      Async do
+      on_own_thread do
         push = OMQ::PUSH.new
         pull = OMQ::PULL.new
         push.bind("ruby://leak-test")
@@ -43,7 +51,7 @@ class OMQMemoryLeakTest < Minitest::Spec
 
     it "does not leak connections after both sides close" do
       weak = nil
-      Async do
+      on_own_thread do
         push = OMQ::PUSH.new
         pull = OMQ::PULL.new
         push.bind("ruby://leak-cycle")
