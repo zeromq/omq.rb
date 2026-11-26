@@ -178,7 +178,9 @@ module OMQ
             cmd = Protocol::ZMTP::Codec::Command.from_body(frame.body)
             case cmd.name
             when "JOIN"
-              @groups[conn]&.add(cmd.data)
+              groups = @groups[conn] or next
+              Routing.check_peer_subscriptions!(groups, cmd.data, @engine.options.max_peer_subscriptions)
+              groups.add(cmd.data)
               @subscriber_joined.resolve(conn) unless @subscriber_joined.resolved?
             when "LEAVE"
               @groups[conn]&.delete(cmd.data)

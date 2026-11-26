@@ -66,6 +66,8 @@ module OMQ
       # @param prefix [String]
       #
       def on_subscribe(conn, prefix)
+        Routing.check_peer_subscriptions!(@subscriptions[conn], prefix, @engine.options.max_peer_subscriptions)
+
         @subscriptions[conn] << prefix.b.freeze
         @subscribe_all.add(conn) if prefix.empty?
         @subscriber_joined.resolve(conn) unless @subscriber_joined.resolved?

@@ -89,6 +89,28 @@ class OMQProtocolErrorsTest < Minitest::Spec
   end
 
 
+  it "drops a subscriber that holds more than max_peer_subscriptions" do
+    Async do
+      pub = OMQ::PUB.new
+      pub.linger                 = 0
+      pub.max_peer_subscriptions = 4
+      port = pub.bind("tcp://127.0.0.1:0").port
+
+      raw = raw_zmtp_peer(port, "SUB")
+      %w[a b c d d].each { |prefix| raw.send_command(Z::Codec::Command.subscribe(prefix)) }
+      pub.subscriber_joined.wait
+      assert_equal 1, pub.connection_count # 4 distinct prefixes are fine
+
+      raw.send_command(Z::Codec::Command.subscribe("e"))
+      pub.all_peers_gone.wait
+      pass
+    ensure
+      raw&.close
+      pub&.close
+    end
+  end
+
+
   it "fatal error stops reconnect" do
     Async do |task|
       task.with_timeout(2) do

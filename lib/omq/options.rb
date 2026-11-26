@@ -28,6 +28,7 @@ module OMQ
       @heartbeat_timeout     = nil   # seconds, nil = use heartbeat_interval
       @max_message_size      = nil      # bytes, nil = unlimited
       @max_message_parts     = 1024     # frames per received message, nil = unlimited
+      @max_peer_subscriptions = 65_536  # prefixes/groups one peer may hold, nil = unlimited
       @conflate              = false
       @sndbuf                = nil   # bytes, nil = OS default
       @rcvbuf                = nil   # bytes, nil = OS default
@@ -65,6 +66,10 @@ module OMQ
     #   @return [Integer, nil] most frames a received message may have
     #     (default 1024, like omq.rs; nil = unlimited). A peer that sends
     #     more is disconnected.
+    # @!attribute max_peer_subscriptions
+    #   @return [Integer, nil] most subscription prefixes (PUB/XPUB) or
+    #     groups (RADIO) one peer may hold (default 65536, like omq.rs;
+    #     nil = unlimited). A peer that asks for more is disconnected.
     # @!attribute sndbuf
     #   @return [Integer, nil] SO_SNDBUF size in bytes (nil = OS default)
     # @!attribute rcvbuf
@@ -80,6 +85,7 @@ module OMQ
                   :read_timeout,          :write_timeout,
                   :heartbeat_interval,    :heartbeat_ttl,    :heartbeat_timeout,
                   :max_message_size,      :max_message_parts,
+                  :max_peer_subscriptions,
                   :sndbuf,    :rcvbuf,
                   :on_mute,
                   :mechanism

@@ -62,6 +62,7 @@ module OMQ
       :heartbeat_timeout,     :heartbeat_timeout=,
       :max_message_size,      :max_message_size=,
       :max_message_parts,     :max_message_parts=,
+      :max_peer_subscriptions, :max_peer_subscriptions=,
       :sndbuf,                :sndbuf=,
       :rcvbuf,                :rcvbuf=,
       :on_mute,               :on_mute=,

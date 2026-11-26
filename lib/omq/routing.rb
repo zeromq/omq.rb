@@ -50,6 +50,22 @@ module OMQ
     end
 
 
+    # Refuses one more subscription prefix or group from a peer that
+    # already holds +limit+. The raised error drops the peer.
+    #
+    # @param held [Set<String>] what the peer holds now
+    # @param item [String] the prefix or group it asks for
+    # @param limit [Integer, nil] max_peer_subscriptions
+    # @raise [Protocol::ZMTP::Error]
+    #
+    def self.check_peer_subscriptions!(held, item, limit)
+      return unless limit
+      return if held.size < limit || held.include?(item)
+
+      raise Protocol::ZMTP::Error, "peer exceeds max_peer_subscriptions #{limit}"
+    end
+
+
     # Builds a send or recv queue based on the mute strategy.
     #
     # @param hwm [Integer] high water mark
