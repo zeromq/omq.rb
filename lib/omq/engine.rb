@@ -86,6 +86,7 @@ module OMQ
       @routing         = nil
       @connections     = {} # connection => ConnectionLifecycle
       @dialers         = {} # endpoint => Dialer (reconnect intent + connect logic)
+      @dialer_barriers = {} # endpoint => Async::Barrier (its reconnect + connection tasks)
       @listeners       = {} # endpoint => Listener
       @lifecycle       = SocketLifecycle.new
       @fatal_error     = nil
@@ -166,23 +167,6 @@ module OMQ
     end
 
 
-    # Spawns a ruby:// reconnect retry task under the socket's parent task.
-    #
-    # @param endpoint [String]
-    # @yield [interval] the retry loop body
-    #
-    def spawn_inproc_retry(endpoint)
-      ri  = @options.reconnect_interval
-      ivl = ri.is_a?(Range) ? ri.begin : ri
-      ann = "inproc reconnect #{endpoint}"
-
-      @lifecycle.barrier.async(transient: true, annotation: ann) do
-        yield ivl
-      rescue Async::Stop, Async::Cancel
-      end
-    end
-
-
     # Binds to an endpoint.
     #
     # @param endpoint [String] e.g. "tcp://127.0.0.1:5555", "ruby://foo"
@@ -217,14 +201,12 @@ module OMQ
       endpoint, transport = resolve_endpoint(endpoint)
       validate_endpoint!(endpoint, transport)
 
-      dialer = transport.dialer(endpoint, self, **opts)
+      dialer             = transport.dialer(endpoint, self, **opts)
+      @dialers[endpoint] = dialer
 
       if endpoint.start_with?("ruby://")
-        # Ruby in-process connect is synchronous and instant
-        dialer.connect
-        @dialers[endpoint] = dialer
+        connect_inproc(endpoint, dialer)
       else
-        @dialers[endpoint] = dialer
         emit_monitor_event(:connect_delayed, endpoint: endpoint)
         schedule_reconnect(endpoint, delay: 0)
       end
@@ -233,8 +215,8 @@ module OMQ
     end
 
 
-    # Disconnects from an endpoint. Closes connections to that endpoint
-    # and stops auto-reconnection for it.
+    # Disconnects from an endpoint. Stops its reconnect loop and any
+    # handshake in progress, then closes its connections.
     #
     # @param endpoint [String]
     # @return [void]
@@ -242,6 +224,7 @@ module OMQ
     def disconnect(endpoint)
       endpoint = canonical_endpoint(endpoint)
       @dialers.delete(endpoint)
+      @dialer_barriers.delete(endpoint)&.stop
       close_connections_at(endpoint)
     end
 
@@ -279,8 +262,16 @@ module OMQ
     # @return [void]
     #
     def handle_connected(io, endpoint: nil)
+      barrier = @dialer_barriers[endpoint]
+
+      # Disconnected (or closed) while the dial was in flight.
+      unless barrier && @dialers.key?(endpoint)
+        io.close rescue nil
+        return
+      end
+
       emit_monitor_event(:connected, endpoint: endpoint)
-      spawn_connection(io, as_server: false, endpoint: endpoint)
+      spawn_connection(io, as_server: false, endpoint: endpoint, parent: barrier)
     end
 
 
@@ -374,7 +365,7 @@ module OMQ
 
       dialer = @dialers[endpoint]
 
-      Reconnect.schedule(dialer, @options, @lifecycle.parent_task, self)
+      Reconnect.schedule(dialer, @options, dialer_barrier(endpoint), self)
     end
 
 
@@ -634,9 +625,12 @@ module OMQ
     # @param io [#read, #write, #close] accepted or dialed socket
     # @param as_server [Boolean] true for accepted connections
     # @param endpoint [String, nil] the endpoint URI, for monitor events
+    # @param parent [Async::Barrier, nil] owner of the connection task:
+    #   the dialer's barrier for dialed connections, so {#disconnect}
+    #   also stops a handshake in progress
     #
-    def spawn_connection(io, as_server:, endpoint: nil)
-      @lifecycle.barrier&.async(transient: true, annotation: "conn #{endpoint}") do
+    def spawn_connection(io, as_server:, endpoint: nil, parent: @lifecycle.barrier)
+      parent&.async(transient: true, annotation: "conn #{endpoint}") do
         done      = Async::Promise.new
         transport = endpoint ? transport_for(endpoint) : nil
         lifecycle = ConnectionLifecycle.new(self, endpoint: endpoint, done: done, transport: transport)
@@ -693,7 +687,37 @@ module OMQ
     #
     def schedule_reconnect(endpoint, delay: nil)
       dialer = @dialers[endpoint]
-      Reconnect.schedule(dialer, @options, @lifecycle.parent_task, self, delay: delay)
+      Reconnect.schedule(dialer, @options, dialer_barrier(endpoint), self, delay: delay)
+    end
+
+
+    # Returns the barrier that owns +endpoint+'s reconnect loop and
+    # dialed connection tasks, nested in the socket barrier so
+    # {#close} stops them too.
+    #
+    # @param endpoint [String]
+    # @return [Async::Barrier]
+    #
+    def dialer_barrier(endpoint)
+      @dialer_barriers[endpoint] ||= Async::Barrier.new(parent: @lifecycle.barrier)
+    end
+
+
+    # Ruby in-process connects are synchronous: link now, or wait up to
+    # one reconnect interval for a bind, then keep retrying in the
+    # background like any other dialer.
+    #
+    # @param endpoint [String]
+    # @param dialer [Transport::Inproc::Dialer]
+    #
+    def connect_inproc(endpoint, dialer)
+      dialer.connect(wait: true)
+    rescue Errno::ECONNREFUSED
+      emit_monitor_event(:connect_delayed, endpoint: endpoint)
+      schedule_reconnect(endpoint)
+    rescue
+      @dialers.delete(endpoint)
+      raise
     end
 
 
@@ -800,8 +824,8 @@ module OMQ
     # Cascades teardown through the socket-level barrier. Stopping the
     # barrier cancels every tracked task: connection supervisors (whose
     # `ensure lost!` runs the ordered disconnect side effects), accept
-    # loops, heartbeat, maintenance. Reconnect loops live on the user's
-    # parent task and self-exit via `@engine.closed?`.
+    # loops, heartbeat, maintenance, and the per-endpoint dialer
+    # barriers with their reconnect loops.
     #
     def tear_down_barrier
       @lifecycle.barrier&.stop

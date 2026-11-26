@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- In-process connects to an unbound endpoint retry through the regular reconnect
+  loop: they honor `reconnect_interval` backoff and emit `:connect_delayed` and
+  `:connect_retried`.
+
 ### Fixed
 
 - Applied `sndbuf` and `rcvbuf` to TCP and IPC connections instead of killing
@@ -25,6 +31,10 @@
   `EMFILE` ended the accept loop for good and left the endpoint bound but deaf.
   Listeners now emit `:accept_failed`, back off on resource exhaustion and drop
   clients that fail during setup.
+- Stopped reconnecting after `#disconnect`. TCP, IPC and in-process dialers kept
+  retrying and connected once a peer appeared; connect, disconnect, connect gave
+  two connections. `#disconnect` now also stops a handshake in progress, and
+  `#close` stops reconnect loops immediately.
 
 ## [0.29.1] - 2026-11-26
 
