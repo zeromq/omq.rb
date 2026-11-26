@@ -57,7 +57,8 @@ module OMQ
         @connections_by_routing_id[routing_id] = connection
         @routing_id_by_connection[connection]  = routing_id
 
-        @engine.start_recv_pump(connection, @recv_queue) { |msg| [routing_id, *msg] }
+        # Single-frame socket: drop multipart input from a bad peer.
+        @engine.start_recv_pump(connection, @recv_queue) { |msg| [routing_id, msg.first] if msg.size == 1 }
 
         q = Routing.build_queue(@engine.options.send_hwm, :block)
         @conn_queues[connection] = q

@@ -19,6 +19,8 @@
   new peer.
 - Applied `max_message_size` to the plaintext of CURVE frames, so a message
   exactly at the limit no longer drops the connection (protocol-zmtp).
+- Dropped multipart messages from peers of single-frame sockets (CLIENT, SERVER,
+  GATHER, CHANNEL, PEER) instead of delivering them.
 
 ## [0.29.1] - 2026-11-26
 

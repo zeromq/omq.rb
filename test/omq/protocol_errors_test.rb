@@ -2,6 +2,10 @@
 
 require_relative "../test_helper"
 require "io/stream"
+require "omq/client_server"
+require "omq/scatter_gather"
+require "omq/channel"
+require "omq/peer"
 
 class OMQProtocolErrorsTest < Minitest::Spec
   Z = Protocol::ZMTP
@@ -36,6 +40,33 @@ class OMQProtocolErrorsTest < Minitest::Spec
       end
     end.wait
   end
+
+  {
+    OMQ::GATHER  => "SCATTER",
+    OMQ::CLIENT  => "SERVER",
+    OMQ::SERVER  => "CLIENT",
+    OMQ::CHANNEL => "CHANNEL",
+    OMQ::PEER    => "PEER",
+  }.each do |klass, peer_type|
+    it "#{klass.name.split("::").last} drops multipart input from a peer" do
+      Async do
+        sock = klass.new(linger: 0)
+        port = sock.bind("tcp://127.0.0.1:0").port
+        raw  = raw_zmtp_peer(port, peer_type)
+
+        raw.send_message(["part 1".b, "part 2".b])
+        raw.send_message(["single".b])
+
+        msg = sock.receive
+        assert_equal "single", msg.last
+        assert_includes [1, 2], msg.size # SERVER/PEER prepend a routing id
+      ensure
+        raw&.close
+        sock&.close
+      end
+    end
+  end
+
 
   it "fatal error stops reconnect" do
     Async do |task|

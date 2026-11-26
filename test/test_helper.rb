@@ -38,6 +38,18 @@ module Kernel
   end
 end
 
+# Opens a hand-driven ZMTP peer to 127.0.0.1:+port+ and completes the
+# NULL handshake. Lets tests send what a misbehaving peer would send.
+#
+# @return [Protocol::ZMTP::Connection]
+def raw_zmtp_peer(port, socket_type, identity: "")
+  io   = IO::Stream::Buffered.wrap(Socket.tcp("127.0.0.1", port))
+  conn = Protocol::ZMTP::Connection.new(io, socket_type: socket_type, identity: identity)
+  conn.handshake!
+  conn
+end
+
+
 # Waits for every +socket+ to have at least one peer connection.
 # Uses each socket's peer_connected promise instead of sleeping.
 def wait_connected(*sockets, timeout: 2)

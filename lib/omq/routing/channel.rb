@@ -46,7 +46,8 @@ module OMQ
         raise "CHANNEL allows only one peer" if @connection
         @connection = connection
 
-        @engine.start_recv_pump(connection, @recv_queue)
+        # Single-frame socket: drop multipart input from a bad peer.
+        @engine.start_recv_pump(connection, @recv_queue) { |msg| msg if msg.size == 1 }
 
         unless connection.is_a?(Transport::Inproc::Pipe)
           @send_queue = Routing.build_queue(@engine.options.send_hwm, :block)
