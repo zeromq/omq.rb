@@ -41,6 +41,19 @@ module Protocol
         # "\x07MESSAGE" prefix + short nonce + flags byte + Poly1305 tag.
         WIRE_OVERHEAD = 8 + 8 + 1 + BOX_OVERHEAD
 
+        # X25519 public keys of small order, as libsodium lists them,
+        # compared with the top bit cleared. Each makes the shared secret
+        # all zero, so a box built from it protects nothing.
+        LOW_ORDER_KEYS = %w[
+          0000000000000000000000000000000000000000000000000000000000000000
+          0100000000000000000000000000000000000000000000000000000000000000
+          e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800
+          5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157
+          ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f
+          edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f
+          eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f
+        ].map { |hex| [hex].pack("H*").freeze }.freeze
+
 
         # Creates a CURVE server mechanism.
         #
@@ -68,6 +81,15 @@ module Protocol
         end
 
 
+        # @param key [String] 32-byte X25519 public key
+        # @return [Boolean] whether +key+ is a small-order point
+        def self.low_order_key?(key)
+          masked = key.b.dup
+          masked.setbyte(31, masked.getbyte(31) & 0x7F)
+          LOW_ORDER_KEYS.include?(masked)
+        end
+
+
         # @param public_key [String, nil] 32-byte permanent public key
         # @param secret_key [String, nil] 32-byte permanent secret key
         # @param server_key [String, nil] 32-byte server permanent public key (client only)
@@ -87,6 +109,7 @@ module Protocol
             @cookie_key = crypto::Random.random_bytes(32)
           else
             validate_key!(server_key, "server_key")
+            raise ArgumentError, "server_key is a low-order point" if self.class.low_order_key?(server_key.b)
             @server_public = crypto::PublicKey.new(server_key.b)
             if public_key && secret_key
               validate_key!(public_key, "public_key")
@@ -285,7 +308,7 @@ module Protocol
             raise Error, "WELCOME decryption failed"
           end
 
-          sn_public = @crypto::PublicKey.new(w_plaintext.byteslice(0, 32))
+          sn_public = peer_public_key(w_plaintext.byteslice(0, 32), "server short-term key")
           cookie    = w_plaintext.byteslice(32, 96)
 
           session = @crypto::Box.new(sn_public, cn_secret)
@@ -381,7 +404,7 @@ module Protocol
           hdata = hello_cmd.data
           raise Error, "HELLO wrong size (#{hdata.bytesize})" unless hdata.bytesize == 194
 
-          cn_public     = @crypto::PublicKey.new(hdata.byteslice(74, 32))
+          cn_public     = peer_public_key(hdata.byteslice(74, 32), "client short-term key")
           h_short_nonce = hdata.byteslice(106, 8)
           h_signature   = hdata.byteslice(114, 80)
 
@@ -454,7 +477,7 @@ module Protocol
 
           raise Error, "INITIATE plaintext too short" if i_plaintext.bytesize < 32 + 16 + 80
 
-          client_permanent  = @crypto::PublicKey.new(i_plaintext.byteslice(0, 32))
+          client_permanent  = peer_public_key(i_plaintext.byteslice(0, 32), "client permanent key")
           vouch_short_nonce = i_plaintext.byteslice(32, 16)
           vouch_ciphertext  = i_plaintext.byteslice(48, 80)
           metadata_bytes    = i_plaintext.byteslice(128..) || "".b
@@ -565,6 +588,14 @@ module Protocol
           io.flush
         rescue IOError
           # connection may already be broken
+        end
+
+
+        # Wraps a public key the peer sent, refusing small-order points.
+        def peer_public_key(bytes, name)
+          raise Error, "#{name} is a low-order point" if self.class.low_order_key?(bytes)
+
+          @crypto::PublicKey.new(bytes)
         end
 
 

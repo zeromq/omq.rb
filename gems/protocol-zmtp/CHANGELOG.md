@@ -25,6 +25,11 @@
   identity over 255 bytes, or an as-server flag other than 0 or 1 now fail the
   handshake. A peer could declare a huge READY or HELLO frame and have it read
   before authentication.
+- Rejected small-order CURVE public keys: a peer's short-term or permanent key,
+  or a configured server key, that is one of the X25519 low-order points (with
+  or without the top bit) now fails the handshake or raises `ArgumentError`.
+  With such a key the shared secret is all zero; the pure Ruby nuckle backend
+  did not refuse it. Added `Curve.low_order_key?`.
 
 ## [0.10.5] - 2026-10-15
 

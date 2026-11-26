@@ -574,5 +574,38 @@ class ProtocolZMTPMechanismCurveTest < Minitest::Spec
         end
       end
     end
+
+    describe "low-order keys" do
+      Curve = Protocol::ZMTP::Mechanism::Curve
+
+
+      it "recognizes every small-order point, with or without the top bit" do
+        Curve::LOW_ORDER_KEYS.each do |key|
+          assert Curve.low_order_key?(key)
+
+          high = key.dup
+          high.setbyte(31, high.getbyte(31) | 0x80)
+          assert Curve.low_order_key?(high)
+        end
+
+        refute Curve.low_order_key?(Nuckle::PrivateKey.generate.public_key.to_s)
+      end
+
+
+      it "rejects a low-order server key in the client config" do
+        assert_raises(ArgumentError) do
+          Curve.client(server_key: Curve::LOW_ORDER_KEYS[2], crypto: Nuckle)
+        end
+      end
+
+
+      it "rejects a low-order key sent by the peer" do
+        mech = Curve.client(server_key: Nuckle::PrivateKey.generate.public_key.to_s, crypto: Nuckle)
+
+        assert_raises(Protocol::ZMTP::Error) do
+          mech.send(:peer_public_key, Curve::LOW_ORDER_KEYS[3], "server short-term key")
+        end
+      end
+    end
   end
 end

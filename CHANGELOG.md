@@ -132,6 +132,8 @@
   that claims one gets a generated identity, and generated identities are a zero
   byte plus a 32-bit counter, so they can no longer collide with peer-chosen
   ones.
+- Rejected small-order CURVE keys from peers, which gave an all-zero shared
+  secret with the nuckle backend (protocol-zmtp).
 
 ## [0.29.1] - 2026-11-26
 
