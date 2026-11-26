@@ -14,11 +14,12 @@ module OMQ
       Engine.transports["ipc"] = self
 
 
-      # The URI of an abstract namespace endpoint. +URI.parse+ reads the @
-      # of "ipc://@name" as the end of an empty userinfo, so its #to_s is
-      # "ipc://name", a relative file path. Here the path keeps the @.
+      # The URI of an endpoint +URI.parse+ can't keep, with the path as
+      # given. +URI.parse+ reads the @ of "ipc://@name" as the end of an
+      # empty userinfo, so its #to_s is "ipc://name", a relative file path,
+      # and it rejects paths with spaces and similar characters.
       #
-      class AbstractURI < URI::Generic
+      class PathURI < URI::Generic
         # @return [String] e.g. "ipc://@name"
         #
         def to_s
@@ -139,18 +140,27 @@ module OMQ
 
 
         # @param endpoint [String] e.g. "ipc:///tmp/my.sock" or "ipc://@abstract"
-        # @return [URI::Generic] the endpoint's URI; an {AbstractURI} for an
-        #   abstract namespace name
+        # @return [URI::Generic] the endpoint's URI; a {PathURI} for an
+        #   abstract namespace name or a path +URI.parse+ rejects
         #
         def endpoint_uri(endpoint)
           path = parse_path(endpoint)
-          return URI.parse(endpoint) unless abstract?(path)
+          return path_uri(path) if abstract?(path)
 
-          AbstractURI.new("ipc", nil, nil, nil, nil, path, nil, nil, nil)
+          begin
+            URI.parse(endpoint)
+          rescue URI::InvalidURIError
+            path_uri(path)
+          end
         end
 
 
         private
+
+
+        def path_uri(path)
+          PathURI.new("ipc", nil, nil, nil, nil, path, nil, nil, nil)
+        end
 
 
         # Connects to +path+ and hangs up. Raises ECONNREFUSED if nothing

@@ -9,6 +9,9 @@
   reads the @ as the end of an empty userinfo, and connecting to that dialed
   a relative file path. Abstract names `URI.parse` rejects, such as ones with
   spaces, no longer raise after the bind.
+- `#bind` and `#connect` no longer raise for an IPC file path `URI.parse`
+  rejects, such as one with a space. They raised once the socket was already
+  bound or dialing.
 
 ## [0.30.0] - 2026-11-26
 
