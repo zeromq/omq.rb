@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `--lz4` help reads "LZ4 compression", without "(FAST)".
+
 ## 0.20.0 - 2026-11-26
 
 - `-z` and `--compress=zstd` compress at an adaptive level: each connection
