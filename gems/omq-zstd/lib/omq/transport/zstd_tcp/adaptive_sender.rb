@@ -24,7 +24,7 @@ module OMQ
         WRITE_GRACE = 0.001
 
         # The send pump's batch limits (`Routing::RoundRobin`). A batch that
-        # reaches one stopped with input left.
+        # reaches one with input still queued overflowed.
         BATCH_MSG_CAP  = Routing::RoundRobin::BATCH_MSG_CAP
         BATCH_BYTE_CAP = Routing::RoundRobin::BATCH_BYTE_CAP
 
@@ -39,9 +39,13 @@ module OMQ
         # @param codec [Codec] the socket's codec, with the level range
         # @param send_hwm [Integer, nil] the socket's send HWM. A batch this
         #   large was taken from a full queue.
-        def initialize(codec, send_hwm:)
+        # @param queued [#call, nil] whether the socket has messages queued
+        #   to send, asked as each batch is written. Nil counts no batch as
+        #   backlogged.
+        def initialize(codec, send_hwm:, queued:)
           @codec       = codec
           @send_hwm    = send_hwm if send_hwm&.positive?
+          @queued      = queued
           @adaptive    = Zrip::AdaptiveLevel.new(codec.level_range, start: START_LEVEL)
           @dict        = codec.send_dict_bytes
           @frame_codec = codec.build_frame_codec(@adaptive.level)
@@ -72,8 +76,14 @@ module OMQ
           bytes = 0
           messages.each { |parts| parts.each { |part| bytes += part.bytesize } }
 
+          # A batch that reaches a limit can still be all there was: one
+          # large message reaches the byte limit alone.
+          capped = messages.size >= BATCH_MSG_CAP || bytes >= BATCH_BYTE_CAP
+          left   = @queued&.call
+
           @batches    += 1
-          @capped     += 1 if messages.size >= BATCH_MSG_CAP || bytes >= BATCH_BYTE_CAP
+          @backlogged += 1 if left
+          @overflowed += 1 if left && capped
           @input_full += 1 if @send_hwm && messages.size >= @send_hwm
         end
 
@@ -101,8 +111,8 @@ module OMQ
             elapsed:    elapsed,
             blocked:    @blocked,
             batches:    @batches,
-            backlogged: @capped,
-            overflowed: @capped,
+            backlogged: @backlogged,
+            overflowed: @overflowed,
             input_full: @input_full,
           )
           level = @adaptive.update(plain: @plain, compressed: @compressed, busy: @busy, bottleneck: bottleneck)
@@ -129,7 +139,8 @@ module OMQ
           @busy           = 0.0
           @blocked        = 0.0
           @batches        = 0
-          @capped         = 0
+          @backlogged     = 0
+          @overflowed     = 0
           @input_full     = 0
         end
 

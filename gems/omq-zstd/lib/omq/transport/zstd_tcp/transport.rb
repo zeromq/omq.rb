@@ -111,6 +111,16 @@ module OMQ
         end
 
 
+        # @param engine [Engine]
+        # @return [Proc] whether the socket has messages queued to send
+        def queued_probe(engine)
+          routing = engine.routing
+          return -> { false } unless routing.respond_to?(:send_queues_drained?)
+
+          -> { !routing.send_queues_drained? }
+        end
+
+
         private
 
 
@@ -248,7 +258,8 @@ module OMQ
         # @return [ZstdConnection]
         #
         def wrap_connection(conn)
-          ZstdConnection.new(conn, @codec, adaptive: true, send_hwm: @engine.options.send_hwm)
+          ZstdConnection.new(conn, @codec, adaptive: true, send_hwm: @engine.options.send_hwm,
+                                             queued: ZstdTcp.queued_probe(@engine))
         end
 
       end
@@ -289,7 +300,8 @@ module OMQ
         # @return [ZstdConnection]
         #
         def wrap_connection(conn)
-          ZstdConnection.new(conn, @codec, adaptive: true, send_hwm: @engine.options.send_hwm)
+          ZstdConnection.new(conn, @codec, adaptive: true, send_hwm: @engine.options.send_hwm,
+                                             queued: ZstdTcp.queued_probe(@engine))
         end
 
 

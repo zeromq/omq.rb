@@ -16,11 +16,13 @@ module OMQ
         # @param adaptive [Boolean] adapt the send level on this connection,
         #   within the codec's range
         # @param send_hwm [Integer, nil] the socket's send HWM
-        def initialize(conn, codec, adaptive: false, send_hwm: nil)
+        # @param queued [#call, nil] whether the socket has messages queued
+        #   to send
+        def initialize(conn, codec, adaptive: false, send_hwm: nil, queued: nil)
           super(conn, max_message_size: codec.max_message_size,
                 arena_sentinel: Codec::ARENA_MAGIC, protocol_error: ProtocolError)
           @codec              = codec
-          @sender             = AdaptiveSender.new(codec, send_hwm: send_hwm) if adaptive && codec.level_range
+          @sender             = AdaptiveSender.new(codec, send_hwm: send_hwm, queued: queued) if adaptive && codec.level_range
           @dict_shipped       = false
           # FrameCodec is the decoder. Starts no-dict; when a dict
           # shipment arrives on this direction, we build a fresh

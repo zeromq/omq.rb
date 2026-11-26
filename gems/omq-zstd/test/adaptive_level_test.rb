@@ -42,9 +42,11 @@ class OMQZstdAdaptiveLevelTest < Minitest::Spec
 
 
   describe ZstdTcp::AdaptiveSender do
-    def sender
+    # `queued` is whether the socket still has messages to send after each
+    # batch.
+    def sender(queued: true)
       codec = ZstdTcp::Codec.new(level: ZstdTcp::START_LEVEL, level_range: ZstdTcp::DEFAULT_LEVEL_RANGE)
-      ZstdTcp::AdaptiveSender.new(codec, send_hwm: 1000)
+      ZstdTcp::AdaptiveSender.new(codec, send_hwm: 1000, queued: -> { queued })
     end
 
 
@@ -85,10 +87,32 @@ class OMQZstdAdaptiveLevelTest < Minitest::Spec
     end
 
 
+    it "steps toward ratio when capped batches leave nothing queued" do
+      s = sender(queued: false)
+      run_window(s, blocked: 0.0, capped: true)
+      assert_operator s.frame_codec.level, :>, -1
+    end
+
+
     it "waits for 100 ms and 256 KiB of input before it adapts" do
       s = sender
       run_window(s, blocked: 0.0, capped: true, elapsed: 0.05)
       assert_equal(-1, s.frame_codec.level)
+    end
+  end
+
+
+  describe "queued_probe" do
+    it "says whether the socket has messages queued to send" do
+      Sync do
+        push  = OMQ::PUSH.new(linger: 0)
+        probe = ZstdTcp.queued_probe(push.instance_variable_get(:@engine))
+        refute probe.call
+        push << ["no peer, so it stays queued"]
+        assert probe.call
+      ensure
+        push&.close
+      end
     end
   end
 
