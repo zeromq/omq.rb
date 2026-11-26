@@ -9,6 +9,8 @@
 - Validated `reconnect_interval`. Zero, negative, non-finite and beginless
   values raised later or busy-looped; an endless Range (`0.1..`) killed TCP
   sockets with `ArgumentError` and now backs off without a cap.
+- Treated `heartbeat_interval = 0` as disabled, like libzmq. It sent PINGs in a
+  tight loop and closed every connection right after the handshake.
 
 ## [0.29.1] - 2026-11-26
 

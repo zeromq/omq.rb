@@ -14,7 +14,7 @@ module OMQ
       #
       def self.start(parent, conn, options)
         interval = options.heartbeat_interval
-        return unless interval
+        return unless interval&.positive?
 
         ttl     = options.heartbeat_ttl     || interval
         timeout = options.heartbeat_timeout || interval

@@ -42,6 +42,44 @@ class OMQHeartbeatTest < Minitest::Spec
       end
     end
 
+    it "treats a zero heartbeat_interval as disabled" do
+      parent = Async::Barrier.new
+      opts   = OMQ::Options.new
+      opts.heartbeat_interval = 0
+
+      assert_nil OMQ::Engine::Heartbeat.start(parent, nil, opts)
+      assert_empty parent.tasks
+    end
+
+
+    it "keeps a connection with zero heartbeat_interval up" do
+      Async do
+        rep = OMQ::REP.new.tap { |s| s.linger = 0 }
+        rep.heartbeat_interval = 0
+        port = rep.bind("tcp://127.0.0.1:0").port
+
+        req = OMQ::REQ.new.tap { |s| s.linger = 0 }
+        req.heartbeat_interval = 0
+        events = []
+        req.monitor { |event| events << event.type }
+        req.connect("tcp://127.0.0.1:#{port}")
+
+        5.times do |i|
+          req.send("ping #{i}")
+          assert_equal ["ping #{i}"], rep.receive
+          rep.send("pong #{i}")
+          assert_equal ["pong #{i}"], req.receive
+        end
+
+        assert_equal 1, events.count(:handshake_succeeded)
+        refute_includes events, :disconnected
+      ensure
+        req&.close
+        rep&.close
+      end
+    end
+
+
     it "detects dead peer via heartbeat timeout" do
       Async do
         rep = OMQ::REP.new.tap { |s| s.linger = 0 }
