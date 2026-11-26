@@ -103,6 +103,32 @@ class OMQZstdAdaptiveLevelTest < Minitest::Spec
   end
 
 
+  describe ZstdTcp::ZstdConnection do
+    # A connection whose writes wait on the link, as io-stream does once
+    # its buffer passes 64 KiB.
+    class SlowLink
+      def write_message(_parts)
+        sleep 0.005
+      end
+
+
+      def write_messages(_messages)
+        sleep 0.005
+      end
+
+    end
+
+
+    it "counts writes that wait on the link as stalled" do
+      codec = ZstdTcp::Codec.new(level: ZstdTcp::START_LEVEL, level_range: ZstdTcp::DEFAULT_LEVEL_RANGE)
+      conn  = ZstdTcp::ZstdConnection.new(SlowLink.new, codec, adaptive: true, send_hwm: 1000)
+      conn.write_messages([["a" * 100], ["b" * 100]])
+      conn.write_message(["c" * 100])
+      assert_operator conn.instance_variable_get(:@sender).instance_variable_get(:@blocked), :>=, 0.007
+    end
+  end
+
+
   describe "queued_probe" do
     it "says whether the socket has messages queued to send" do
       Sync do

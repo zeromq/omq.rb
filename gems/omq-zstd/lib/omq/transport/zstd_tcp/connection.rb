@@ -46,7 +46,7 @@ module OMQ
         def write_message(parts)
           compressed = @codec.compress_parts(parts, send_codec)
           ship_dict!
-          __getobj__.write_message(compressed)
+          timed { __getobj__.write_message(compressed) }
           @sender&.note_batch([parts])
         end
 
@@ -54,7 +54,7 @@ module OMQ
         def write_messages(messages)
           compressed = @codec.compress_messages(messages, send_codec)
           ship_dict!
-          __getobj__.write_messages(compressed)
+          timed { __getobj__.write_messages(compressed) }
           @sender&.note_batch(messages)
         end
 
@@ -73,7 +73,8 @@ module OMQ
         end
 
 
-        # Counts the time a write takes toward the adaptation window.
+        # Counts the time a write takes toward the adaptation window. A write
+        # waits on the link when io-stream drains its buffer, past 64 KiB.
         def timed
           return yield unless @sender
 
