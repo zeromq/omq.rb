@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-26
+
 ### Changed
 
 - The sender compresses with lz4rip's ratio profile: on JSON records, 2%
@@ -19,6 +21,7 @@
 - The listener keeps accepting after `EMFILE`, `ECONNABORTED` and similar
   errors, as `tcp://` does. One such error stopped it for good.
 - Require `lz4rip ~> 0.3.0`, for its ratio profile.
+- Require `omq ~> 0.30`, for the decode budget and the accept loop.
 
 ## [0.4.1] - 2026-11-26
 

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-26
+
 ### Fixed
 
 - Without a native Fiber scheduler (TruffleRuby), monitor events could stop
