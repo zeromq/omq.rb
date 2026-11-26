@@ -79,6 +79,9 @@
   a 64-slot blocking queue, so accept loops, handshakes and teardown waited on
   the monitor. Lifecycle events no longer block; verbose message events still
   wait for the monitor to catch up.
+- Dropped RADIO messages too large for one UDP datagram instead of killing the
+  socket with `Errno::EMSGSIZE`. The UDP send buffer now fits a maximum-size
+  datagram (macOS defaults to 9216 bytes), or uses `sndbuf` when set.
 
 ## [0.29.1] - 2026-11-26
 

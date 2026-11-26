@@ -20,6 +20,23 @@ class OMQTransportUDPTest < Minitest::Spec
       end
     end
 
+    it "drops a message too large for one datagram and keeps sending" do
+      Async do
+        dish  = OMQ::DISH.bind("udp://127.0.0.1:15559")
+        radio = OMQ::RADIO.connect("udp://127.0.0.1:15559")
+        dish.join("weather")
+        Async::Task.current.yield
+
+        radio.publish("weather", "x" * 70_000)
+        radio.publish("weather", "y" * 20_000)
+        assert_equal ["weather", "y" * 20_000], dish.receive
+      ensure
+        radio&.close
+        dish&.close
+      end
+    end
+
+
     it "filters messages to un-joined groups" do
       Sync do
         dish  = OMQ::DISH.bind("udp://127.0.0.1:15551")

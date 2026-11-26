@@ -69,6 +69,22 @@ module OMQ
         end
 
 
+        # Sizes the send buffer of a RADIO socket. Uses +sndbuf+ if set;
+        # otherwise makes sure a maximum-size datagram fits (macOS
+        # defaults to 9216 bytes and refuses larger sends).
+        #
+        # @param socket [UDPSocket]
+        # @param options [Options]
+        #
+        def apply_send_buffer(socket, options)
+          size = options.sndbuf
+          size ||= MAX_DATAGRAM_SIZE unless socket.getsockopt(::Socket::SOL_SOCKET, ::Socket::SO_SNDBUF).int >= MAX_DATAGRAM_SIZE
+          socket.setsockopt(::Socket::SOL_SOCKET, ::Socket::SO_SNDBUF, size) if size
+        rescue SystemCallError
+          # keep the OS default
+        end
+
+
         # Decodes a UDP datagram into [group, body].
         #
         # @param data [String] raw datagram bytes
@@ -113,6 +129,7 @@ module OMQ
         def connect
           host, port = UDP.parse_endpoint(@endpoint)
           socket     = UDPSocket.new
+          UDP.apply_send_buffer(socket, @engine.options)
           conn       = RadioConnection.new(socket, host, port)
           @engine.connection_ready(conn, endpoint: @endpoint)
         end
@@ -141,11 +158,16 @@ module OMQ
         #
         # @param parts [Array<String>] [group, body]
         #
+        # Drops what UDP can't carry: a datagram over
+        # {MAX_DATAGRAM_SIZE}, or one the OS refuses as too large.
+        #
         def write_message(parts)
           group, body = parts
           datagram = UDP.encode_datagram(group.to_s, body.to_s)
+          return if datagram.bytesize > MAX_DATAGRAM_SIZE
+
           @socket.send(datagram, 0, @host, @port)
-        rescue Errno::ECONNREFUSED, Errno::ENETUNREACH
+        rescue Errno::ECONNREFUSED, Errno::ENETUNREACH, Errno::EMSGSIZE
           # UDP fire-and-forget — drop silently
         end
 
