@@ -27,11 +27,25 @@ module OMQ
         MAX_COMPRESSED_PART = 1 << 30
 
 
+        # @return [String, nil] the dictionary this socket sends with
+        # @return [Integer, nil] the socket's `max_message_size`
         attr_reader :send_dict_bytes, :max_message_size
 
+        # @return [Integer] the level of the shared codec: fixed, or the start
+        #   of an adaptive range
+        attr_reader :level
 
-        def initialize(level:, dict: nil, max_message_size: nil, auto_dict: nil)
+        # @return [Range, nil] the levels each connection adapts within, or
+        #   nil for a fixed level
+        attr_reader :level_range
+
+        # @return [Zrip::FrameCodec] the shared frame codec
+        attr_reader :send_codec
+
+
+        def initialize(level:, level_range: nil, dict: nil, max_message_size: nil, auto_dict: nil)
           @level            = level
+          @level_range      = level_range
           @max_message_size = max_message_size
           @dict_capacity    = if auto_dict.is_a?(Hash) && auto_dict[:capacity]
                                 auto_dict[:capacity]
@@ -58,27 +72,49 @@ module OMQ
         end
 
 
-        def compress_parts(parts)
-          return @cached_compressed if parts.equal?(@cached_parts)
+        # Compresses one message's parts. Fan-out compresses a message once
+        # for every subscriber with the shared codec; a connection that
+        # adapts its level passes its own.
+        #
+        # @param parts [Array<String>]
+        # @param frame_codec [Zrip::FrameCodec]
+        # @return [Array<String>] wire parts
+        def compress_parts(parts, frame_codec = @send_codec)
+          shared = frame_codec.equal?(@send_codec)
+          return @cached_compressed if shared && parts.equal?(@cached_parts)
 
           parts.each { |p| maybe_train!(p) }
 
-          compressed = parts.map { |p| compress_or_plain(p) }
-          @cached_parts      = parts
-          @cached_compressed = compressed.freeze
+          compressed = parts.map { |p| compress_or_plain(p, frame_codec) }
+          if shared
+            @cached_parts      = parts
+            @cached_compressed = compressed.freeze
+          end
           compressed
         end
 
 
-        def compress_messages(messages)
+        # A frame codec with the socket's dictionary, if any, at `level`.
+        #
+        # @param level [Integer]
+        # @return [Zrip::FrameCodec]
+        def build_frame_codec(level)
+          Zrip::FrameCodec.new(dict: @send_dict_bytes, level: level)
+        end
+
+
+        # @param messages [Array<Array<String>>]
+        # @param frame_codec [Zrip::FrameCodec]
+        # @return [Array<Array<String>>] wire messages
+        def compress_messages(messages, frame_codec = @send_codec)
           CompressionArena.each_batch(messages, target: ARENA_TARGET_BYTES).map do |batch|
             if batch.size == 1
-              compress_parts(batch.first)
+              compress_parts(batch.first, frame_codec)
             else
               batch.each { |parts| parts.each { |part| maybe_train!(part) } }
               threshold = @send_dict_bytes ? MIN_COMPRESS_WITH_DICT : MIN_COMPRESS_NO_DICT
               [CompressionArena.encode(batch, sentinel: ARENA_MAGIC, threshold: threshold) do |data|
-                @send_codec.compress(data)
+                frame_codec.compress(data)
               end]
             end
           end
@@ -196,13 +232,13 @@ module OMQ
         end
 
 
-        def compress_or_plain(part)
+        def compress_or_plain(part, frame_codec = @send_codec)
           bytes = part.is_a?(String) && part.encoding == Encoding::BINARY ? part : part.to_s.b
           threshold = @send_dict_bytes ? MIN_COMPRESS_WITH_DICT : MIN_COMPRESS_NO_DICT
           return plain(bytes) if bytes.bytesize < threshold
           return plain(bytes) if bytes.bytesize > max_compressed_part
 
-          compressed = @send_codec.compress(bytes)
+          compressed = frame_codec.compress(bytes)
 
           return plain(bytes) if compressed.bytesize >= bytes.bytesize - 4
 

@@ -9,6 +9,15 @@ module OMQ
     module ZstdTcp
       SCHEME = "zstd+tcp"
 
+      # Levels a connection adapts within by default, as omq.rs.
+      DEFAULT_LEVEL_RANGE = (-7..4)
+
+      # The level an adaptive connection starts at, and fan-out keeps.
+      START_LEVEL = -1
+
+      # Levels zrip accepts: -8 runs as -7, and 0 as its default level.
+      LEVELS = (-8..4)
+
 
       # WeakKeyMap keyed by Engine — the Codec for a socket lives as long
       # as the Engine (and therefore the socket) lives.  When the socket is
@@ -22,21 +31,19 @@ module OMQ
         #
         # @param endpoint [String] e.g. "zstd+tcp://127.0.0.1:5555"
         # @param engine [Engine]
-        # @param level [Integer] Zstd compression level
+        # @param level [Integer, Range, nil] a fixed level (-7..4), or a
+        #   Range each connection adapts its level within. Nil adapts within
+        #   -7..4. Fan-out sockets (PUB, XPUB, RADIO) compress a message once
+        #   for all subscribers, so they keep a fixed level: the start of the
+        #   range.
         # @param dict [String, nil] user-supplied dictionary bytes
         # @param auto_dict [true, Hash, nil] enable automatic dictionary
         #   training. Pass `true` for defaults or `{ capacity: N }`.
         # @return [Listener]
+        # @raise [ArgumentError] on an unknown option or a level zrip lacks
         #
-        def listener(endpoint, engine, level: -3, dict: nil, auto_dict: nil, **)
-          validate_security!(engine)
-          validate_auto_dict!(auto_dict, dict)
-          codec = codec_for(
-            engine,
-            level: level,
-            dict: dict,
-            auto_dict: normalize_auto_dict(auto_dict),
-          )
+        def listener(endpoint, engine, level: nil, dict: nil, auto_dict: nil)
+          codec = codec_for(engine, level: level, dict: dict, auto_dict: auto_dict)
 
           host, port = parse_endpoint(endpoint)
           host       = normalize_bind_host(host)
@@ -59,22 +66,15 @@ module OMQ
         #
         # @param endpoint [String] e.g. "zstd+tcp://127.0.0.1:5555"
         # @param engine [Engine]
-        # @param level [Integer] Zstd compression level
+        # @param level [Integer, Range, nil] see {.listener}
         # @param dict [String, nil] user-supplied dictionary bytes
         # @param auto_dict [true, Hash, nil] enable automatic dictionary
         #   training. Pass `true` for defaults or `{ capacity: N }`.
         # @return [Dialer]
+        # @raise [ArgumentError] on an unknown option or a level zrip lacks
         #
-        def dialer(endpoint, engine, level: -3, dict: nil, auto_dict: nil, **)
-          validate_security!(engine)
-          validate_auto_dict!(auto_dict, dict)
-          codec = codec_for(
-            engine,
-            level: level,
-            dict: dict,
-            auto_dict: normalize_auto_dict(auto_dict),
-          )
-          Dialer.new(endpoint, engine, codec)
+        def dialer(endpoint, engine, level: nil, dict: nil, auto_dict: nil)
+          Dialer.new(endpoint, engine, codec_for(engine, level: level, dict: dict, auto_dict: auto_dict))
         end
 
 
@@ -164,13 +164,40 @@ module OMQ
         end
 
 
+        # The socket's codec: the first bind or connect sets its options.
         def codec_for(engine, level:, dict:, auto_dict:)
-          @codecs[engine] ||= Codec.new level: level, dict: dict, auto_dict: auto_dict,
-            max_message_size: engine.options.max_message_size
-
+          validate_security!(engine)
+          validate_auto_dict!(auto_dict, dict)
+          @codecs[engine] ||= build_codec(engine, level, dict, normalize_auto_dict(auto_dict))
         rescue Ractor::IsolationError
-          Codec.new level: level, dict: dict, auto_dict: auto_dict,
-            max_message_size: engine.options.max_message_size
+          build_codec(engine, level, dict, normalize_auto_dict(auto_dict))
+        end
+
+
+        def build_codec(engine, level, dict, auto_dict)
+          range = level_range(level)
+          start = range ? Zrip::AdaptiveLevel.new(range, start: START_LEVEL).level : level
+          range = nil if engine.routing.is_a?(Routing::FanOut)
+          Codec.new(level: start, level_range: range, dict: dict, auto_dict: auto_dict,
+                    max_message_size: engine.options.max_message_size)
+        end
+
+
+        # @return [Range, nil] the range to adapt within, nil for a fixed level
+        # @raise [ArgumentError] on a level or range zrip lacks
+        def level_range(level)
+          case level
+          when nil
+            DEFAULT_LEVEL_RANGE
+          when Range
+            Zrip::AdaptiveLevel.new(level, start: START_LEVEL) # validates the range
+            level
+          when Integer
+            raise ArgumentError, "level #{level} is outside #{LEVELS}" unless LEVELS.cover?(level)
+            nil
+          else
+            raise ArgumentError, "level must be an Integer or a Range, got #{level.inspect}"
+          end
         end
       end
 
@@ -221,7 +248,7 @@ module OMQ
         # @return [ZstdConnection]
         #
         def wrap_connection(conn)
-          ZstdConnection.new(conn, @codec)
+          ZstdConnection.new(conn, @codec, adaptive: true, send_hwm: @engine.options.send_hwm)
         end
 
       end
@@ -262,7 +289,7 @@ module OMQ
         # @return [ZstdConnection]
         #
         def wrap_connection(conn)
-          ZstdConnection.new(conn, @codec)
+          ZstdConnection.new(conn, @codec, adaptive: true, send_hwm: @engine.options.send_hwm)
         end
 
 
