@@ -14,6 +14,21 @@ module OMQ
       Engine.transports["ipc"] = self
 
 
+      # The URI of an endpoint +URI.parse+ can't keep, with the path as
+      # given. +URI.parse+ reads the @ of "ipc://@name" as the end of an
+      # empty userinfo, so its #to_s is "ipc://name", a relative file path,
+      # and it rejects paths with spaces and similar characters.
+      #
+      class PathURI < URI::Generic
+        # @return [String] e.g. "ipc://@name"
+        #
+        def to_s
+          "ipc://#{path}"
+        end
+
+      end
+
+
       class << self
         # ZMTP connection class used for IPC-accepted/dialed peers.
         #
@@ -124,7 +139,28 @@ module OMQ
         end
 
 
+        # @param endpoint [String] e.g. "ipc:///tmp/my.sock" or "ipc://@abstract"
+        # @return [URI::Generic] the endpoint's URI; a {PathURI} for an
+        #   abstract namespace name or a path +URI.parse+ rejects
+        #
+        def endpoint_uri(endpoint)
+          path = parse_path(endpoint)
+          return path_uri(path) if abstract?(path)
+
+          begin
+            URI.parse(endpoint)
+          rescue URI::InvalidURIError
+            path_uri(path)
+          end
+        end
+
+
         private
+
+
+        def path_uri(path)
+          PathURI.new("ipc", nil, nil, nil, nil, path, nil, nil, nil)
+        end
 
 
         # Connects to +path+ and hangs up. Raises ECONNREFUSED if nothing

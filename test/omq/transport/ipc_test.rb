@@ -37,6 +37,43 @@ class OMQTransportIPCTest < Minitest::Spec
       end
     end
 
+    it "returns a URI for a file path URI.parse rejects" do
+      Async do
+        endpoint = "ipc://#{File.join(Dir.tmpdir, "omq test #{$$}.sock")}"
+        server   = OMQ::PAIR.new
+        client   = OMQ::PAIR.new
+        bound    = server.bind(endpoint)
+        assert_equal endpoint, bound.to_s
+
+        assert_equal endpoint, client.connect(bound.to_s).to_s
+        client.send("via a path with a space")
+        assert_equal ["via a path with a space"], server.receive
+      ensure
+        client&.close
+        server&.close
+      end
+    end
+
+    it "returns abstract namespace URIs that keep the @" do
+      skip "abstract namespace only on Linux" unless RUBY_PLATFORM =~ /linux/
+
+      Async do
+        endpoint = "ipc://@omq-test-abstract-uri-#{$$}"
+        server   = OMQ::PAIR.new
+        client   = OMQ::PAIR.new
+        bound    = server.bind(endpoint)
+        assert_equal endpoint, bound.to_s
+        assert_equal "@omq-test-abstract-uri-#{$$}", bound.path
+
+        assert_equal endpoint, client.connect(bound.to_s).to_s
+        client.send("via the bound URI")
+        assert_equal ["via the bound URI"], server.receive
+      ensure
+        client&.close
+        server&.close
+      end
+    end
+
     it "applies sndbuf and rcvbuf to dialed and accepted connections" do
       Async do
         pull = OMQ::PULL.new

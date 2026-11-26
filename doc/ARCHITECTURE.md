@@ -188,8 +188,9 @@ A transport implements:
   optionally `#port`.
 - `.dialer(endpoint, engine)`: a dialer with `#endpoint` and `#connect`.
   `Engine#connect` and `Reconnect` use it for every transport.
-- Optionally `.validate_endpoint!(endpoint)` and
-  `.canonical_endpoint(endpoint)`.
+- Optionally `.validate_endpoint!(endpoint)`,
+  `.canonical_endpoint(endpoint)` and `.endpoint_uri(endpoint)`, the URI
+  `#bind` and `#connect` return (IPC keeps the @ of abstract names).
 
 `CONNECTION_LOST` and `CONNECTION_FAILED` accept plugin error classes until
 the first bind or connect freezes them.

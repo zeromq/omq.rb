@@ -33,6 +33,21 @@ module OMQ
     class << self
       # @return [Hash{String => Module}] registered transports
       attr_reader :transports
+
+
+      # The URI {#bind} and {#connect} return for +endpoint+. A transport
+      # with +.endpoint_uri+ builds it: IPC keeps the @ of abstract names.
+      # The native backends use it for the endpoints they resolve.
+      #
+      # @param endpoint [String]
+      # @return [URI::Generic]
+      #
+      def endpoint_uri(endpoint)
+        transport = @transports[endpoint[/\A[^:]+/]]
+        return transport.endpoint_uri(endpoint) if transport.respond_to?(:endpoint_uri)
+
+        URI.parse(endpoint)
+      end
     end
 
 
@@ -217,7 +232,7 @@ module OMQ
       @listeners[listener.endpoint] = listener
       remember_bind_alias(endpoint, listener.endpoint)
       emit_monitor_event(:listening, endpoint: listener.endpoint)
-      URI.parse(listener.endpoint)
+      Engine.endpoint_uri(listener.endpoint)
     rescue => error
       emit_monitor_event(:bind_failed, endpoint: endpoint, detail: { error: error })
       raise
@@ -245,7 +260,7 @@ module OMQ
         schedule_reconnect(endpoint, delay: 0)
       end
 
-      URI.parse(endpoint)
+      Engine.endpoint_uri(endpoint)
     end
 
 

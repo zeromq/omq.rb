@@ -173,6 +173,27 @@ class OMQBackendRustRustBackendTest < Minitest::Spec
       end
 
 
+      it "returns abstract namespace URIs that keep the @" do
+        skip "abstract namespace only on Linux" unless RUBY_PLATFORM =~ /linux/
+
+        run_backend do
+          endpoint = "ipc://@omq-test-rust-uri-#{$$}"
+          pull     = OMQ::PULL.new(backend: BACKEND)
+          push     = OMQ::PUSH.new(backend: BACKEND)
+          bound    = pull.bind(endpoint)
+          assert_equal endpoint, bound.to_s
+
+          assert_equal endpoint, push.connect(bound.to_s).to_s
+          push.peer_connected.wait
+          push << "via the bound URI"
+          assert_equal ["via the bound URI"], pull.receive
+        ensure
+          push&.close
+          pull&.close
+        end
+      end
+
+
       it "sends multipart messages" do
         run_backend do
           pull = OMQ::PULL.new(backend: BACKEND)

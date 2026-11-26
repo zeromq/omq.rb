@@ -122,7 +122,7 @@ module OMQ
           capture_parent_task(parent: parent)
           apply_endpoint_options!(opts)
           ensure_materialized
-          URI.parse(with_java_errors { @native.bind(endpoint) })
+          ::OMQ::Engine.endpoint_uri(with_java_errors { @native.bind(endpoint) })
         end
 
 
@@ -132,7 +132,7 @@ module OMQ
           ensure_materialized
           with_java_errors { @native.connect(endpoint) }
           resolve_peer_connected if endpoint.start_with?("inproc://")
-          URI.parse(endpoint)
+          ::OMQ::Engine.endpoint_uri(endpoint)
         end
 
 
