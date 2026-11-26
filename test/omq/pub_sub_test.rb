@@ -354,4 +354,48 @@ class OMQPubSubTest < Minitest::Spec
       end
     end
   end
+
+
+  describe "PUB with on_mute: :block" do
+    it "admits a new subscriber while a send is blocked on a full one" do
+      Async do |task|
+        pub = OMQ::PUB.new(on_mute: :block)
+        pub.send_hwm = 1
+        pub.linger   = 0
+        pub.bind("inproc://pubsub-block-join")
+
+        stalled = OMQ::SUB.new
+        stalled.recv_hwm = 1
+        stalled.subscribe("")
+        stalled.connect("inproc://pubsub-block-join")
+
+        sent  = 0
+        flood = task.async do
+          loop do
+            pub << "x"
+            sent += 1
+          end
+        end
+
+        # Run the flood until it stops making progress: it is now
+        # blocked inside the fan-out on the stalled subscriber's queue.
+        last = -1
+        until sent == last
+          last = sent
+          10.times { task.yield }
+        end
+
+        late = OMQ::SUB.new
+        late.subscribe("")
+        late.connect("inproc://pubsub-block-join")
+
+        assert_equal 2, pub.connection_count
+      ensure
+        flood&.stop
+        late&.close
+        stalled&.close
+        pub&.close
+      end
+    end
+  end
 end

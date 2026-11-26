@@ -11,6 +11,9 @@
   sockets with `ArgumentError` and now backs off without a cap.
 - Treated `heartbeat_interval = 0` as disabled, like libzmq. It sent PINGs in a
   tight loop and closed every connection right after the handshake.
+- Iterated snapshots of peers and subscriptions in PUB, XPUB, XSUB, SUB, RADIO
+  and DISH. A peer joining while a send or subscribe was blocked raised
+  `RuntimeError` inside `#connection_added`, so the new peer never registered.
 
 ## [0.29.1] - 2026-11-26
 

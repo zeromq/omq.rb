@@ -41,6 +41,7 @@ module OMQ
         @subscriptions      = {} # connection => Set of prefixes
         @subscribe_all      = Set.new # connections subscribed to "" (match-all fast path)
         @conn_queues        = {} # connection => per-connection send queue
+        @fan_out_queues     = [].freeze # snapshot of @conn_queues values
         @conflate           = engine.options.conflate
         @subscriber_joined  = Async::Promise.new
         @latest             = {} if @conflate
@@ -91,6 +92,7 @@ module OMQ
       def add_fan_out_send_connection(conn)
         q = Routing.build_queue(@engine.options.send_hwm, @engine.options.on_mute)
         @conn_queues[conn] = q
+        @fan_out_queues    = @conn_queues.values.freeze
         start_conn_send_pump(conn, q)
       end
 
@@ -104,6 +106,7 @@ module OMQ
       def remove_fan_out_send_connection(conn)
         @subscribe_all.delete(conn)
         @conn_queues.delete(conn)
+        @fan_out_queues = @conn_queues.values.freeze
       end
 
 
@@ -119,11 +122,14 @@ module OMQ
       # or other subscribers. Applications can opt in to :block for
       # strict backpressure.
       #
+      # Iterates a frozen snapshot: a :block enqueue can yield, and peers
+      # that join or leave meanwhile must not break the iteration.
+      #
       # @param parts [Array<String>]
       #
       def fan_out_enqueue(parts)
-        @connections.each do |conn|
-          @conn_queues[conn].enqueue(parts)
+        @fan_out_queues.each do |q|
+          q.enqueue(parts)
         end
       end
 

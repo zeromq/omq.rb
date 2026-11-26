@@ -46,7 +46,7 @@ module OMQ
       def connection_added(connection)
         @connections << connection
 
-        @subscriptions.each do |prefix|
+        @subscriptions.to_a.each do |prefix|
           send_subscribe(connection, prefix)
         end
 
@@ -74,7 +74,7 @@ module OMQ
       #
       def subscribe(prefix)
         @subscriptions << prefix
-        @connections.each { |conn| send_subscribe(conn, prefix) }
+        @connections.to_a.each { |conn| send_subscribe(conn, prefix) }
       end
 
 
@@ -84,7 +84,7 @@ module OMQ
       #
       def unsubscribe(prefix)
         @subscriptions.delete(prefix)
-        @connections.each { |conn| send_cancel(conn, prefix) }
+        @connections.to_a.each { |conn| send_cancel(conn, prefix) }
       end
 
 

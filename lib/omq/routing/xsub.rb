@@ -69,7 +69,7 @@ module OMQ
       # @param parts [Array<String>]
       #
       def enqueue(parts)
-        @connections.each do |conn|
+        @connections.to_a.each do |conn|
           @conn_queues[conn]&.enqueue(parts)
         end
       end

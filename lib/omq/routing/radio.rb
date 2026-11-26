@@ -27,7 +27,7 @@ module OMQ
       #
       def initialize(engine)
         @engine            = engine
-        @connections       = []
+        @connections       = [].freeze # copy-on-write: the send pump iterates it while writes yield
         @groups            = {} # connection => Set of joined groups (or ANY_GROUPS for UDP)
         @send_queue        = Routing.build_queue(engine.options.send_hwm, :block)
         @subscriber_joined = Async::Promise.new
@@ -55,7 +55,7 @@ module OMQ
       # @param connection [Protocol::ZMTP::Connection]
       #
       def connection_added(connection)
-        @connections << connection
+        @connections = [*@connections, connection].freeze
         if connection.respond_to?(:read_frame)
           @groups[connection] = Set.new
           start_group_listener(connection)
@@ -69,7 +69,7 @@ module OMQ
       # @param connection [Protocol::ZMTP::Connection]
       #
       def connection_removed(connection)
-        @connections.delete(connection)
+        @connections = (@connections - [connection]).freeze
         @groups.delete(connection)
       end
 
