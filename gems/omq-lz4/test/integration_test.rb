@@ -57,6 +57,44 @@ class OMQLZ4IntegrationTest < Minitest::Spec
     end
 
 
+    it "keeps accepting after a transient accept error" do
+      Sync do
+        pull = OMQ::PULL.new
+        events = []
+        pull.monitor { |event| events << event.type }
+        uri    = pull.bind("lz4+tcp://127.0.0.1:0")
+        server = pull.instance_variable_get(:@engine).listeners.values.first.instance_variable_get(:@servers).first
+
+        # The accept after the first client fails once with EMFILE.
+        original = server.method(:accept)
+        failed   = false
+        server.define_singleton_method(:accept) do |*args|
+          unless failed
+            failed = true
+            raise Errno::EMFILE
+          end
+
+          original.call(*args)
+        end
+
+        first = OMQ::PUSH.new(linger: 0)
+        first.connect(uri.to_s)
+        first << ["first"]
+        assert_equal ["first"], pull.receive
+
+        second = OMQ::PUSH.new(linger: 0)
+        second.connect(uri.to_s)
+        second << ["second"]
+        assert_equal ["second"], pull.receive
+        assert_includes events, :accept_failed
+      ensure
+        second&.close
+        first&.close
+        pull&.close
+      end
+    end
+
+
     it "ships a configured sender-side dict once and round-trips subsequent messages" do
       dict = ("event=login user=alice payload=" * 10).b
 

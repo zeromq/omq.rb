@@ -8,6 +8,8 @@
   in omq.rs. An LZ4M part reserves no more than its blocks can decode to.
   A 12-byte part declaring a huge size raised `NoMemoryError`, which escaped
   the connection's error handling.
+- The listener keeps accepting after `EMFILE`, `ECONNABORTED` and similar
+  errors, as `tcp://` does. One such error stopped it for good.
 
 ## [0.4.1] - 2026-11-26
 
