@@ -140,6 +140,10 @@
   for groups it didn't join. A flood on its UDP port kept the receive loop
   spinning without letting anything else run.
 - Stopped sending heartbeat PINGs to ZMTP 3.0 peers, which have no PING command.
+- Made `udp://` work over IPv6 (`udp://[::1]:5555`) and resolve the RADIO
+  destination once at connect instead of on every datagram. DISH on a multicast
+  address now joins the group, and several DISH sockets can bind the same group
+  and port.
 
 ## [0.29.1] - 2026-11-26
 

@@ -55,6 +55,51 @@ class OMQTransportUDPTest < Minitest::Spec
     end
 
 
+    it "delivers over IPv6" do
+      skip "no IPv6 loopback" unless Socket.ip_address_list.any?(&:ipv6_loopback?)
+
+      Async do
+        dish  = OMQ::DISH.bind("udp://[::1]:15561")
+        radio = OMQ::RADIO.connect("udp://[::1]:15561")
+        dish.join("weather")
+        Async::Task.current.yield
+
+        radio.publish("weather", "v6")
+        assert_equal ["weather", "v6"], dish.receive
+      ensure
+        radio&.close
+        dish&.close
+      end
+    end
+
+
+    it "joins the group when DISH binds a multicast address" do
+      Async do
+        group = "udp://239.255.77.7:15562"
+
+        begin
+          first = OMQ::DISH.bind(group)
+        rescue SystemCallError => e
+          skip "no multicast here: #{e.message}"
+        end
+
+        second = OMQ::DISH.bind(group) # same group and port
+
+        radio = OMQ::RADIO.connect(group)
+        [first, second].each { it.join("weather") }
+        Async::Task.current.yield
+
+        radio.publish("weather", "everyone")
+        assert_equal ["weather", "everyone"], first.receive
+        assert_equal ["weather", "everyone"], second.receive
+      ensure
+        radio&.close
+        second&.close
+        first&.close
+      end
+    end
+
+
     it "filters messages to un-joined groups" do
       Sync do
         dish  = OMQ::DISH.bind("udp://127.0.0.1:15551")

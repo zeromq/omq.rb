@@ -3,6 +3,7 @@
 require "socket"
 require "uri"
 require "set"
+require "ipaddr"
 
 module OMQ
   module Transport
@@ -27,12 +28,47 @@ module OMQ
         # @param engine [Engine]
         # @return [Listener]
         #
+        # A multicast address joins its group, and several DISH sockets
+        # may bind the same group and port.
+        #
         def listener(endpoint, engine, **)
           host, port = parse_endpoint(endpoint)
-          host = "0.0.0.0" if host == "*"
-          socket = UDPSocket.new
-          socket.bind(host, port)
+          addr       = Addrinfo.udp(host == "*" ? "0.0.0.0" : host, port)
+          socket     = UDPSocket.new(addr.afamily)
+
+          if multicast?(addr)
+            socket.setsockopt(::Socket::SOL_SOCKET, ::Socket::SO_REUSEADDR, true)
+            socket.bind(addr.ip_address, port)
+            join_group(socket, addr)
+          else
+            socket.bind(addr.ip_address, port)
+          end
+
           Listener.new(endpoint, socket, engine)
+        end
+
+
+        # @param addr [Addrinfo]
+        # @return [Boolean]
+        #
+        def multicast?(addr)
+          addr.ipv4_multicast? || addr.ipv6_multicast?
+        end
+
+
+        # Joins the multicast group +addr+ on the default interface.
+        #
+        # @param socket [UDPSocket]
+        # @param addr [Addrinfo]
+        #
+        def join_group(socket, addr)
+          group = IPAddr.new(addr.ip_address)
+
+          if addr.ipv6?
+            socket.setsockopt(::Socket::IPPROTO_IPV6, ::Socket::IPV6_JOIN_GROUP, group.hton + [0].pack("I"))
+          else
+            socket.setsockopt(::Socket::IPPROTO_IP, ::Socket::IP_ADD_MEMBERSHIP, group.hton + IPAddr.new("0.0.0.0").hton)
+          end
         end
 
 
@@ -126,11 +162,15 @@ module OMQ
         #
         # @return [void]
         #
+        # Resolves the host once, so sends don't hit DNS, and picks the
+        # socket family to match (IPv4 or IPv6).
+        #
         def connect
           host, port = UDP.parse_endpoint(@endpoint)
-          socket     = UDPSocket.new
+          addr       = Addrinfo.udp(host, port)
+          socket     = UDPSocket.new(addr.afamily)
           UDP.apply_send_buffer(socket, @engine.options)
-          conn       = RadioConnection.new(socket, host, port)
+          conn       = RadioConnection.new(socket, addr)
           @engine.connection_ready(conn, endpoint: @endpoint)
         end
 
@@ -144,13 +184,11 @@ module OMQ
       #
       class RadioConnection
         # @param socket [UDPSocket]
-        # @param host [String]
-        # @param port [Integer]
+        # @param addr [Addrinfo] resolved destination
         #
-        def initialize(socket, host, port)
-          @socket = socket
-          @host   = host
-          @port   = port
+        def initialize(socket, addr)
+          @socket   = socket
+          @sockaddr = addr.to_sockaddr
         end
 
 
@@ -166,7 +204,7 @@ module OMQ
           datagram = UDP.encode_datagram(group.to_s, body.to_s)
           return if datagram.bytesize > MAX_DATAGRAM_SIZE
 
-          @socket.send(datagram, 0, @host, @port)
+          @socket.send(datagram, 0, @sockaddr)
         rescue Errno::ECONNREFUSED, Errno::ENETUNREACH, Errno::EMSGSIZE
           # UDP fire-and-forget — drop silently
         end
