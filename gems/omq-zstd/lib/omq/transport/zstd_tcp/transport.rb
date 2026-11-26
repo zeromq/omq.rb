@@ -12,7 +12,8 @@ module OMQ
       # Levels a connection adapts within by default, as omq.rs.
       DEFAULT_LEVEL_RANGE = (-7..4)
 
-      # The level an adaptive connection starts at, and fan-out keeps.
+      # The level an adaptive connection starts at, and fan-out keeps: the
+      # end of the range nearest it when the range leaves it out.
       START_LEVEL = -1
 
       # Levels zrip accepts: -8 runs as -7, and 0 as its default level.
@@ -34,8 +35,8 @@ module OMQ
         # @param level [Integer, Range, nil] a fixed level (-7..4), or a
         #   Range each connection adapts its level within. Nil adapts within
         #   -7..4. Fan-out sockets (PUB, XPUB, RADIO) compress a message once
-        #   for all subscribers, so they keep a fixed level: the start of the
-        #   range.
+        #   for all subscribers, so they keep a fixed level: -1, or the end
+        #   of the range nearest it.
         # @param dict [String, nil] user-supplied dictionary bytes
         # @param auto_dict [true, Hash, nil] enable automatic dictionary
         #   training. Pass `true` for defaults or `{ capacity: N }`.

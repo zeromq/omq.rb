@@ -77,8 +77,9 @@ push.connect("zstd+tcp://127.0.0.1:5555", level: -5..2) # adapts within -5..2
 ```
 
 Fan-out sockets (PUB, XPUB, RADIO) compress each message once for all
-subscribers, so they keep a fixed level: the start of the range. An adaptive
-connection has its own Zstd compressor; a fixed level shares one per socket.
+subscribers, so they keep a fixed level: -1, or the end of the range nearest
+it. An adaptive connection has its own Zstd compressor; a fixed level shares
+one per socket.
 
 Per-direction, per-side: each side picks its own send level. Receiving works
 at any level the peer chose. Unknown options raise `ArgumentError`.
@@ -150,9 +151,9 @@ cap is rejected on the offending part.
 pull.max_message_size = 1_048_576  # 1 MiB cap on the total message
 ```
 
-If `max_message_size` is `nil` (OMQ's default, unlimited), there is no
-ceiling on decompressed message size. Set a value that matches what
-your application would tolerate over plain `tcp://`.
+If `max_message_size` is `nil` (OMQ's default), a message may decode to
+just under 1 GiB, plaintext parts included, as in omq.rs. Set a value
+that matches what your application would tolerate over plain `tcp://`.
 
 Independent of the message-size knob, the dictionary itself is capped at
 8 KiB. A peer attempting to ship a larger dictionary, or send a message

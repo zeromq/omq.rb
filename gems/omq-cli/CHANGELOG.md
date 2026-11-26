@@ -4,8 +4,8 @@
 
 - `-z` and `--compress=zstd` compress at an adaptive level: each connection
   steps within -7..4 toward speed when compression is the limit and toward
-  ratio when the link is. They used a fixed level -3. `-Z` and
-  `--compress=zstd:LEVEL` keep a fixed level.
+  ratio when the link is. They used a fixed level -3. `pub` and `radio`
+  keep -1, and `-Z` and `--compress=zstd:LEVEL` a fixed level.
 
 ## 0.19.1 - 2026-08-08
 

@@ -435,7 +435,7 @@ Both peers must pass `-z` (or otherwise opt into `zstd+tcp://`).
 
 | Flag | Effect |
 |------|--------|
-| `-z` | Compression at an adaptive level: each connection steps within -7..4 toward speed when compression is the limit and toward ratio when the link is |
+| `-z` | Compression at an adaptive level: each connection steps within -7..4 toward speed when compression is the limit and toward ratio when the link is. `pub` and `radio` keep -1 |
 | `-Z` | Compression at fixed level **3** (better ratio, more CPU) |
 | `--compress=zstd:LEVEL` | Fixed level, e.g. `zstd:-1`, `zstd:4` |
 

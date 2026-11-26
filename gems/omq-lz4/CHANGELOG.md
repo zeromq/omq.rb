@@ -12,8 +12,8 @@
   copies. Peers decode it unchanged.
 - `bind` and `connect` raise `ArgumentError` for options the transport
   doesn't know. They were ignored.
-- With `max_message_size` unset, a message may decode to at most 1 GiB, as
-  in omq.rs. An LZ4M part reserves no more than its blocks can decode to.
+- With `max_message_size` unset, a message may decode to just under 1 GiB,
+  as in omq.rs. An LZ4M part reserves no more than its blocks can decode to.
   A 12-byte part declaring a huge size raised `NoMemoryError`, which escaped
   the connection's error handling.
 - The listener keeps accepting after `EMFILE`, `ECONNABORTED` and similar
