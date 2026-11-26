@@ -8,6 +8,8 @@
   local backpressure can keep heartbeat expiry from treating the peer as silent.
 - Recorded the TTL a peer sends in its PINGs as `Connection#peer_ttl`, with an
   `#on_peer_ttl` callback for the first one.
+- Added `Connection#max_message_parts`: a received message with more frames
+  raises `Protocol::ZMTP::Error`.
 
 ### Fixed
 

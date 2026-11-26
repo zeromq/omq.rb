@@ -68,6 +68,27 @@ class OMQProtocolErrorsTest < Minitest::Spec
   end
 
 
+  it "drops a peer that sends more parts than max_message_parts" do
+    Async do
+      pull = OMQ::PULL.new
+      pull.linger            = 0
+      pull.max_message_parts = 8
+      port = pull.bind("tcp://127.0.0.1:0").port
+
+      raw = raw_zmtp_peer(port, "PUSH")
+      raw.send_message(Array.new(8) { "".b })
+      assert_equal 8, pull.receive.size
+
+      raw.send_message(Array.new(9) { "".b })
+      pull.all_peers_gone.wait
+      pass
+    ensure
+      raw&.close
+      pull&.close
+    end
+  end
+
+
   it "fatal error stops reconnect" do
     Async do |task|
       task.with_timeout(2) do

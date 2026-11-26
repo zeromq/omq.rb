@@ -104,6 +104,10 @@ module OMQ
           mechanism:        @engine.options.mechanism&.dup,
           max_message_size: @engine.options.max_message_size
 
+        if conn.respond_to?(:max_message_parts=)
+          conn.max_message_parts = @engine.options.max_message_parts
+        end
+
         Async::Task.current.with_timeout(handshake_timeout) do
           conn.handshake!
         end

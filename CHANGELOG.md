@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `max_message_parts` (default 1024, like omq.rs; `nil` = unlimited). A
+  peer that sends a message with more frames is disconnected. `max_message_size`
+  is per frame, so a peer could send hundreds of thousands of empty frames in
+  one message and cost about 20 bytes of heap per wire byte.
+
 ### Changed
 
 - In-process connects to an unbound endpoint retry through the regular reconnect

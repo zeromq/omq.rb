@@ -64,6 +64,11 @@ module Protocol
       attr_reader :max_message_size
 
 
+      # @return [Integer, nil] most frames one received message may have,
+      #   nil = unlimited
+      attr_accessor :max_message_parts
+
+
       # Encrypted mechanisms that don't report their per-frame overhead
       # get this much room on the wire before decryption.
       ENCRYPTED_WIRE_SLACK = 64
@@ -97,6 +102,7 @@ module Protocol
         @last_received_at = nil
         @reading_paused   = false
         @peer_ttl         = nil
+        @max_message_parts = nil
         @on_peer_ttl      = nil
 
         self.max_message_size = max_message_size
@@ -283,6 +289,10 @@ module Protocol
 
           frames << frame.body
           break unless frame.more?
+
+          if @max_message_parts && frames.size >= @max_message_parts
+            raise Error, "message exceeds max_message_parts #{@max_message_parts}"
+          end
         end
 
         frames

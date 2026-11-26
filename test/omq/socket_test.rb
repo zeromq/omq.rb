@@ -54,6 +54,7 @@ class OMQSocketTest < Minitest::Spec
           heartbeat_ttl: 0.5,
           heartbeat_timeout: 0.6,
           max_message_size: 42,
+          max_message_parts: 16,
           conflate: true,
           sndbuf: 1024,
           rcvbuf: 2048,

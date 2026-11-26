@@ -61,6 +61,7 @@ module OMQ
       :heartbeat_ttl,         :heartbeat_ttl=,
       :heartbeat_timeout,     :heartbeat_timeout=,
       :max_message_size,      :max_message_size=,
+      :max_message_parts,     :max_message_parts=,
       :sndbuf,                :sndbuf=,
       :rcvbuf,                :rcvbuf=,
       :on_mute,               :on_mute=,
