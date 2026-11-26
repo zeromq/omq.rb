@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Require `zrip ~> 0.2.2`. Auto-trained dictionaries now fill the
+  `auto_dict` capacity, and a capacity under 256 trains a 256-byte
+  dictionary.
+
 ## [0.5.0] - 2026-10-15
 
 ### Added
