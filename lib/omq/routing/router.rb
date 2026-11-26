@@ -25,6 +25,7 @@ module OMQ
         @recv_queue              = Routing.build_queue(engine.options.recv_hwm, :block)
         @connections_by_identity = {}
         @identity_by_connection  = {}
+        @next_routing_id         = SecureRandom.random_number(1 << 32)
         @conn_queues             = {}
       end
 
@@ -51,7 +52,7 @@ module OMQ
       #
       def connection_added(connection)
         identity = connection.peer_identity
-        identity = SecureRandom.bytes(5) if identity.nil? || identity.empty?
+        identity = generate_identity if identity.nil? || identity.empty? || identity.getbyte(0).zero?
         @connections_by_identity[identity] = connection
         @identity_by_connection[connection] = identity
 
@@ -110,6 +111,19 @@ module OMQ
       #
       def send_queues_drained?
         @conn_queues.values.all?(&:empty?)
+      end
+
+
+      private
+
+
+      # Routing id for a peer without a usable identity: a zero byte and
+      # a 32-bit counter, as in libzmq. Peers can't claim identities
+      # starting with a zero byte, so these never collide with theirs.
+      #
+      def generate_identity
+        @next_routing_id = (@next_routing_id + 1) & 0xFFFF_FFFF
+        [0, @next_routing_id].pack("CN")
       end
 
     end

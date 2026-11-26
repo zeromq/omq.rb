@@ -128,6 +128,10 @@
 - Failed the handshake for a peer that sends a handshake frame over 64 KiB, more
   than 256 properties, an identity over 255 bytes or an invalid as-server flag
   (protocol-zmtp).
+- Reserved ROUTER identities that start with a zero byte, as libzmq does: a peer
+  that claims one gets a generated identity, and generated identities are a zero
+  byte plus a 32-bit counter, so they can no longer collide with peer-chosen
+  ones.
 
 ## [0.29.1] - 2026-11-26
 

@@ -111,6 +111,26 @@ class OMQProtocolErrorsTest < Minitest::Spec
   end
 
 
+  it "ROUTER replaces a peer identity that starts with a zero byte" do
+    Async do
+      router = OMQ::ROUTER.new(linger: 0)
+      port   = router.bind("tcp://127.0.0.1:0").port
+      raw    = raw_zmtp_peer(port, "DEALER", identity: "\0taken".b)
+
+      raw.send_message(["hello".b])
+      identity, body = router.receive
+
+      assert_equal "hello", body
+      refute_equal "\0taken".b, identity
+      assert_equal 0, identity.getbyte(0)
+      assert_equal 5, identity.bytesize
+    ensure
+      raw&.close
+      router&.close
+    end
+  end
+
+
   it "fatal error stops reconnect" do
     Async do |task|
       task.with_timeout(2) do
