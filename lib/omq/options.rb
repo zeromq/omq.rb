@@ -24,7 +24,7 @@ module OMQ
       @write_timeout         = nil
       @reconnect_interval    = 0.1   # seconds; Range sets backoff min..max
       @heartbeat_interval    = nil   # seconds, nil = disabled
-      @heartbeat_ttl         = nil   # seconds, nil = use heartbeat_interval
+      @heartbeat_ttl         = nil   # seconds, nil = advertise no TTL
       @heartbeat_timeout     = nil   # seconds, nil = use heartbeat_interval
       @max_message_size      = nil      # bytes, nil = unlimited
       @max_message_parts     = 1024     # frames per received message, nil = unlimited
@@ -57,7 +57,7 @@ module OMQ
     # @!attribute heartbeat_interval
     #   @return [Numeric, nil] PING interval in seconds (nil = disabled)
     # @!attribute heartbeat_ttl
-    #   @return [Numeric, nil] TTL advertised in PING (nil = use heartbeat_interval)
+    #   @return [Numeric, nil] TTL advertised in PING (nil = none)
     # @!attribute heartbeat_timeout
     #   @return [Numeric, nil] time without traffic before closing (nil = use heartbeat_interval)
     # @!attribute max_message_size
