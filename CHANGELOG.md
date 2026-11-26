@@ -6,6 +6,9 @@
 
 - Applied `sndbuf` and `rcvbuf` to TCP and IPC connections instead of killing
   the socket with `NameError` (`Socket` resolved to `OMQ::Socket`).
+- Validated `reconnect_interval`. Zero, negative, non-finite and beginless
+  values raised later or busy-looped; an endless Range (`0.1..`) killed TCP
+  sockets with `ArgumentError` and now backs off without a cap.
 
 ## [0.29.1] - 2026-11-26
 

@@ -42,6 +42,48 @@ class OMQReconnectBackoffTest < Minitest::Spec
       end
     end
 
+    it "reconnects with an endless Range (no backoff cap)" do
+      Async do
+        pull = OMQ::PULL.new.tap { |s| s.linger = 0 }
+        port = pull.bind("tcp://127.0.0.1:0").port
+        pull.close
+
+        push                    = OMQ::PUSH.new.tap { |s| s.linger = 0 }
+        push.reconnect_interval = (RECONNECT_INTERVAL..)
+        push.connect("tcp://127.0.0.1:#{port}")
+
+        pull = OMQ::PULL.new.tap { |s| s.linger = 0 }
+        pull.bind("tcp://127.0.0.1:#{port}")
+        wait_connected(push, pull)
+
+        push << "uncapped"
+        assert_equal ["uncapped"], pull.receive
+      ensure
+        push&.close
+        pull&.close
+      end
+    end
+
+
+    it "rejects reconnect intervals that would hang or busy-loop" do
+      push = OMQ::PUSH.new
+
+      [0, -1, Float::INFINITY, Float::NAN, 0..1, (..1), 0.5..0.1, "0.1", nil].each do |bad|
+        assert_raises(ArgumentError, "accepted #{bad.inspect}") do
+          push.reconnect_interval = bad
+        end
+      end
+
+      push.reconnect_interval = (0.05..)
+      assert_equal 0.05..Float::INFINITY, push.reconnect_interval
+
+      push.reconnect_interval = 0.05..0.05
+      assert_equal 0.05..0.05, push.reconnect_interval
+    ensure
+      push&.close
+    end
+
+
     it "uses fixed interval when reconnect_interval is a number" do
       Async do
         req                    = OMQ::REQ.new.tap { |s| s.linger = 0 }

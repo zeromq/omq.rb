@@ -52,8 +52,6 @@ module OMQ
     #   @return [Numeric, nil] read timeout in seconds (nil = no timeout)
     # @!attribute write_timeout
     #   @return [Numeric, nil] write timeout in seconds (nil = no timeout)
-    # @!attribute reconnect_interval
-    #   @return [Numeric, Range] reconnect interval in seconds, or Range for exponential backoff
     # @!attribute heartbeat_interval
     #   @return [Numeric, nil] PING interval in seconds (nil = disabled)
     # @!attribute heartbeat_ttl
@@ -75,12 +73,30 @@ module OMQ
                   :linger,    :identity,
                   :router_mandatory,  :conflate,
                   :read_timeout,          :write_timeout,
-                  :reconnect_interval,
                   :heartbeat_interval,    :heartbeat_ttl,    :heartbeat_timeout,
                   :max_message_size,
                   :sndbuf,    :rcvbuf,
                   :on_mute,
                   :mechanism
+
+
+    # @return [Numeric, Range] reconnect interval in seconds, or Range
+    #   for exponential backoff (begin..max)
+    #
+    attr_reader :reconnect_interval
+
+
+    # Sets the reconnect interval. An endless Range backs off without a
+    # cap and is stored with a +Float::INFINITY+ end.
+    #
+    # @param value [Numeric, Range] interval in seconds, or begin..max
+    # @raise [ArgumentError] unless the interval (or Range begin) is a
+    #   positive finite number and the Range end is not below its begin
+    #
+    def reconnect_interval=(value)
+      @reconnect_interval = validate_reconnect_interval(value)
+    end
+
 
     # @return [Boolean] true if router_mandatory is set
     alias_method :router_mandatory?, :router_mandatory
@@ -96,5 +112,37 @@ module OMQ
 
     # @param val [Numeric, nil] alias for #write_timeout=
     alias_method :send_timeout=,     :write_timeout=
+
+
+    private
+
+
+    def validate_reconnect_interval(value)
+      case value
+      when Range
+        min = value.begin
+        max = value.end || Float::INFINITY
+
+        unless positive_finite?(min) && max.is_a?(Numeric) && max >= min
+          raise ArgumentError, "reconnect_interval Range needs a positive finite begin and an end >= begin, got #{value.inspect}"
+        end
+
+        min..max
+      when Numeric
+        unless positive_finite?(value)
+          raise ArgumentError, "reconnect_interval must be a positive finite number, got #{value.inspect}"
+        end
+
+        value
+      else
+        raise ArgumentError, "reconnect_interval must be a Numeric or a Range, got #{value.inspect}"
+      end
+    end
+
+
+    def positive_finite?(value)
+      value.is_a?(Numeric) && value.positive? && value.finite?
+    end
+
   end
 end
