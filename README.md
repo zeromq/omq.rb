@@ -46,7 +46,7 @@ walkthrough of every major pattern with working code.
   connect, peers come and go. ZeroMQ reconnects automatically and queued
   messages drain when peers arrive
 
-For architecture internals, see [DESIGN.md](doc/DESIGN.md).
+For architecture internals, see [ARCHITECTURE.md](doc/ARCHITECTURE.md).
 If you're interested in the steps taken to reach the current performance, read [PERFORMANCE.md](doc/PERFORMANCE.md).
 
 ## Install
@@ -193,8 +193,8 @@ you need to mutate it.
 > **Work-stealing, not round-robin.** Outbound load balancing uses one shared
 > send queue per socket drained by N racing pump fibers, so a slow peer can't
 > stall the pipeline. Under tight bursts on small `n`, distribution isn't
-> strict RR. See [DESIGN.md](doc/DESIGN.md#per-socket-hwm-not-per-connection) and
-> [Libzmq quirks](doc/DESIGN.md#libzmq-quirks-omq-avoids) for the reasoning.
+> strict RR. See [Send queues and HWM](doc/ARCHITECTURE.md#send-queues-and-hwm) and
+> [Differences from libzmq](doc/ARCHITECTURE.md#differences-from-libzmq).
 
 #### Draft (single-frame only)
 

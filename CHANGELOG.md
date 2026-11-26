@@ -29,6 +29,8 @@
 - PINGs advertise no TTL unless `heartbeat_ttl` is set, like libzmq and omq.rs.
   The TTL used to default to `heartbeat_interval`, which made TTL-honoring peers
   drop the connection whenever a PING ran late.
+- `doc/DESIGN.md` is now `doc/ARCHITECTURE.md`, trimmed to the current
+  components, task tree and data flow.
 
 ### Fixed
 

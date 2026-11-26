@@ -12,8 +12,7 @@ module OMQ
     # which is strictly better than libzmq's strict per-pipe round-robin
     # for PUSH-style patterns.
     #
-    # See doc/DESIGN.md "Per-socket HWM (not per-connection)" for the
-    # full reasoning.
+    # See doc/ARCHITECTURE.md "Send queues and HWM".
     #
     # Including classes must call `init_round_robin(engine)` from
     # their #initialize.
