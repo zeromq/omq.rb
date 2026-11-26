@@ -115,8 +115,10 @@ sentinel + plaintext).
 ### Security limits
 
 The receiver bounds decompression by the socket's `max_message_size`
-(the same knob you'd use on a plain `tcp://` socket). It caps the
-**total decompressed size of all parts in a single message**. A peer
+(the same knob you'd use on a plain `tcp://` socket), or 1 GiB when it is
+unset, as in omq.rs. It caps the
+**total decompressed size of all parts in a single message**, and is checked
+against sizes a peer declares before anything is allocated for them. A peer
 attempting to send an over-budget message drops the connection.
 `OMQ::SocketDeadError` surfaces on the next `receive`.
 

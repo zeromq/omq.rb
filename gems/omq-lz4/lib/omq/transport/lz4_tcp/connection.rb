@@ -153,7 +153,7 @@ module OMQ
         def decode_parts(parts)
           decoded   = []
           all_dicts = true
-          budget    = @max_message_size
+          budget    = @decode_budget
 
           parts.each do |wire|
             raise LZ4::ProtocolError, "wire part too short (< 4 bytes)" if wire.bytesize < 4

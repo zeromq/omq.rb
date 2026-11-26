@@ -98,6 +98,14 @@ class OMQLZ4CodecTest < Minitest::Spec
     end
 
     describe ".encode_part / .decode_part (multi-block, LZ4M)" do
+      it "refuses a declared size its blocks cannot decode to before allocating it" do
+        wire = OMQ::LZ4::Codec::LZ4M_SENTINEL + [1 << 50].pack("Q<")
+        assert_raises(OMQ::LZ4::ProtocolError) do
+          OMQ::LZ4::Codec.decode_part(wire, block_codec: codec)
+        end
+      end
+
+
       let(:block_size) { 1024 }
 
       it "round-trips a payload spanning multiple blocks" do

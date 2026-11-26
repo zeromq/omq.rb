@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- With `max_message_size` unset, a message may decode to at most 1 GiB, as
+  in omq.rs. An LZ4M part reserves no more than its blocks can decode to.
+  A 12-byte part declaring a huge size raised `NoMemoryError`, which escaped
+  the connection's error handling.
+
 ## [0.4.1] - 2026-11-26
 
 ### Changed
