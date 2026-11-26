@@ -278,9 +278,7 @@ module OMQ
       # (e.g. a non-ZMQ service on the same port).
       #
       def handshake_timeout
-        ri = @engine.options.reconnect_interval
-        ri = ri.end if ri.is_a?(Range)
-        [ri, 0.5].max
+        @engine.options.attempt_timeout
       end
 
 

@@ -117,9 +117,7 @@ module OMQ
         # doesn't block the retry loop. Floor at 0.5s for real-network latency.
         #
         def connect_timeout(options)
-          ri = options.reconnect_interval
-          ri = ri.end if ri.is_a?(Range)
-          [ri, 0.5].max
+          options.attempt_timeout
         end
 
 

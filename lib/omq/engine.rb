@@ -580,7 +580,7 @@ module OMQ
     def drain_send_queues(timeout)
       return unless @routing.respond_to?(:send_queues_drained?)
 
-      deadline      = timeout && Async::Clock.now + timeout
+      deadline      = timeout&.finite? ? Async::Clock.now + timeout : nil # nil, Infinity: no limit
       @drain_signal = Async::Notification.new
 
       until @routing.send_queues_drained?

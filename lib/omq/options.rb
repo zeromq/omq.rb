@@ -109,6 +109,19 @@ module OMQ
     end
 
 
+    # Seconds one connect or handshake attempt may take: the reconnect
+    # interval, or the Range end (its begin when endless), but at least
+    # 0.5.
+    #
+    # @return [Numeric]
+    #
+    def attempt_timeout
+      ri = @reconnect_interval
+      ri = ri.end.finite? ? ri.end : ri.begin if ri.is_a?(Range)
+      [ri, 0.5].max
+    end
+
+
     # @return [Boolean] true if router_mandatory is set
     alias_method :router_mandatory?, :router_mandatory
 
