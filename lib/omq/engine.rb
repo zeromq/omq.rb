@@ -217,7 +217,7 @@ module OMQ
       @listeners[listener.endpoint] = listener
       remember_bind_alias(endpoint, listener.endpoint)
       emit_monitor_event(:listening, endpoint: listener.endpoint)
-      URI.parse(listener.endpoint)
+      endpoint_uri(transport, listener.endpoint)
     rescue => error
       emit_monitor_event(:bind_failed, endpoint: endpoint, detail: { error: error })
       raise
@@ -245,7 +245,7 @@ module OMQ
         schedule_reconnect(endpoint, delay: 0)
       end
 
-      URI.parse(endpoint)
+      endpoint_uri(transport, endpoint)
     end
 
 
@@ -553,6 +553,16 @@ module OMQ
 
 
     private
+
+
+    # @return [URI::Generic] the URI of +endpoint+, from its transport if
+    #   the transport builds its own
+    #
+    def endpoint_uri(transport, endpoint)
+      return transport.endpoint_uri(endpoint) if transport.respond_to?(:endpoint_uri)
+
+      URI.parse(endpoint)
+    end
 
 
     # Spawns a per-connection task on the socket-level barrier that runs

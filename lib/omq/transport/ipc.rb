@@ -14,6 +14,20 @@ module OMQ
       Engine.transports["ipc"] = self
 
 
+      # The URI of an abstract namespace endpoint. +URI.parse+ reads the @
+      # of "ipc://@name" as the end of an empty userinfo, so its #to_s is
+      # "ipc://name", a relative file path. Here the path keeps the @.
+      #
+      class AbstractURI < URI::Generic
+        # @return [String] e.g. "ipc://@name"
+        #
+        def to_s
+          "ipc://#{path}"
+        end
+
+      end
+
+
       class << self
         # ZMTP connection class used for IPC-accepted/dialed peers.
         #
@@ -121,6 +135,18 @@ module OMQ
         #
         def abstract?(path)
           path.start_with?("@")
+        end
+
+
+        # @param endpoint [String] e.g. "ipc:///tmp/my.sock" or "ipc://@abstract"
+        # @return [URI::Generic] the endpoint's URI; an {AbstractURI} for an
+        #   abstract namespace name
+        #
+        def endpoint_uri(endpoint)
+          path = parse_path(endpoint)
+          return URI.parse(endpoint) unless abstract?(path)
+
+          AbstractURI.new("ipc", nil, nil, nil, nil, path, nil, nil, nil)
         end
 
 

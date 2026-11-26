@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `#bind` and `#connect` return a URI that keeps the @ of an abstract IPC
+  name. They returned `ipc://name` for `ipc://@name`, because `URI.parse`
+  reads the @ as the end of an empty userinfo, and connecting to that dialed
+  a relative file path. Abstract names `URI.parse` rejects, such as ones with
+  spaces, no longer raise after the bind.
+
 ## [0.30.0] - 2026-11-26
 
 ### Added
