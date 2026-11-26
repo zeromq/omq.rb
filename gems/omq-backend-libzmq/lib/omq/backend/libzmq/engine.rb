@@ -152,7 +152,7 @@ module OMQ
         @connections << :libzmq
         @peer_connected.resolve(:libzmq) unless @peer_connected.resolved?
         resolve_subscriber_joined_without_monitor
-        URI.parse(resolved)
+        ::OMQ::Engine.endpoint_uri(resolved)
       end
 
 
@@ -166,7 +166,7 @@ module OMQ
         @connections << :libzmq
         @peer_connected.resolve(:libzmq) unless @peer_connected.resolved?
         resolve_subscriber_joined_without_monitor
-        URI.parse(endpoint)
+        ::OMQ::Engine.endpoint_uri(endpoint)
       end
 
 

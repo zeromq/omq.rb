@@ -58,7 +58,7 @@ module OMQ
         apply_endpoint_options!(opts)
         ensure_materialized
         resolved = @socket.bind(endpoint)
-        URI.parse(resolved)
+        ::OMQ::Engine.endpoint_uri(resolved)
       end
 
 
@@ -67,7 +67,7 @@ module OMQ
         apply_endpoint_options!(opts)
         ensure_materialized
         @socket.connect(endpoint)
-        URI.parse(endpoint)
+        ::OMQ::Engine.endpoint_uri(endpoint)
       end
 
 

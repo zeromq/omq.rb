@@ -26,6 +26,25 @@ class OMQBackendLibzmqLibzmqTest < Minitest::Spec
       end
     end
 
+    it "returns abstract namespace URIs that keep the @" do
+      skip "abstract namespace only on Linux" unless RUBY_PLATFORM =~ /linux/
+
+      Async do
+        endpoint = "ipc://@omq-test-libzmq-uri-#{$$}"
+        pull     = OMQ::PULL.new(backend: :libzmq)
+        push     = OMQ::PUSH.new(backend: :libzmq)
+        bound    = pull.bind(endpoint)
+        assert_equal endpoint, bound.to_s
+
+        assert_equal endpoint, push.connect(bound.to_s).to_s
+        push.send("via the bound URI")
+        assert_equal ["via the bound URI"], pull.receive
+      ensure
+        push&.close
+        pull&.close
+      end
+    end
+
     it "REQ/REP over TCP" do
       Async do
         rep = OMQ::REP.new(backend: :libzmq)

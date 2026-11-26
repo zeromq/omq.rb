@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- `Engine.endpoint_uri(endpoint)`: the URI `#bind` and `#connect` return,
+  built by the transport when it has `.endpoint_uri`. The native backends use
+  it for the endpoints they resolve.
+
 ### Fixed
 
 - `#bind` and `#connect` return a URI that keeps the @ of an abstract IPC
