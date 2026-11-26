@@ -71,7 +71,7 @@ module OMQ
 
 
         def decode_parts(parts)
-          budget    = @codec.max_message_size
+          budget    = @decode_budget
           decoded   = []
           all_dicts = true
 

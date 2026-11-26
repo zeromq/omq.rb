@@ -55,6 +55,17 @@ class OMQZstdCodecSecurityTest < Minitest::Spec
     end
 
 
+    it "limits a frame to 1 GiB when max_message_size is unset" do
+      conn  = connection(codec)
+      # Frame header: single segment, 8-byte Frame_Content_Size of 2 GiB.
+      frame = OMQ::Transport::ZstdTcp::Codec::ZSTD_MAGIC + [0xE0].pack("C") + [1 << 31].pack("Q<") + "\x01\x00\x00".b
+      error = assert_raises(OMQ::Transport::ZstdTcp::ProtocolError) do
+        conn.send(:decode_parts, [frame])
+      end
+      assert_match(/exceeds limit 1073741824/, error.message)
+    end
+
+
     it "allows a frame that fits the budget" do
       c = codec(max_message_size: 10_000)
       conn = connection(c)
