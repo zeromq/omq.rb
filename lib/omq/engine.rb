@@ -217,12 +217,14 @@ module OMQ
       endpoint, transport = resolve_endpoint(endpoint)
       validate_endpoint!(endpoint, transport)
 
+      dialer = transport.dialer(endpoint, self, **opts)
+
       if endpoint.start_with?("ruby://")
-        # Ruby in-process connect is synchronous and instant — no Dialer
-        transport.connect(endpoint, self, **opts)
-        @dialers[endpoint] = :ruby  # sentinel for reconnect intent
+        # Ruby in-process connect is synchronous and instant
+        dialer.connect
+        @dialers[endpoint] = dialer
       else
-        @dialers[endpoint] = transport.dialer(endpoint, self, **opts)
+        @dialers[endpoint] = dialer
         emit_monitor_event(:connect_delayed, endpoint: endpoint)
         schedule_reconnect(endpoint, delay: 0)
       end
