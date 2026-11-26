@@ -187,9 +187,20 @@ module OMQ
         def build_codec(engine, level, dict, auto_dict)
           range = level_range(level)
           start = range ? Zrip::AdaptiveLevel.new(range, start: START_LEVEL).level : level
-          range = nil if engine.routing.is_a?(Routing::FanOut)
+          range = nil if fan_out?(engine.routing)
           Codec.new(level: start, level_range: range, dict: dict, auto_dict: auto_dict,
                     max_message_size: engine.options.max_message_size)
+        end
+
+
+        # PUB, XPUB and RADIO compress each message once for all peers.
+        # RADIO is a draft type, loaded only by `require "omq/radio_dish"`.
+        def fan_out?(routing)
+          return true if routing.is_a?(Routing::FanOut)
+
+          return false unless defined?(Routing::Radio)
+
+          routing.is_a?(Routing::Radio)
         end
 
 

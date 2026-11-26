@@ -3,6 +3,7 @@
 require_relative "test_helper"
 require "async"
 require "omq"
+require "omq/radio_dish"
 
 class OMQZstdAdaptiveLevelTest < Minitest::Spec
   ZstdTcp = OMQ::Transport::ZstdTcp
@@ -164,6 +165,22 @@ class OMQZstdAdaptiveLevelTest < Minitest::Spec
       ensure
         pub&.close
         sub&.close
+      end
+    end
+
+
+    it "keeps RADIO at the adaptive start level" do
+      Sync do
+        dish  = OMQ::DISH.new
+        radio = OMQ::RADIO.new(linger: 0)
+        uri   = dish.bind("zstd+tcp://127.0.0.1:0")
+        radio.connect(uri.to_s)
+        codec = ZstdTcp.instance_variable_get(:@codecs)[radio.instance_variable_get(:@engine)]
+        assert_nil codec.level_range
+        assert_equal ZstdTcp::START_LEVEL, codec.level
+      ensure
+        radio&.close
+        dish&.close
       end
     end
 
