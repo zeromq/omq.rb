@@ -21,11 +21,12 @@ module OMQ
       BATCH_MSG_CAP  = 256
       BATCH_BYTE_CAP = 512 * 1024
 
-      # @return [Boolean] true when the shared send queue is empty
-      #   and no pump fiber is mid-write with a dequeued batch.
+      # @return [Boolean] true when the shared send queue is empty.
+      #   Batches a pump is still writing are counted by
+      #   {Engine#sending_batch}.
       #
       def send_queues_drained?
-        @send_queue.empty? && @in_flight == 0
+        @send_queue.empty?
       end
 
 
@@ -40,7 +41,6 @@ module OMQ
         @connections = []
         @send_queue  = Routing.build_queue(engine.options.send_hwm, :block)
         @direct_pipe = nil
-        @in_flight   = 0   # messages dequeued but not yet written
       end
 
 
@@ -142,19 +142,12 @@ module OMQ
 
           loop do
             dequeue_batch_capped(batch) or break
-            @in_flight += batch.size
-
-            begin
-              write_batch(conn, batch)
-            ensure
-              @in_flight -= batch.size
-            end
+            @engine.sending_batch { write_batch(conn, batch) }
 
             batch.each do |parts|
               @engine.emit_verbose_msg_sent(conn, parts)
             end
             batch.clear
-            @engine.wake_drain
 
             Async::Task.current.yield
           end

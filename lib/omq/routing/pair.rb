@@ -100,18 +100,20 @@ module OMQ
           loop do
             Routing.dequeue_batch(@send_queue, batch) or break
 
-            if batch.size == 1
-              conn.write_message(batch.first)
-            else
-              conn.write_messages(batch)
+            @engine.sending_batch do
+              if batch.size == 1
+                conn.write_message(batch.first)
+              else
+                conn.write_messages(batch)
+              end
+
+              conn.flush
             end
 
-            conn.flush
             batch.each do |parts|
               @engine.emit_verbose_msg_sent(conn, parts)
             end
             batch.clear
-            @engine.wake_drain
           end
         end
       end

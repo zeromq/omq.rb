@@ -135,8 +135,7 @@ module OMQ
 
           loop do
             parts = q.dequeue or break # queue closed: peer gone
-            forward_subscription(conn, parts.first&.b)
-            @engine.wake_drain
+            @engine.sending_batch { forward_subscription(conn, parts.first&.b) }
           end
         end
       end

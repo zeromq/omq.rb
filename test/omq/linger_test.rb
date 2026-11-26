@@ -30,6 +30,26 @@ class OMQLingerTest < Minitest::Spec
     end
 
 
+    it "flushes a batch a pump is still writing before close tears down" do
+      Async do
+        rep  = OMQ::REP.new # default linger: wait for every reply
+        port = rep.bind("tcp://127.0.0.1:0").port
+        req  = OMQ::REQ.new.tap { |s| s.linger = 0 }
+        req.connect("tcp://127.0.0.1:#{port}")
+
+        req << "ping"
+        rep.receive
+        rep << "pong" # the pump may take it off the queue right away
+        rep.close
+
+        assert_equal ["pong"], req.receive
+      ensure
+        req&.close
+        rep&.close
+      end
+    end
+
+
     it "closes the socket under a send blocked on a peer that stopped reading" do
       Async do |task|
         server = TCPServer.new("127.0.0.1", 0)

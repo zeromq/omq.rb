@@ -102,6 +102,7 @@ module OMQ
       @monitor_queue   = nil
       @verbose_monitor = false
       @drain_signal    = nil # set while #close waits for send queues
+      @batches_sending = 0   # batches pumps took off a queue and haven't flushed
     end
 
 
@@ -368,6 +369,22 @@ module OMQ
     end
 
 
+    # Runs a send pump's write of a batch it took off a queue. Until the
+    # block returns, {#drain_send_queues} counts the batch as unsent, so
+    # #close doesn't tear the connection down under the write.
+    #
+    # @yield the write and flush
+    # @return [Object] the block's value
+    #
+    def sending_batch
+      @batches_sending += 1
+      yield
+    ensure
+      @batches_sending -= 1
+      wake_drain
+    end
+
+
     # Dequeues the next received message. Blocks until available.
     #
     # @return [Array<String>, nil] message parts, or nil once the socket
@@ -583,7 +600,7 @@ module OMQ
       deadline      = timeout&.finite? ? Async::Clock.now + timeout : nil # nil, Infinity: no limit
       @drain_signal = Async::Notification.new
 
-      until @routing.send_queues_drained?
+      until @batches_sending.zero? && @routing.send_queues_drained?
         if deadline
           remaining = deadline - Async::Clock.now
           break if remaining <= 0

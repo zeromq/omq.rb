@@ -112,61 +112,67 @@ module OMQ
             Routing.dequeue_batch(@send_queue, batch) or break
             @send_pump_idle = false
 
-            @written.clear
+            @engine.sending_batch { write_batch(batch) }
+            batch.clear
+          end
+        end
+      end
 
-            if @conflate
-              # Keep only the last matching message per connection.
-              @latest.clear
-              batch.each do |parts|
-                group = parts[0]
-                body  = parts[1] || EMPTY_BINARY
-                @connections.each do |conn|
-                  next unless @groups[conn]&.include?(group)
-                  @latest[conn] = [group, body]
-                end
-              end
-              @latest.each do |conn, msg|
-                next if muted?(conn)
-                begin
-                  conn.write_message(msg)
-                  @written << conn
-                rescue *CONNECTION_LOST
-                end
-              end
-            else
-              batch.each do |parts|
-                group      = parts[0]
-                body       = parts[1] || EMPTY_BINARY
-                msg        = [group, body]
-                wire_bytes = nil
 
-                @connections.each do |conn|
-                  next unless @groups[conn]&.include?(group)
-                  next if muted?(conn)
-                  begin
-                    if conn.respond_to?(:curve?) && conn.curve?
-                      conn.write_message(msg)
-                    elsif conn.respond_to?(:write_wire)
-                      wire_bytes ||= Protocol::ZMTP::Codec::Frame.encode_message(msg)
-                      conn.write_wire(wire_bytes)
-                    else
-                      conn.write_message(msg)
-                    end
-                    @written << conn
-                  rescue *CONNECTION_LOST
-                  end
-                end
-              end
+      # Writes +batch+ to every connection that joined a message's group,
+      # then flushes each connection written to.
+      #
+      def write_batch(batch)
+        @written.clear
+
+        if @conflate
+          # Keep only the last matching message per connection.
+          @latest.clear
+          batch.each do |parts|
+            group = parts[0]
+            body  = parts[1] || EMPTY_BINARY
+            @connections.each do |conn|
+              next unless @groups[conn]&.include?(group)
+              @latest[conn] = [group, body]
             end
-
-            @written.each do |conn|
-              conn.flush
+          end
+          @latest.each do |conn, msg|
+            next if muted?(conn)
+            begin
+              conn.write_message(msg)
+              @written << conn
             rescue *CONNECTION_LOST
             end
-
-            batch.clear
-            @engine.wake_drain
           end
+        else
+          batch.each do |parts|
+            group      = parts[0]
+            body       = parts[1] || EMPTY_BINARY
+            msg        = [group, body]
+            wire_bytes = nil
+
+            @connections.each do |conn|
+              next unless @groups[conn]&.include?(group)
+              next if muted?(conn)
+              begin
+                if conn.respond_to?(:curve?) && conn.curve?
+                  conn.write_message(msg)
+                elsif conn.respond_to?(:write_wire)
+                  wire_bytes ||= Protocol::ZMTP::Codec::Frame.encode_message(msg)
+                  conn.write_wire(wire_bytes)
+                else
+                  conn.write_message(msg)
+                end
+                @written << conn
+              rescue *CONNECTION_LOST
+              end
+            end
+          end
+        end
+
+        @written.each do |conn|
+          conn.flush
+        rescue *CONNECTION_LOST
         end
       end
 

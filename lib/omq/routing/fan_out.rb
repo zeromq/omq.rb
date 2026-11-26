@@ -185,12 +185,14 @@ module OMQ
           loop do
             Routing.dequeue_batch(q, batch) or break
 
-            if write_matching_batch(conn, batch, use_wire, aux_batch)
-              conn.flush
-              batch.each { |parts| @engine.emit_verbose_msg_sent(conn, parts) }
+            @engine.sending_batch do
+              if write_matching_batch(conn, batch, use_wire, aux_batch)
+                conn.flush
+                batch.each { |parts| @engine.emit_verbose_msg_sent(conn, parts) }
+              end
             end
+
             batch.clear
-            @engine.wake_drain
           end
         end
       end
@@ -269,13 +271,13 @@ module OMQ
 
             batch.clear
 
-            if latest
-              conn.write_message(latest)
-              conn.flush
-              @engine.emit_verbose_msg_sent(conn, latest)
+            @engine.sending_batch do
+              if latest
+                conn.write_message(latest)
+                conn.flush
+                @engine.emit_verbose_msg_sent(conn, latest)
+              end
             end
-
-            @engine.wake_drain
           end
         end
       end
