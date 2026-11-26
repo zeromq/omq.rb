@@ -220,6 +220,29 @@ class OMQPubSubTest < Minitest::Spec
         pub&.close
       end
     end
+
+
+    it "counts subscriptions like libzmq" do
+      Async do
+        xpub = OMQ::XPUB.bind("inproc://pubsub-counted")
+        sub  = OMQ::SUB.connect("inproc://pubsub-counted")
+
+        sub.subscribe("a")
+        sub.subscribe("a")
+        sub.unsubscribe("a")
+        sub.subscribe("b") # marks where a premature cancel would show up
+
+        assert_equal ["\x01a".b], xpub.receive
+        assert_equal ["\x01a".b], xpub.receive
+        assert_equal ["\x01b".b], xpub.receive
+
+        sub.unsubscribe("a")
+        assert_equal ["\x00a".b], xpub.receive
+      ensure
+        sub&.close
+        xpub&.close
+      end
+    end
   end
 
   describe "XPUB/XSUB" do

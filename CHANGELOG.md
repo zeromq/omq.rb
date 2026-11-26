@@ -103,6 +103,10 @@
 - Honored the TTL a peer puts in its PINGs: the connection closes when nothing
   arrives for that long, even without a local heartbeat. The TTL was parsed and
   ignored.
+- Counted SUB subscriptions like libzmq: subscribing to a prefix twice and
+  unsubscribing once keeps the subscription, and peers get the CANCEL only when
+  the last one goes. `#subscribe` and `#unsubscribe` no longer raise when a peer
+  is disconnecting.
 
 ## [0.29.1] - 2026-11-26
 
