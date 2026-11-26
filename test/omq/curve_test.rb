@@ -88,6 +88,35 @@ class OMQCurveTest < Minitest::Spec
       end
     end
 
+    describe "max_message_size" do
+      it "applies the limit to the decrypted frame, not the CURVE envelope" do
+        server_pub, server_sec = generate_keypair
+        client_pub, client_sec = generate_keypair
+
+        Async do
+          pull = OMQ::PULL.new
+          pull.max_message_size = 100
+          pull.mechanism = curve_server(server_pub, server_sec)
+          port = pull.bind("tcp://127.0.0.1:0").port
+
+          push = OMQ::PUSH.new(linger: 0)
+          push.mechanism = curve_client(client_pub, client_sec, server_key: server_pub)
+          push.connect("tcp://127.0.0.1:#{port}")
+
+          push << "x" * 100
+          assert_equal ["x" * 100], pull.receive
+
+          push << "y" * 101
+          pull.recv_timeout = 0.05
+          assert_raises(IO::TimeoutError) { pull.receive }
+        ensure
+          push&.close
+          pull&.close
+        end
+      end
+    end
+
+
     describe "Authentication" do
       it "allows a client in the allowed Set" do
         server_pub, server_sec = generate_keypair

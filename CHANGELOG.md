@@ -17,6 +17,8 @@
 - Kept a ROUTER identity routable after a second peer took it over and the first
   one left. The departing connection deleted the route that now pointed at the
   new peer.
+- Applied `max_message_size` to the plaintext of CURVE frames, so a message
+  exactly at the limit no longer drops the connection (protocol-zmtp).
 
 ## [0.29.1] - 2026-11-26
 

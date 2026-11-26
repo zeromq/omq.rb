@@ -35,8 +35,11 @@ module Protocol
         NONCE_PREFIX_COOKIE    = "COOKIE--"
 
 
-        BOX_OVERHEAD = 16
-        MAX_NONCE    = (2**64) - 1
+        BOX_OVERHEAD  = 16
+        MAX_NONCE     = (2**64) - 1
+
+        # "\x07MESSAGE" prefix + short nonce + flags byte + Poly1305 tag.
+        WIRE_OVERHEAD = 8 + 8 + 1 + BOX_OVERHEAD
 
 
         # Creates a CURVE server mechanism.
@@ -118,6 +121,13 @@ module Protocol
 
         # @return [Boolean] true -- CURVE always encrypts frames
         def encrypted? = true
+
+
+        # @return [Integer] bytes a MESSAGE adds to each frame body on the wire
+        def wire_overhead
+          WIRE_OVERHEAD
+        end
+
 
         # Returns a periodic maintenance task for rotating the cookie key (server only).
         #

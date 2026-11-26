@@ -47,9 +47,14 @@ module Protocol
       # @return [Float, nil] monotonic timestamp of last received frame
       attr_reader :last_received_at
 
-      # Transport wrappers may need room for bounded wire envelopes in
-      # addition to the application message limit they enforce after decoding.
-      attr_writer :max_message_size
+      # @return [Integer, nil] largest frame body accepted after decryption,
+      #   nil = unlimited
+      attr_reader :max_message_size
+
+
+      # Encrypted mechanisms that don't report their per-frame overhead
+      # get this much room on the wire before decryption.
+      ENCRYPTED_WIRE_SLACK = 64
 
 
       # @param io [#peek, #read_exactly, #write, #flush, #close] transport IO
@@ -77,14 +82,28 @@ module Protocol
         @peer_minor       = nil
         @metadata         = opts.empty? ? nil : opts.transform_keys(&:to_s)
         @mutex            = Mutex.new
-        @max_message_size = max_message_size
         @last_received_at = nil
+
+        self.max_message_size = max_message_size
 
         # Reusable scratch buffer for frame headers. Array#pack(buffer:)
         # writes in place so the per-message 2-or-9 byte String allocation
         # in write_frames disappears on the hot send path.
         @header_buf = String.new(capacity: 9, encoding: Encoding::BINARY)
         @frame_buf  = String.new(capacity: 257, encoding: Encoding::BINARY)
+      end
+
+
+      # Sets the frame size limit. Transport wrappers may need room for
+      # bounded wire envelopes in addition to the application message
+      # limit they enforce after decoding. Encrypted frames are allowed
+      # the mechanism's overhead on the wire and checked against +size+
+      # after decryption.
+      #
+      # @param size [Integer, nil] max frame body in bytes, nil = unlimited
+      def max_message_size=(size)
+        @max_message_size = size
+        @max_wire_size    = size && size + wire_overhead
       end
 
 
@@ -282,11 +301,14 @@ module Protocol
       # @raise [EOFError] if connection is closed
       def read_frame
         loop do
-          frame = Codec::Frame.read_from(@io, max_message_size: @max_message_size)
+          frame = Codec::Frame.read_from(@io, max_message_size: @max_wire_size)
 
           touch_heartbeat
 
-          frame = @mechanism.decrypt(frame) if @mechanism.encrypted?
+          if @mechanism.encrypted?
+            frame = @mechanism.decrypt(frame)
+            check_decrypted_size!(frame) if @max_message_size
+          end
 
           if frame.command?
             cmd = Codec::Command.from_body(frame.body)
@@ -337,6 +359,24 @@ module Protocol
       end
 
       private
+
+
+      # Per-frame wire overhead of the mechanism (0 for plaintext).
+      def wire_overhead
+        return 0 unless @mechanism.encrypted?
+        return @mechanism.wire_overhead if @mechanism.respond_to?(:wire_overhead)
+
+        ENCRYPTED_WIRE_SLACK
+      end
+
+
+      def check_decrypted_size!(frame)
+        size = frame.body.bytesize
+        return if size <= @max_message_size
+
+        raise Error, "frame size #{size} exceeds max_message_size #{@max_message_size}"
+      end
+
 
       # Defers task cancellation around a block of wire writes so the
       # peer never sees a half-written frame or partial multipart

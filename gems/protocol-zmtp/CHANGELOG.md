@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixed
+
+- Checked `max_message_size` against the decrypted frame. CURVE frames were
+  checked with their 33-byte MESSAGE envelope, so a message at the limit dropped
+  the connection. Encrypted mechanisms can report `#wire_overhead`; others get
+  64 bytes of slack before decryption.
+
 ## [0.10.5] - 2026-10-15
 
 ### Added
