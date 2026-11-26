@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-26
+
+### Changed
+
+- Require `lz4rip ~> 0.2.2`. An `auto_dict` capacity of 4 to 31 bytes no
+  longer raises during training.
+
 ## [0.4.0] - 2026-10-15
 
 ### Added
