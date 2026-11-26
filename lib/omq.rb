@@ -28,6 +28,7 @@ require_relative "omq/engine"
 OMQ::Backend.register(:ruby, OMQ::Engine)
 
 # Transport
+require_relative "omq/transport/accept_loop"
 require_relative "omq/transport/inproc"
 require_relative "omq/transport/tcp"
 require_relative "omq/transport/ipc"

@@ -170,6 +170,9 @@ module OMQ
               Async::Task.current.defer_stop do
                 yield IO::Stream::Buffered.wrap(client)
               end
+            rescue *AcceptLoop::RECOVERABLE_ERRORS => error
+              client&.close rescue nil
+              AcceptLoop.recover(error, @engine, @endpoint)
             end
           rescue Async::Stop
           rescue IOError

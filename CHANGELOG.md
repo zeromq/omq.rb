@@ -21,6 +21,10 @@
   exactly at the limit no longer drops the connection (protocol-zmtp).
 - Dropped multipart messages from peers of single-frame sockets (CLIENT, SERVER,
   GATHER, CHANNEL, PEER) instead of delivering them.
+- Kept TCP and IPC listeners accepting after transient `accept(2)` errors. One
+  `EMFILE` ended the accept loop for good and left the endpoint bound but deaf.
+  Listeners now emit `:accept_failed`, back off on resource exhaustion and drop
+  clients that fail during setup.
 
 ## [0.29.1] - 2026-11-26
 
