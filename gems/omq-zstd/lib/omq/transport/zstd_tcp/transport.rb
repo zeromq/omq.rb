@@ -284,6 +284,9 @@ module OMQ
 
                   on_accepted.call stream
                 end
+              rescue *AcceptLoop::RECOVERABLE_ERRORS => error
+                client&.close rescue nil
+                AcceptLoop.recover(error, @engine, @endpoint)
               end
             rescue Async::Stop
             rescue IOError

@@ -8,6 +8,8 @@
   omq.rs. A declared size reserved up to 128 MiB per frame.
 - A part above 1 GiB is sent as plaintext, as omq-proto 0.40 does; omq.rs
   refuses such frames.
+- The listener keeps accepting after `EMFILE`, `ECONNABORTED` and similar
+  errors, as `tcp://` does. One such error stopped it for good.
 
 ## [0.5.1] - 2026-11-26
 
