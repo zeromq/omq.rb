@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Applied `sndbuf` and `rcvbuf` to TCP and IPC connections instead of killing
+  the socket with `NameError` (`Socket` resolved to `OMQ::Socket`).
+
 ## [0.29.1] - 2026-11-26
 
 ### Fixed

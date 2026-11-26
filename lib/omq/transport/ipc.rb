@@ -62,11 +62,11 @@ module OMQ
         #
         def apply_buffer_sizes(sock, options)
           if options.sndbuf
-            sock.setsockopt(Socket::SOL_SOCKET, Socket::SO_SNDBUF, options.sndbuf)
+            sock.setsockopt(::Socket::SOL_SOCKET, ::Socket::SO_SNDBUF, options.sndbuf)
           end
 
           if options.rcvbuf
-            sock.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVBUF, options.rcvbuf)
+            sock.setsockopt(::Socket::SOL_SOCKET, ::Socket::SO_RCVBUF, options.rcvbuf)
           end
         end
 

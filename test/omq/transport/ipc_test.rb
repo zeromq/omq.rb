@@ -36,6 +36,27 @@ class OMQTransportIPCTest < Minitest::Spec
       end
     end
 
+    it "applies sndbuf and rcvbuf to dialed and accepted connections" do
+      Async do
+        pull = OMQ::PULL.new
+        pull.sndbuf = 65_536
+        pull.rcvbuf = 65_536
+        pull.bind("ipc://@omq-test-bufsizes-#{$$}")
+
+        push = OMQ::PUSH.new
+        push.sndbuf = 65_536
+        push.rcvbuf = 65_536
+        push.connect("ipc://@omq-test-bufsizes-#{$$}")
+
+        push.send("buffered")
+        assert_equal ["buffered"], pull.receive
+      ensure
+        push&.close
+        pull&.close
+      end
+    end
+
+
     it "REQ/REP over IPC" do
       Async do
         path = File.join(Dir.tmpdir, "omq-test-reqrep-#{$$}.sock")

@@ -43,7 +43,7 @@ module OMQ
     IO::Stream::ConnectionResetError,
   ]
 
-  RESOLUTION_ERROR = defined?(Socket::ResolutionError) ? Socket::ResolutionError : SocketError
+  RESOLUTION_ERROR = defined?(::Socket::ResolutionError) ? ::Socket::ResolutionError : ::SocketError
 
   # Errors raised when a peer cannot be reached.
   CONNECTION_FAILED = [

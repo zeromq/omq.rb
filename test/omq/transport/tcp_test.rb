@@ -67,6 +67,27 @@ class OMQTransportTCPTest < Minitest::Spec
       end
     end
 
+    it "applies sndbuf and rcvbuf to dialed and accepted connections" do
+      Async do
+        pull = OMQ::PULL.new
+        pull.sndbuf = 65_536
+        pull.rcvbuf = 65_536
+        port = pull.bind("tcp://127.0.0.1:0").port
+
+        push = OMQ::PUSH.new
+        push.sndbuf = 65_536
+        push.rcvbuf = 65_536
+        push.connect("tcp://127.0.0.1:#{port}")
+
+        push.send("buffered")
+        assert_equal ["buffered"], pull.receive
+      ensure
+        push&.close
+        pull&.close
+      end
+    end
+
+
     describe "host normalization" do
       it "normalize_bind_host maps * to nil (dual-stack wildcard)" do
         assert_nil OMQ::Transport::TCP.normalize_bind_host("*")
