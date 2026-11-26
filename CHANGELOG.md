@@ -45,6 +45,10 @@
   `SocketClosedError`, and receiving returns `nil`, like a closed
   `Thread::Queue`. `#close` on a socket that never bound or connected now closes
   it.
+- Kept an in-process sender alive when its peer closes between two sends.
+  Writing into the closed peer now counts as a lost connection instead of
+  killing the socket, and the single-peer bypass re-queues the message for the
+  next peer.
 
 ## [0.29.1] - 2026-11-26
 

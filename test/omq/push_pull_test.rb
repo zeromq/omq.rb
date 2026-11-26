@@ -193,6 +193,35 @@ class OMQPushPullTest < Minitest::Spec
 
     # -- binder closes, new binder appears (inproc) --------------------------
 
+    it "survives a send into an inproc peer that just closed" do
+      Async do
+        pull = OMQ::PULL.bind("inproc://dg-inproc-closed-peer")
+        push = OMQ::PUSH.new
+        push.reconnect_interval = RECONNECT_INTERVAL
+        push.connect("inproc://dg-inproc-closed-peer")
+        push << "first"
+        assert_equal ["first"], pull.receive
+
+        # PUSH still routes to the pipe and writes into the closed
+        # socket's queue before its own teardown runs. That must not
+        # kill PUSH. The message goes back to the send queue, where the
+        # dying connection's pump may still take and drop it.
+        pull.close
+        push << "early"
+        push.all_peers_gone.wait
+
+        pull = OMQ::PULL.bind("inproc://dg-inproc-closed-peer")
+        push << "after"
+        msg = pull.receive
+        msg = pull.receive if msg == ["early"]
+        assert_equal ["after"], msg
+      ensure
+        push&.close
+        pull&.close
+      end
+    end
+
+
     it "reconnects inproc after the binder closes and a new one binds" do
       Async do
         pull = OMQ::PULL.bind("inproc://dg-inproc-rebind")

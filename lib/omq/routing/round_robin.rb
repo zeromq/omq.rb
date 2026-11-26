@@ -85,11 +85,18 @@ module OMQ
       # and writes directly to the peer's recv queue. Otherwise blocks
       # on the shared bounded send queue (backpressure when full).
       #
+      # If the peer closed before this socket noticed, the message goes
+      # to the send queue and waits for the next peer.
+      #
       def enqueue_round_robin(parts)
         pipe = @direct_pipe
 
         if pipe&.direct_recv_queue
-          pipe.send_message(transform_send(parts))
+          begin
+            pipe.send_message(transform_send(parts))
+          rescue IOError
+            @send_queue.enqueue(parts)
+          end
         else
           @send_queue.enqueue(parts)
         end
