@@ -194,6 +194,8 @@ class OMQZstdAdaptiveLevelTest < Minitest::Spec
         assert_raises(ArgumentError) { push.connect(uri.to_s, level: 10..20) }
         assert_raises(ArgumentError) { push.connect(uri.to_s, levle: 3) }
         assert_raises(ArgumentError) { pull.bind("zstd+tcp://127.0.0.1:0", profile: :ratio) }
+        # Only the first bind sets the codec, but each one checks its level.
+        assert_raises(ArgumentError) { pull.bind("zstd+tcp://127.0.0.1:0", level: 9) }
       ensure
         push&.close
         pull&.close

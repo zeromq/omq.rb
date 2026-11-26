@@ -174,10 +174,12 @@ module OMQ
         end
 
 
-        # The socket's codec: the first bind or connect sets its options.
+        # The socket's codec: the first bind or connect sets its options,
+        # and each one checks them.
         def codec_for(engine, level:, dict:, auto_dict:)
           validate_security!(engine)
           validate_auto_dict!(auto_dict, dict)
+          level_range(level)
           @codecs[engine] ||= build_codec(engine, level, dict, normalize_auto_dict(auto_dict))
         rescue Ractor::IsolationError
           build_codec(engine, level, dict, normalize_auto_dict(auto_dict))
