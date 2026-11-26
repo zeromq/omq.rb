@@ -82,6 +82,9 @@
 - Dropped RADIO messages too large for one UDP datagram instead of killing the
   socket with `Errno::EMSGSIZE`. The UDP send buffer now fits a maximum-size
   datagram (macOS defaults to 9216 bytes), or uses `sndbuf` when set.
+- Released the socket of a connection whose send was blocked on a peer that
+  stopped reading. A zero-linger `#close` returned, but the fd and its send pump
+  stayed alive forever (protocol-zmtp).
 
 ## [0.29.1] - 2026-11-26
 

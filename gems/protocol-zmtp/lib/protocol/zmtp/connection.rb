@@ -353,9 +353,25 @@ module Protocol
       #
       # @return [void]
       def close
-        @io.close
-      rescue IOError
+        if writing?
+          # A writer is mid-frame, maybe blocked on a peer that stopped
+          # reading. A buffered close would flush behind it and never
+          # return. Shut the socket down under it, which wakes the
+          # blocked write with an error, then close it.
+          raw = @io.respond_to?(:io) ? @io.io : @io
+          raw.shutdown if raw.respond_to?(:shutdown)
+          raw.close
+        else
+          @io.close
+        end
+      rescue IOError, SystemCallError
         # already closed
+      end
+
+
+      # @return [Boolean] whether a frame write is in progress
+      def writing?
+        @mutex.locked?
       end
 
       private

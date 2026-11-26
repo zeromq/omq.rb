@@ -8,6 +8,9 @@
   checked with their 33-byte MESSAGE envelope, so a message at the limit dropped
   the connection. Encrypted mechanisms can report `#wire_overhead`; others get
   64 bytes of slack before decryption.
+- Closed the socket under a write that is blocked on a peer that stopped
+  reading. `#close` flushed first and waited behind the stuck writer forever.
+  Added `#writing?`.
 
 ## [0.10.5] - 2026-10-15
 

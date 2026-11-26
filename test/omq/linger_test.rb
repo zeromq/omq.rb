@@ -4,6 +4,57 @@ require_relative "../test_helper"
 
 class OMQLingerTest < Minitest::Spec
   describe "Linger" do
+    it "closes the socket under a send blocked on a peer that stopped reading" do
+      Async do |task|
+        server = TCPServer.new("127.0.0.1", 0)
+        port = server.addr[1]
+
+        # A peer that completes the handshake and then never reads.
+        accepted = Async::Promise.new
+        task.async do
+          sock = server.accept
+          conn = Protocol::ZMTP::Connection.new(IO::Stream::Buffered.wrap(sock), socket_type: "PULL", as_server: true)
+          conn.handshake!
+          accepted.resolve(sock)
+        end
+
+        push = OMQ::PUSH.new(linger: 0)
+        push.connect("tcp://127.0.0.1:#{port}")
+        push.peer_connected.wait
+        peer = accepted.wait
+
+        sent  = 0
+        flood = task.async do
+          loop do
+            push << "x" * 65_536
+            sent += 1
+          end
+        end
+
+        # Stop once the flood blocks on the full socket.
+        last = -1
+        until sent == last
+          last = sent
+          sleep 0.01
+        end
+        flood.stop
+
+        lifecycle = push.engine.connections.values.first
+        raw       = lifecycle.conn.io.io
+        push.close
+        10.times { task.yield }
+
+        # The peer never reads, yet our socket is closed under the send
+        # pump that was blocked on it.
+        assert raw.closed?
+      ensure
+        flood&.stop
+        peer&.close
+        server&.close
+      end
+    end
+
+
     it "drains send queue before closing when linger > 0" do
       Async do
         pull = OMQ::PULL.new
