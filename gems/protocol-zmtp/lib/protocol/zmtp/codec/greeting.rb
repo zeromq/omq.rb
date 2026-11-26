@@ -94,7 +94,10 @@ module Protocol
           end
 
           mechanism = data.byteslice(MECHANISM_OFFSET, MECHANISM_LENGTH).delete("\x00")
-          as_server = data.getbyte(AS_SERVER_OFFSET) == 1
+          as_server = data.getbyte(AS_SERVER_OFFSET)
+          raise Error, "invalid as-server flag 0x%02x" % as_server unless as_server <= 1
+
+          as_server = as_server == 1
 
           {
             major:     major,

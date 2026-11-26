@@ -163,7 +163,7 @@ module Protocol
 
 
         def read_command(io)
-          frame = Codec::Frame.read_from(io)
+          frame = Codec::Frame.read_from(io, max_message_size: Codec::Frame::HANDSHAKE_MAX_SIZE)
           raise Error, "expected command frame, got data frame" unless frame.command?
 
           Codec::Command.from_body(frame.body).raise_if_error!

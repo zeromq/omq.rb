@@ -25,6 +25,10 @@ module Protocol
         SHORT_MAX = 255
         LONG_MAX  = (1 << 63) - 1
 
+        # Largest frame accepted before the handshake completes. A peer
+        # that isn't authenticated yet must not make us read a huge frame.
+        HANDSHAKE_MAX_SIZE = 64 * 1024
+
         # Pre-computed single-byte flag strings (avoids Integer#chr + String#b per frame).
         FLAG_BYTES = Array.new(256) { |i| i.chr.b.freeze }.freeze
 

@@ -43,7 +43,7 @@ module Protocol
           io.write(ready_cmd.to_frame.to_wire)
           io.flush
 
-          frame = Codec::Frame.read_from(io)
+          frame = Codec::Frame.read_from(io, max_message_size: Codec::Frame::HANDSHAKE_MAX_SIZE)
           unless frame.command?
             raise Error, "expected command frame, got data frame"
           end

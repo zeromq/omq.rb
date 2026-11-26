@@ -20,6 +20,11 @@
 - Closed the socket under a write that is blocked on a peer that stopped
   reading. `#close` flushed first and waited behind the stuck writer forever.
   Added `#writing?`.
+- Bounded what an unauthenticated peer can send during the handshake: frames
+  over 64 KiB (`Codec::Frame::HANDSHAKE_MAX_SIZE`), more than 256 properties, an
+  identity over 255 bytes, or an as-server flag other than 0 or 1 now fail the
+  handshake. A peer could declare a huge READY or HELLO frame and have it read
+  before authentication.
 
 ## [0.10.5] - 2026-10-15
 

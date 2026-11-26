@@ -267,7 +267,7 @@ module Protocol
           io.flush
 
           # --- Read WELCOME ---
-          welcome_frame = Codec::Frame.read_from(io)
+          welcome_frame = Codec::Frame.read_from(io, max_message_size: Codec::Frame::HANDSHAKE_MAX_SIZE)
           raise Error, "expected command frame" unless welcome_frame.command?
           welcome_cmd = Codec::Command.from_body(welcome_frame.body).raise_if_error!
           raise Error, "expected WELCOME, got #{welcome_cmd.name}" unless welcome_cmd.name == "WELCOME"
@@ -319,7 +319,7 @@ module Protocol
           io.flush
 
           # --- Read READY ---
-          ready_frame = Codec::Frame.read_from(io)
+          ready_frame = Codec::Frame.read_from(io, max_message_size: Codec::Frame::HANDSHAKE_MAX_SIZE)
           raise Error, "expected command frame" unless ready_frame.command?
           ready_cmd = Codec::Command.from_body(ready_frame.body).raise_if_error!
           raise Error, "expected READY, got #{ready_cmd.name}" unless ready_cmd.name == "READY"
@@ -373,7 +373,7 @@ module Protocol
 
 
           # --- Read HELLO ---
-          hello_frame = Codec::Frame.read_from(io)
+          hello_frame = Codec::Frame.read_from(io, max_message_size: Codec::Frame::HANDSHAKE_MAX_SIZE)
           raise Error, "expected command frame" unless hello_frame.command?
           hello_cmd = Codec::Command.from_body(hello_frame.body).raise_if_error!
           raise Error, "expected HELLO, got #{hello_cmd.name}" unless hello_cmd.name == "HELLO"
@@ -419,7 +419,7 @@ module Protocol
           io.flush
 
           # --- Read INITIATE ---
-          init_frame = Codec::Frame.read_from(io)
+          init_frame = Codec::Frame.read_from(io, max_message_size: Codec::Frame::HANDSHAKE_MAX_SIZE)
           raise Error, "expected command frame" unless init_frame.command?
           init_cmd = Codec::Command.from_body(init_frame.body).raise_if_error!
           raise Error, "expected INITIATE, got #{init_cmd.name}" unless init_cmd.name == "INITIATE"

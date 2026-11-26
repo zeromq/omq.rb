@@ -146,6 +146,10 @@ module Protocol
         @peer_major       = result[:peer_major]
         @peer_minor       = result[:peer_minor]
 
+        if @peer_identity && @peer_identity.bytesize > 255
+          raise Error, "peer identity exceeds 255 bytes"
+        end
+
         unless @peer_socket_type
           raise Error, "peer READY missing Socket-Type"
         end

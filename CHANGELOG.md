@@ -125,6 +125,9 @@
 - Reported an XPUB cancel for each subscription of a subscriber that
   disconnects, like libzmq, so forwarders drop it upstream instead of keeping it
   forever.
+- Failed the handshake for a peer that sends a handshake frame over 64 KiB, more
+  than 256 properties, an identity over 255 bytes or an invalid as-server flag
+  (protocol-zmtp).
 
 ## [0.29.1] - 2026-11-26
 
