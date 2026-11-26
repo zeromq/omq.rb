@@ -62,7 +62,7 @@ module OMQ
       #
       def connection_removed(connection)
         @connections.delete(connection)
-        @conn_queues.delete(connection)
+        @conn_queues.delete(connection)&.close
       end
 
 
@@ -72,7 +72,7 @@ module OMQ
       #
       def enqueue(parts)
         @connections.to_a.each do |conn|
-          @conn_queues[conn]&.enqueue(parts)
+          Routing.enqueue_to_peer(@conn_queues[conn], parts)
         end
       end
 
@@ -90,7 +90,7 @@ module OMQ
       def start_conn_send_pump(conn, q)
         @engine.spawn_conn_pump_task(conn, annotation: "send pump") do
           loop do
-            parts = q.dequeue
+            parts = q.dequeue or break # queue closed: peer gone
             frame = parts.first&.b
 
             next if frame.nil? || frame.empty?

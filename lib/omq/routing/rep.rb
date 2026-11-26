@@ -87,7 +87,7 @@ module OMQ
       # @param connection [Protocol::ZMTP::Connection]
       #
       def connection_removed(connection)
-        @conn_queues.delete(connection)
+        @conn_queues.delete(connection)&.close
       end
 
 
@@ -101,7 +101,7 @@ module OMQ
         raise SocketError, "REP socket expects recv/send/recv/send order" unless @current_reply
 
         conn, envelope = @current_reply
-        @conn_queues[conn]&.enqueue([*envelope, EMPTY_FRAME, *parts].freeze)
+        Routing.enqueue_to_peer(@conn_queues[conn], [*envelope, EMPTY_FRAME, *parts].freeze)
         @current_reply = nil
       end
 

@@ -142,7 +142,7 @@ module OMQ
           batch = []
 
           loop do
-            dequeue_batch_capped(batch)
+            dequeue_batch_capped(batch) or break
             @in_flight += batch.size
 
             begin
@@ -162,9 +162,12 @@ module OMQ
       end
 
 
+      # @return [Array, nil] +batch+, or nil once the send queue is closed
+      #
       def dequeue_batch_capped(batch = [])
-        batch << @send_queue.dequeue
-        bytes = batch_bytes(batch.first)
+        first = @send_queue.dequeue or return
+        batch << first
+        bytes = batch_bytes(first)
 
         while batch.size < BATCH_MSG_CAP && bytes < BATCH_BYTE_CAP
           msg = @send_queue.dequeue(timeout: 0)
@@ -172,6 +175,8 @@ module OMQ
           batch << msg
           bytes += batch_bytes(msg)
         end
+
+        batch
       end
 
 

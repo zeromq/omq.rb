@@ -74,7 +74,7 @@ module OMQ
           @connections_by_identity.delete(identity)
         end
 
-        @conn_queues.delete(connection)
+        @conn_queues.delete(connection)&.close
       end
 
 
@@ -91,7 +91,7 @@ module OMQ
         end
         conn = @connections_by_identity[identity]
         return unless conn  # silently drop if peer disconnected
-        @conn_queues[conn]&.enqueue(parts[1..])
+        Routing.enqueue_to_peer(@conn_queues[conn], parts[1..])
       end
 
 

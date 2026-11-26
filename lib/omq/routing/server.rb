@@ -68,7 +68,7 @@ module OMQ
       def connection_removed(connection)
         routing_id = @routing_id_by_connection.delete(connection)
         @connections_by_routing_id.delete(routing_id) if routing_id
-        @conn_queues.delete(connection)
+        @conn_queues.delete(connection)&.close
       end
 
 
@@ -78,7 +78,7 @@ module OMQ
         routing_id = parts.first
         conn = @connections_by_routing_id[routing_id]
         return unless conn
-        @conn_queues[conn]&.enqueue(parts[1..])
+        Routing.enqueue_to_peer(@conn_queues[conn], parts[1..])
       end
 
 

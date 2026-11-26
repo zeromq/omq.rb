@@ -98,5 +98,42 @@ class OMQRouterDealerTest < Minitest::Spec
         router&.close
       end
     end
+
+    it "unblocks a send to a peer that leaves while its queue is full" do
+      Async do |task|
+        router = OMQ::ROUTER.bind("inproc://rd-departed-block")
+        router.send_hwm = 1
+
+        dealer = OMQ::DEALER.new(linger: 0)
+        dealer.identity = "slow"
+        dealer.recv_hwm = 1
+        dealer.connect("inproc://rd-departed-block")
+
+        sent  = 0
+        flood = task.async do
+          100.times do
+            router.send(["slow", "x"])
+            sent += 1
+          end
+        end
+
+        # Run the flood until it stops making progress: it is now
+        # blocked at HWM on the stalled peer's queue.
+        last = -1
+        until sent == last
+          last = sent
+          10.times { task.yield }
+        end
+
+        assert_operator sent, :<, 100
+        dealer.close
+
+        flood.wait
+        assert_equal 100, sent
+      ensure
+        flood&.stop
+        router&.close
+      end
+    end
   end
 end

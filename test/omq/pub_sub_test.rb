@@ -397,5 +397,44 @@ class OMQPubSubTest < Minitest::Spec
         pub&.close
       end
     end
+
+    it "unblocks the fan-out when a full subscriber leaves" do
+      Async do |task|
+        pub = OMQ::PUB.new(on_mute: :block)
+        pub.send_hwm = 1
+        pub.bind("inproc://pubsub-block-leave")
+
+        stalled = OMQ::SUB.new
+        stalled.linger = 0
+        stalled.recv_hwm = 1
+        stalled.subscribe("")
+        stalled.connect("inproc://pubsub-block-leave")
+
+        sent  = 0
+        flood = task.async do
+          100.times do
+            pub << "x"
+            sent += 1
+          end
+        end
+
+        # Run the flood until it stops making progress: it is now
+        # blocked at HWM on the stalled peer's queue.
+        last = -1
+        until sent == last
+          last = sent
+          10.times { task.yield }
+        end
+
+        assert_operator sent, :<, 100
+        stalled.close
+
+        flood.wait
+        assert_equal 100, sent
+      ensure
+        flood&.stop
+        pub&.close
+      end
+    end
   end
 end

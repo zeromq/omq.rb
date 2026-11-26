@@ -21,7 +21,7 @@ module OMQ
           batch = []
 
           loop do
-            Routing.dequeue_batch(q, batch)
+            Routing.dequeue_batch(q, batch) or break
 
             if batch.size == 1
               conn.write_message batch.first

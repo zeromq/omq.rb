@@ -100,7 +100,7 @@ module OMQ
           batch = []
 
           loop do
-            Routing.dequeue_batch(@send_queue, batch)
+            Routing.dequeue_batch(@send_queue, batch) or break
             batch.each { |parts| conn.write_message(parts) }
             conn.flush
             batch.clear

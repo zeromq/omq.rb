@@ -105,7 +105,7 @@ module OMQ
       #
       def remove_fan_out_send_connection(conn)
         @subscribe_all.delete(conn)
-        @conn_queues.delete(conn)
+        @conn_queues.delete(conn)&.close
         @fan_out_queues = @conn_queues.values.freeze
       end
 
@@ -129,7 +129,7 @@ module OMQ
       #
       def fan_out_enqueue(parts)
         @fan_out_queues.each do |q|
-          q.enqueue(parts)
+          Routing.enqueue_to_peer(q, parts)
         end
       end
 
@@ -187,7 +187,7 @@ module OMQ
           aux_batch = []
 
           loop do
-            Routing.dequeue_batch(q, batch)
+            Routing.dequeue_batch(q, batch) or break
 
             if write_matching_batch(conn, batch, use_wire, aux_batch)
               conn.flush
@@ -263,7 +263,7 @@ module OMQ
           batch = []
 
           loop do
-            Routing.dequeue_batch(q, batch)
+            Routing.dequeue_batch(q, batch) or break
 
             # Keep only the latest message that matches the subscription.
             latest = batch.reverse.find do |parts|

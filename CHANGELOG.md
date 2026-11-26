@@ -49,6 +49,10 @@
   Writing into the closed peer now counts as a lost connection instead of
   killing the socket, and the single-peer bypass re-queues the message for the
   next peer.
+- Released senders blocked on the full queue of a peer that disconnects (ROUTER,
+  REP, SERVER, PEER, XSUB, and PUB/XPUB with `on_mute: :block`). The queue was
+  dropped but never closed, so the sender hung forever; the message is now
+  dropped.
 
 ## [0.29.1] - 2026-11-26
 

@@ -109,7 +109,7 @@ module OMQ
 
           loop do
             @send_pump_idle = true
-            Routing.dequeue_batch(@send_queue, batch)
+            Routing.dequeue_batch(@send_queue, batch) or break
             @send_pump_idle = false
 
             @written.clear
