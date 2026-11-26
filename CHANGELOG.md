@@ -31,6 +31,13 @@
   drop the connection whenever a PING ran late.
 - `doc/DESIGN.md` is now `doc/ARCHITECTURE.md`, trimmed to the current
   components, task tree and data flow.
+- ROUTER, SERVER and PEER keep a dialed peer's send queue and routing id across
+  reconnects, like libzmq's pipes. Sends while the peer is down queue up to
+  `send_hwm` and go out after the redial, and replies keep reaching a peer that
+  reconnects without an explicit identity. With `router_mandatory`, sending to a
+  dialed peer that is down no longer raises. `#disconnect` drops the queue;
+  `#close` waits up to `linger` for the redial. Accepted peers still lose their
+  queue with the connection.
 
 ### Fixed
 

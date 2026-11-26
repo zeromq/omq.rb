@@ -40,7 +40,7 @@ Routing strategies:
 | Work-stealing send only | `Push`, `Scatter` | `RoundRobin` |
 | Work-stealing both ways | `Pair`, `Dealer`, `Client`, `Channel` | `RoundRobin` |
 | Request-reply | `Req`, `Rep` | `RoundRobin` |
-| Identity routing | `Router`, `Server`, `Peer` | `ConnSendPump` |
+| Identity routing | `Router`, `Server`, `Peer` | `IdentityRouting`, `ConnSendPump` |
 | Fan-out | `Pub`, `XPub`, `Radio` | `FanOut`, `PrefixSet` (radix trie) |
 | Subscription receive | `Sub`, `XSub`, `Dish` | |
 
@@ -108,6 +108,11 @@ Fan-out (PUB, XPUB, RADIO) and identity routing (ROUTER, SERVER, PEER) have
 one bounded queue per connection. Fan-out filters by subscription in the
 pump, and drops for a mute subscriber by default (`on_mute`). ROUTER drops
 for a full peer unless `router_mandatory`.
+
+For identity routing, a dialed endpoint keeps its queue and routing id across
+reconnects, like a libzmq pipe. Sends to a dialed peer that is down wait for
+the redial; `#disconnect` and `#close` drop them. Accepted peers lose their
+queue with the connection.
 
 A pump blocks for the first message, takes more without blocking up to a
 batch cap, writes them all, then flushes once. Fan-out encodes a message

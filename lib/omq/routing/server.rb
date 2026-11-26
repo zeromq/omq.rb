@@ -8,10 +8,12 @@ module OMQ
     # 4-byte routing IDs.
     #
     # Prepends routing ID on receive. Strips routing ID on send and
-    # routes to the identified connection.
+    # routes to the identified connection. A dialed peer keeps its
+    # routing ID and queue across reconnects ({IdentityRouting}).
     #
     class Server
       include ClosableQueues
+      include IdentityRouting
 
       # @return [Async::LimitedQueue]
       #
@@ -21,11 +23,9 @@ module OMQ
       # @param engine [Engine]
       #
       def initialize(engine)
-        @engine                     = engine
-        @recv_queue                 = Routing.build_queue(engine.options.recv_hwm, :block)
-        @connections_by_routing_id  = {}
-        @routing_id_by_connection   = {}
-        @conn_queues                = {}
+        @engine     = engine
+        @recv_queue = Routing.build_queue(engine.options.recv_hwm, :block)
+        init_identity_routing(engine)
       end
 
 
@@ -50,42 +50,35 @@ module OMQ
       # @param connection [Protocol::ZMTP::Connection]
       #
       def connection_added(connection)
-        routing_id = SecureRandom.bytes(4)
-        @connections_by_routing_id[routing_id] = connection
-        @routing_id_by_connection[connection]  = routing_id
+        routing_id = attach_route(connection).id
 
         # Single-frame socket: drop multipart input from a bad peer.
         @engine.start_recv_pump(connection, @recv_queue) { |msg| [routing_id, msg.first] if msg.size == 1 }
-
-        q = Routing.build_queue(@engine.options.send_hwm, :block)
-        @conn_queues[connection] = q
-        ConnSendPump.start(@engine, connection, q)
       end
 
 
       # @param connection [Protocol::ZMTP::Connection]
       #
       def connection_removed(connection)
-        routing_id = @routing_id_by_connection.delete(connection)
-        @connections_by_routing_id.delete(routing_id) if routing_id
-        @conn_queues.delete(connection)&.close
+        detach_route(connection)
       end
 
 
       # @param parts [Array<String>]
       #
       def enqueue(parts)
-        routing_id = parts.first
-        conn = @connections_by_routing_id[routing_id]
-        return unless conn
-        Routing.enqueue_to_peer(@conn_queues[conn], parts[1..])
+        route = route_to(parts.first)
+        return unless route
+
+        Routing.enqueue_to_peer(route.queue, parts[1..])
       end
 
 
-      # True when all per-connection send queues are empty.
-      #
-      def send_queues_drained?
-        @conn_queues.values.all?(&:empty?)
+      private
+
+
+      def generate_routing_id
+        SecureRandom.bytes(4)
       end
 
     end

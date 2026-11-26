@@ -71,12 +71,14 @@ module OMQ
       #   substitute their own ZMTP-shaped connection class. Falls back to
       #   {Protocol::ZMTP::Connection} when nil or when the transport
       #   doesn't define +connection_class+.
+      # @param dialed [Boolean] true if this socket dialed +endpoint+
       #
-      def initialize(engine, endpoint: nil, done: nil, transport: nil)
+      def initialize(engine, endpoint: nil, done: nil, transport: nil, dialed: false)
         @engine    = engine
         @endpoint  = endpoint
         @done      = done
         @transport = transport
+        @dialed    = dialed
         @state     = :new
         @conn      = nil
 
@@ -85,6 +87,13 @@ module OMQ
         # the socket barrier — {Engine#stop}/{Engine#close} cascade
         # through in one call.
         @barrier  = Async::Barrier.new(parent: engine.barrier)
+      end
+
+
+      # @return [Boolean] true if this socket dialed the connection
+      #
+      def dialed?
+        @dialed
       end
 
 
@@ -248,7 +257,12 @@ module OMQ
         @engine.emit_monitor_event(:disconnected, endpoint: @endpoint, detail: detail)
         @done&.resolve(true)
         @engine.maybe_resolve_all_peers_gone
-        @engine.maybe_reconnect(@endpoint) if reconnect
+
+        if reconnect
+          @engine.maybe_reconnect(@endpoint)
+        elsif @dialed
+          @engine.drop_route(@endpoint) # no redial will deliver its queue
+        end
 
         # Cancel every sibling pump of this connection. The caller is
         # the supervisor task, which is NOT in the barrier — so there

@@ -228,6 +228,7 @@ module OMQ
       @dialers.delete(endpoint)
       @dialer_barriers.delete(endpoint)&.stop
       close_connections_at(endpoint)
+      drop_route(endpoint)
     end
 
 
@@ -287,8 +288,40 @@ module OMQ
     # @param pipe [Transport::Inproc::Pipe]
     # @return [Boolean] false if the routing strategy refused the peer
     #
-    def connection_ready(pipe, endpoint: nil)
-      ConnectionLifecycle.new(self, endpoint: endpoint).ready_direct!(pipe)
+    def connection_ready(pipe, endpoint: nil, dialed: false)
+      ConnectionLifecycle.new(self, endpoint: endpoint, dialed: dialed).ready_direct!(pipe)
+    end
+
+
+    # @param conn [Protocol::ZMTP::Connection, Transport::Inproc::Pipe]
+    # @return [String, nil] the endpoint this socket dialed to get +conn+,
+    #   nil for an accepted connection
+    #
+    def dialed_endpoint(conn)
+      lifecycle = @connections[conn]
+      lifecycle.endpoint if lifecycle&.dialed?
+    end
+
+
+    # @param endpoint [String, nil]
+    # @return [Boolean] true if a lost connection to +endpoint+ gets
+    #   redialed
+    #
+    def redials?(endpoint)
+      return false unless endpoint && @dialers.key?(endpoint)
+
+      @lifecycle.open? && @lifecycle.reconnect_enabled
+    end
+
+
+    # Drops the send queue a routing strategy keeps for a dialed
+    # endpoint between connections (ROUTER, SERVER, PEER).
+    #
+    # @param endpoint [String, nil]
+    # @return [void]
+    #
+    def drop_route(endpoint)
+      @routing.drop_route(endpoint) if endpoint && @routing.respond_to?(:drop_route)
     end
 
 
@@ -374,12 +407,9 @@ module OMQ
     # and the endpoint is still dialed.
     #
     def maybe_reconnect(endpoint)
-      return unless endpoint && @dialers.key?(endpoint)
-      return unless @lifecycle.open? && @lifecycle.reconnect_enabled
+      return unless redials?(endpoint)
 
-      dialer = @dialers[endpoint]
-
-      Reconnect.schedule(dialer, @options, dialer_barrier(endpoint), self)
+      Reconnect.schedule(@dialers[endpoint], @options, dialer_barrier(endpoint), self)
     end
 
 
@@ -650,7 +680,7 @@ module OMQ
       parent&.async(transient: true, annotation: "conn #{endpoint}") do
         done      = Async::Promise.new
         transport = endpoint ? transport_for(endpoint) : nil
-        lifecycle = ConnectionLifecycle.new(self, endpoint: endpoint, done: done, transport: transport)
+        lifecycle = ConnectionLifecycle.new(self, endpoint: endpoint, done: done, transport: transport, dialed: !as_server)
         lifecycle.handshake!(io, as_server: as_server)
         done.wait
       rescue Async::Stop, Async::Cancel
