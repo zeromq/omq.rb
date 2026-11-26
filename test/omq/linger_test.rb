@@ -1,9 +1,106 @@
 # frozen_string_literal: true
 
 require_relative "../test_helper"
+require "securerandom"
 
 class OMQLingerTest < Minitest::Spec
+  # Counts how often the linger drain checks the send queues.
+  module CountDrainChecks
+    attr_accessor :drain_checks
+
+
+    def send_queues_drained?
+      self.drain_checks = (drain_checks || 0) + 1
+      super
+    end
+  end
+
+
   describe "Linger" do
+    it "sleeps until something changes instead of polling" do
+      Async do
+        push = OMQ::PUSH.new(linger: 0.1)
+        push.connect("ipc://@omq-linger-#{SecureRandom.hex(4)}") # nobody binds
+        push << "queued"
+        push.engine.routing.extend(CountDrainChecks)
+
+        push.close
+        assert_operator push.engine.routing.drain_checks, :<=, 2
+      end
+    end
+
+
+    it "flushes a batch a pump is still writing before close tears down" do
+      Async do
+        rep  = OMQ::REP.new # default linger: wait for every reply
+        port = rep.bind("tcp://127.0.0.1:0").port
+        req  = OMQ::REQ.new.tap { |s| s.linger = 0 }
+        req.connect("tcp://127.0.0.1:#{port}")
+
+        req << "ping"
+        rep.receive
+        rep << "pong" # the pump may take it off the queue right away
+        rep.close
+
+        assert_equal ["pong"], req.receive
+      ensure
+        req&.close
+        rep&.close
+      end
+    end
+
+
+    it "closes the socket under a send blocked on a peer that stopped reading" do
+      Async do |task|
+        server = TCPServer.new("127.0.0.1", 0)
+        port = server.addr[1]
+
+        # A peer that completes the handshake and then never reads.
+        accepted = Async::Promise.new
+        task.async do
+          sock = server.accept
+          conn = Protocol::ZMTP::Connection.new(IO::Stream::Buffered.wrap(sock), socket_type: "PULL", as_server: true)
+          conn.handshake!
+          accepted.resolve(sock)
+        end
+
+        push = OMQ::PUSH.new(linger: 0)
+        push.connect("tcp://127.0.0.1:#{port}")
+        push.peer_connected.wait
+        peer = accepted.wait
+
+        sent  = 0
+        flood = task.async do
+          loop do
+            push << "x" * 65_536
+            sent += 1
+          end
+        end
+
+        # Stop once the flood blocks on the full socket.
+        last = -1
+        until sent == last
+          last = sent
+          sleep 0.01
+        end
+        flood.stop
+
+        lifecycle = push.engine.connections.values.first
+        raw       = lifecycle.conn.io.io
+        push.close
+        10.times { task.yield }
+
+        # The peer never reads, yet our socket is closed under the send
+        # pump that was blocked on it.
+        assert raw.closed?
+      ensure
+        flood&.stop
+        peer&.close
+        server&.close
+      end
+    end
+
+
     it "drains send queue before closing when linger > 0" do
       Async do
         pull = OMQ::PULL.new

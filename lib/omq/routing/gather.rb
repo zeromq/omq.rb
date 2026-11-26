@@ -5,6 +5,8 @@ module OMQ
     # GATHER socket routing: fair-queue receive from SCATTER peers.
     #
     class Gather
+      include ClosableQueues
+
       # @return [Async::LimitedQueue]
       #
       attr_reader :recv_queue
@@ -39,7 +41,8 @@ module OMQ
       # @param connection [Protocol::ZMTP::Connection]
       #
       def connection_added(connection)
-        @engine.start_recv_pump(connection, @recv_queue)
+        # Single-frame socket: drop multipart input from a bad peer.
+        @engine.start_recv_pump(connection, @recv_queue) { |msg| msg if msg.size == 1 }
       end
 
 

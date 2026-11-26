@@ -10,12 +10,13 @@ module OMQ
     class Reconnect
       # @param dialer [Transport::TCP::Dialer, etc.] stateful dialer factory
       # @param options [Options]
-      # @param parent_task [Async::Task]
+      # @param parent [#async] owner of the retry task (the dialer's barrier)
       # @param engine [Engine]
       # @param delay [Numeric, nil] initial delay (defaults to reconnect_interval)
+      # @return [Async::Task]
       #
-      def self.schedule(dialer, options, parent_task, engine, delay: nil)
-        new(engine, dialer, options).run(parent_task, delay: delay)
+      def self.schedule(dialer, options, parent, engine, delay: nil)
+        new(engine, dialer, options).run(parent, delay: delay)
       end
 
 
@@ -32,13 +33,13 @@ module OMQ
 
       # Spawns a background task that retries the connection with exponential backoff.
       #
-      # @param parent_task [Async::Task]
+      # @param parent [#async]
       # @param delay [Numeric, nil] initial delay override
-      # @return [void]
+      # @return [Async::Task]
       #
-      def run(parent_task, delay: nil)
+      def run(parent, delay: nil)
         endpoint = @dialer.endpoint
-        parent_task.async(transient: true, annotation: "reconnect #{endpoint}") do
+        parent.async(transient: true, annotation: "reconnect #{endpoint}") do
           retry_loop(delay: delay)
         rescue Async::Stop
         rescue => error
@@ -62,10 +63,10 @@ module OMQ
             break
           rescue Protocol::ZMTP::FatalHandshakeError
             break
-          rescue *CONNECTION_LOST, *CONNECTION_FAILED, Protocol::ZMTP::Error
+          rescue *CONNECTION_LOST, *CONNECTION_FAILED, Protocol::ZMTP::Error => error
             delay = next_delay(delay, max_delay)
             @engine.emit_monitor_event :connect_retried,
-                                       endpoint: @dialer.endpoint, detail: { interval: delay }
+                                       endpoint: @dialer.endpoint, detail: { interval: delay, error: error }
           end
         end
       end

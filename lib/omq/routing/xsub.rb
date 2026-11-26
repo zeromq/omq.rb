@@ -9,6 +9,8 @@ module OMQ
     # queue so subscription commands are delivered independently per peer.
     #
     class XSub
+      include ClosableQueues
+
 
       # @return [Async::LimitedQueue]
       #
@@ -22,6 +24,7 @@ module OMQ
         @connections = Set.new
         @recv_queue  = Routing.build_queue(engine.options.recv_hwm, :block)
         @conn_queues = {}
+        @subscriptions = Hash.new(0) # prefix => times subscribed, replayed to new peers
       end
 
 
@@ -52,7 +55,7 @@ module OMQ
 
         q = Routing.build_queue(@engine.options.send_hwm, :block)
         @conn_queues[connection] = q
-        start_conn_send_pump(connection, q)
+        start_conn_send_pump(connection, q, @subscriptions.keys)
       end
 
 
@@ -60,7 +63,7 @@ module OMQ
       #
       def connection_removed(connection)
         @connections.delete(connection)
-        @conn_queues.delete(connection)
+        @conn_queues.delete(connection)&.close
       end
 
 
@@ -68,9 +71,15 @@ module OMQ
       #
       # @param parts [Array<String>]
       #
+      # Subscriptions are recorded, like libzmq's XSUB, so a publisher
+      # that connects (or reconnects) later gets them too. A cancel goes
+      # out only when the last subscription to its prefix is gone.
+      #
       def enqueue(parts)
-        @connections.each do |conn|
-          @conn_queues[conn]&.enqueue(parts)
+        return unless track_subscription(parts.first)
+
+        @connections.to_a.each do |conn|
+          Routing.enqueue_to_peer(@conn_queues[conn], parts)
         end
       end
 
@@ -85,34 +94,74 @@ module OMQ
       private
 
 
-      def start_conn_send_pump(conn, q)
-        @engine.spawn_conn_pump_task(conn, annotation: "send pump") do
-          loop do
-            parts = q.dequeue
-            frame = parts.first&.b
+      # Updates the subscription table for an outgoing message.
+      #
+      # @param frame [String, nil] first frame: 0x01/0x00 + prefix
+      # @return [Boolean] whether to forward the message to the peers
+      #
+      def track_subscription(frame)
+        return true if frame.nil? || frame.empty?
 
-            next if frame.nil? || frame.empty?
+        prefix = frame.byteslice(1..).b
 
-            flag   = frame.getbyte(0)
-            prefix = frame.byteslice(1..) || "".b
+        case frame.getbyte(0)
+        when 0x01
+          @subscriptions[prefix] += 1
+          true
+        when 0x00
+          count = @subscriptions[prefix]
+          return false if count.zero?
 
-            case flag
-            when 0x01
-              if conn.peer_minor >= 1
-                conn.send_command(Protocol::ZMTP::Codec::Command.subscribe(prefix))
-              else
-                conn.send_message([frame])
-              end
-            when 0x00
-              if conn.peer_minor >= 1
-                conn.send_command(Protocol::ZMTP::Codec::Command.cancel(prefix))
-              else
-                conn.send_message([frame])
-              end
-            else
-              next
-            end
+          if count > 1
+            @subscriptions[prefix] = count - 1
+            return false
           end
+
+          @subscriptions.delete(prefix)
+          true
+        else
+          true
+        end
+      end
+
+
+      # @param replay [Array<String>] prefixes to subscribe first
+      #
+      def start_conn_send_pump(conn, q, replay)
+        @engine.spawn_conn_pump_task(conn, annotation: "send pump") do
+          replay.each do |prefix|
+            write_subscription(conn, 0x01, prefix)
+          end
+
+          loop do
+            parts = q.dequeue or break # queue closed: peer gone
+            @engine.sending_batch { forward_subscription(conn, parts.first&.b) }
+          end
+        end
+      end
+
+
+      # Sends a queued 0x01/0x00 + prefix frame on; drops anything else.
+      #
+      def forward_subscription(conn, frame)
+        return if frame.nil? || frame.empty?
+
+        flag = frame.getbyte(0)
+        return unless flag == 0x01 || flag == 0x00
+
+        write_subscription(conn, flag, frame.byteslice(1..) || "".b)
+      end
+
+
+      # Writes a SUBSCRIBE (+flag+ 0x01) or CANCEL (0x00) in the form
+      # the peer understands: a command for ZMTP 3.1, a message for 3.0.
+      #
+      def write_subscription(conn, flag, prefix)
+        if conn.peer_minor >= 1
+          command = flag == 0x01 ? Protocol::ZMTP::Codec::Command.subscribe(prefix) : Protocol::ZMTP::Codec::Command.cancel(prefix)
+          conn.send_command(command)
+        else
+          conn.send_message([flag.chr.b + prefix.b])
         end
       end
 

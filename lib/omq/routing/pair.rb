@@ -10,6 +10,8 @@ module OMQ
     # the in-flight batch is dropped (matching libzmq).
     #
     class Pair
+      include ClosableQueues
+
       # @return [Async::LimitedQueue]
       #
       attr_reader :recv_queue
@@ -44,17 +46,17 @@ module OMQ
 
 
       # @param connection [Protocol::ZMTP::Connection]
-      # @raise [RuntimeError] if a connection already exists
+      # @raise [PeerRefusedError] if a connection already exists
       #
       def connection_added(connection)
-        raise "PAIR allows only one peer" if @connection
+        raise PeerRefusedError, "PAIR allows only one peer" if @connection
         @connection = connection
 
         @engine.start_recv_pump(connection, @recv_queue)
 
-        unless connection.is_a?(Transport::Inproc::Pipe)
-          start_send_pump(connection)
-        end
+        # Inproc pipes take the direct path in #enqueue, but the pump
+        # still drains messages queued while there was no peer.
+        start_send_pump(connection)
       end
 
 
@@ -67,9 +69,13 @@ module OMQ
 
       # @param parts [Array<String>]
       #
+      # Inproc peers get messages written straight into their receive
+      # queue, unless older messages still wait in the send queue.
+      #
       def enqueue(parts)
         conn = @connection
-        if conn.is_a?(Transport::Inproc::Pipe) && conn.direct_recv_queue
+
+        if conn.is_a?(Transport::Inproc::Pipe) && conn.direct_recv_queue && @send_queue.empty?
           conn.send_message(parts)
         else
           @send_queue.enqueue(parts)
@@ -92,15 +98,18 @@ module OMQ
           batch = []
 
           loop do
-            Routing.dequeue_batch(@send_queue, batch)
+            Routing.dequeue_batch(@send_queue, batch) or break
 
-            if batch.size == 1
-              conn.write_message(batch.first)
-            else
-              conn.write_messages(batch)
+            @engine.sending_batch do
+              if batch.size == 1
+                conn.write_message(batch.first)
+              else
+                conn.write_messages(batch)
+              end
+
+              conn.flush
             end
 
-            conn.flush
             batch.each do |parts|
               @engine.emit_verbose_msg_sent(conn, parts)
             end

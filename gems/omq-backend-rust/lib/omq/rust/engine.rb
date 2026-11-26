@@ -210,11 +210,22 @@ module OMQ
           @monitor_watching = true
           FdWatcher.watch_loop(@socket.monitor_fd, owner: self) do |io|
             io.read_nonblock(256, exception: false)
-            while (data = @socket.try_monitor_event)
-              handle_monitor_event(data)
-            end
-            @socket.monitor_fd unless @closed
+            drain_monitor_events
           end
+        end
+      end
+
+
+      # Handles queued monitor events until none is left. #monitor_fd arms
+      # the notification fd, and it signals only events that arrive while
+      # armed, so arm before each check: an event that lands between an
+      # empty check and a later arm would never wake the watcher.
+      #
+      def drain_monitor_events
+        until @closed
+          @socket.monitor_fd
+          data = @socket.try_monitor_event or break
+          handle_monitor_event(data)
         end
       end
 

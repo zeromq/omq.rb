@@ -8,6 +8,9 @@ require_relative "engine/reconnect"
 require_relative "engine/connection_lifecycle"
 require_relative "engine/socket_lifecycle"
 require_relative "engine/maintenance"
+require_relative "engine/endpoints"
+require_relative "engine/monitoring"
+require_relative "engine/pump_tasks"
 
 module OMQ
   # Per-socket orchestrator.
@@ -16,6 +19,11 @@ module OMQ
   # OMQ::Socket instance. Each socket type creates one Engine.
   #
   class Engine
+    include Endpoints
+    include Monitoring
+    include PumpTasks
+
+
     # Scheme → transport module registry.
     # Plugins add entries via +Engine.transports["scheme"] = MyTransport+.
     #
@@ -60,7 +68,7 @@ module OMQ
 
 
     # @!attribute [w] monitor_queue
-    #   @param value [Async::Queue, nil] queue for monitor events
+    #   @param value [MonitorQueue, nil] queue for monitor events
     #
     attr_writer :monitor_queue
 
@@ -86,21 +94,58 @@ module OMQ
       @routing         = nil
       @connections     = {} # connection => ConnectionLifecycle
       @dialers         = {} # endpoint => Dialer (reconnect intent + connect logic)
+      @dialer_barriers = {} # endpoint => Async::Barrier (its reconnect + connection tasks)
       @listeners       = {} # endpoint => Listener
+      @bind_aliases    = {} # endpoint as passed to #bind => listener endpoint
       @lifecycle       = SocketLifecycle.new
       @fatal_error     = nil
       @monitor_queue   = nil
       @verbose_monitor = false
+      @drain_signal    = nil # set while #close waits for send queues
+      @batches_sending = 0   # batches pumps took off a queue and haven't flushed
     end
 
 
-    # Delegated to {SocketLifecycle}.
-    def peer_connected    = @lifecycle.peer_connected
-    def all_peers_gone    = @lifecycle.all_peers_gone
-    def parent_task       = @lifecycle.parent_task
-    def barrier           = @lifecycle.barrier
-    def closed?           = @lifecycle.closed?
-    def on_io_thread?     = @lifecycle.on_io_thread
+    # @return [Async::Promise] resolves with the first peer that connects
+    #
+    def peer_connected
+      @lifecycle.peer_connected
+    end
+
+
+    # @return [Async::Promise] resolves once every peer is gone
+    #
+    def all_peers_gone
+      @lifecycle.all_peers_gone
+    end
+
+
+    # @return [Async::Task, nil] the task the socket's tasks run under
+    #
+    def parent_task
+      @lifecycle.parent_task
+    end
+
+
+    # @return [Async::Barrier, nil] the socket-level barrier
+    #
+    def barrier
+      @lifecycle.barrier
+    end
+
+
+    # @return [Boolean] true once the socket is closed
+    #
+    def closed?
+      @lifecycle.closed?
+    end
+
+
+    # @return [Boolean] true if the socket runs on the shared IO thread
+    #
+    def on_io_thread?
+      @lifecycle.on_io_thread
+    end
 
 
     # Enables or disables auto-reconnect for dropped connections.
@@ -155,34 +200,6 @@ module OMQ
     end
 
 
-    # Returns the transport object (Dialer or Listener) for an endpoint.
-    # Used by {ConnectionLifecycle#ready!} to call +#wrap_connection+.
-    #
-    # @param endpoint [String]
-    # @return [Dialer, Listener, nil]
-    #
-    def transport_object_for(endpoint)
-      @dialers[endpoint] || @listeners[endpoint]
-    end
-
-
-    # Spawns a ruby:// reconnect retry task under the socket's parent task.
-    #
-    # @param endpoint [String]
-    # @yield [interval] the retry loop body
-    #
-    def spawn_inproc_retry(endpoint)
-      ri  = @options.reconnect_interval
-      ivl = ri.is_a?(Range) ? ri.begin : ri
-      ann = "inproc reconnect #{endpoint}"
-
-      @lifecycle.barrier.async(transient: true, annotation: ann) do
-        yield ivl
-      rescue Async::Stop, Async::Cancel
-      end
-    end
-
-
     # Binds to an endpoint.
     #
     # @param endpoint [String] e.g. "tcp://127.0.0.1:5555", "ruby://foo"
@@ -198,6 +215,7 @@ module OMQ
       start_accept_loops(listener)
 
       @listeners[listener.endpoint] = listener
+      remember_bind_alias(endpoint, listener.endpoint)
       emit_monitor_event(:listening, endpoint: listener.endpoint)
       URI.parse(listener.endpoint)
     rescue => error
@@ -217,14 +235,12 @@ module OMQ
       endpoint, transport = resolve_endpoint(endpoint)
       validate_endpoint!(endpoint, transport)
 
-      dialer = transport.dialer(endpoint, self, **opts)
+      dialer             = transport.dialer(endpoint, self, **opts)
+      @dialers[endpoint] = dialer
 
       if endpoint.start_with?("ruby://")
-        # Ruby in-process connect is synchronous and instant
-        dialer.connect
-        @dialers[endpoint] = dialer
+        connect_inproc(endpoint, dialer)
       else
-        @dialers[endpoint] = dialer
         emit_monitor_event(:connect_delayed, endpoint: endpoint)
         schedule_reconnect(endpoint, delay: 0)
       end
@@ -233,8 +249,8 @@ module OMQ
     end
 
 
-    # Disconnects from an endpoint. Closes connections to that endpoint
-    # and stops auto-reconnection for it.
+    # Disconnects from an endpoint. Stops its reconnect loop and any
+    # handshake in progress, then closes its connections.
     #
     # @param endpoint [String]
     # @return [void]
@@ -242,20 +258,26 @@ module OMQ
     def disconnect(endpoint)
       endpoint = canonical_endpoint(endpoint)
       @dialers.delete(endpoint)
+      @dialer_barriers.delete(endpoint)&.stop
       close_connections_at(endpoint)
+      drop_route(endpoint)
     end
 
 
     # Unbinds from an endpoint. Stops the listener and closes all
-    # connections that were accepted on it.
+    # connections that were accepted on it. Accepts the resolved
+    # endpoint (as returned by {#bind}) or the string passed to
+    # {#bind}, e.g. +tcp://localhost:5555+.
     #
     # @param endpoint [String]
     # @return [void]
     #
     def unbind(endpoint)
       endpoint = canonical_endpoint(endpoint)
+      endpoint = @bind_aliases.fetch(endpoint, endpoint)
       listener = @listeners.delete(endpoint) or return
 
+      @bind_aliases.delete_if { |_, bound| bound == endpoint }
       listener.stop
       close_connections_at(endpoint)
     end
@@ -279,8 +301,16 @@ module OMQ
     # @return [void]
     #
     def handle_connected(io, endpoint: nil)
+      barrier = @dialer_barriers[endpoint]
+
+      # Disconnected (or closed) while the dial was in flight.
+      unless barrier && @dialers.key?(endpoint)
+        io.close rescue nil
+        return
+      end
+
       emit_monitor_event(:connected, endpoint: endpoint)
-      spawn_connection(io, as_server: false, endpoint: endpoint)
+      spawn_connection(io, as_server: false, endpoint: endpoint, parent: barrier)
     end
 
 
@@ -288,20 +318,82 @@ module OMQ
     # Skips ZMTP handshake — just registers with routing strategy.
     #
     # @param pipe [Transport::Inproc::Pipe]
+    # @return [Boolean] false if the routing strategy refused the peer
+    #
+    def connection_ready(pipe, endpoint: nil, dialed: false)
+      ConnectionLifecycle.new(self, endpoint: endpoint, dialed: dialed).ready_direct!(pipe)
+    end
+
+
+    # @param conn [Protocol::ZMTP::Connection, Transport::Inproc::Pipe]
+    # @return [String, nil] the endpoint this socket dialed to get +conn+,
+    #   nil for an accepted connection
+    #
+    def dialed_endpoint(conn)
+      lifecycle = @connections[conn]
+      lifecycle.endpoint if lifecycle&.dialed?
+    end
+
+
+    # @param endpoint [String, nil]
+    # @return [Boolean] true if a lost connection to +endpoint+ gets
+    #   redialed
+    #
+    def redials?(endpoint)
+      return false unless endpoint && @dialers.key?(endpoint)
+
+      @lifecycle.open? && @lifecycle.reconnect_enabled
+    end
+
+
+    # Drops the send queue a routing strategy keeps for a dialed
+    # endpoint between connections (ROUTER, SERVER, PEER).
+    #
+    # @param endpoint [String, nil]
     # @return [void]
     #
-    def connection_ready(pipe, endpoint: nil)
-      ConnectionLifecycle.new(self, endpoint: endpoint).ready_direct!(pipe)
+    def drop_route(endpoint)
+      @routing.drop_route(endpoint) if endpoint && @routing.respond_to?(:drop_route)
+      wake_drain
+    end
+
+
+    # Wakes {#drain_send_queues} to check the send queues again. Send
+    # pumps call it after each batch, teardown when a queue goes away.
+    # A no-op unless {#close} is waiting.
+    #
+    # @return [void]
+    #
+    def wake_drain
+      @drain_signal&.signal
+    end
+
+
+    # Runs a send pump's write of a batch it took off a queue. Until the
+    # block returns, {#drain_send_queues} counts the batch as unsent, so
+    # #close doesn't tear the connection down under the write.
+    #
+    # @yield the write and flush
+    # @return [Object] the block's value
+    #
+    def sending_batch
+      @batches_sending += 1
+      yield
+    ensure
+      @batches_sending -= 1
+      wake_drain
     end
 
 
     # Dequeues the next received message. Blocks until available.
     #
-    # @return [Array<String>] message parts
+    # @return [Array<String>, nil] message parts, or nil once the socket
+    #   is closed (like +Thread::Queue#pop+ on a closed queue)
     # @raise if a background pump task crashed
     #
     def dequeue_recv
       raise @fatal_error if @fatal_error
+      return if @lifecycle.closed?
 
       msg = routing.dequeue_recv
       raise @fatal_error if msg.nil? && @fatal_error
@@ -323,10 +415,16 @@ module OMQ
     # @param parts [Array<String>]
     # @return [void]
     # @raise if a background pump task crashed
+    # @raise [SocketClosedError] if the socket is closing or closed,
+    #   including while blocked at HWM
     #
     def enqueue_send(parts)
       raise @fatal_error if @fatal_error
+      raise_if_closed!
+
       routing.enqueue(parts)
+    rescue Async::Queue::ClosedError, ClosedQueueError
+      raise SocketClosedError, "#{@socket_type} socket closed while sending"
     end
 
 
@@ -369,12 +467,9 @@ module OMQ
     # and the endpoint is still dialed.
     #
     def maybe_reconnect(endpoint)
-      return unless endpoint && @dialers.key?(endpoint)
-      return unless @lifecycle.open? && @lifecycle.reconnect_enabled
+      return unless redials?(endpoint)
 
-      dialer = @dialers[endpoint]
-
-      Reconnect.schedule(dialer, @options, @lifecycle.parent_task, self)
+      Reconnect.schedule(@dialers[endpoint], @options, dialer_barrier(endpoint), self)
     end
 
 
@@ -386,6 +481,7 @@ module OMQ
     # @return [void]
     #
     def close
+      return close_unopened if @lifecycle.state == :new
       return unless @lifecycle.open?
 
       @lifecycle.start_closing!
@@ -403,6 +499,7 @@ module OMQ
 
       stop_listeners
       tear_down_barrier
+      close_routing_queues
       emit_monitor_event(:closed)
       close_monitor_queue
     end
@@ -425,97 +522,9 @@ module OMQ
 
       stop_listeners
       tear_down_barrier
+      close_routing_queues
       emit_monitor_event(:closed)
       close_monitor_queue
-    end
-
-
-    # Spawns a transient pump task with error propagation.
-    #
-    # Unexpected exceptions are caught and forwarded to
-    # {#signal_fatal_error} so blocked callers (send/recv)
-    # see the real error instead of deadlocking.
-    #
-    # @param annotation [String] task annotation for debugging
-    # @param parent [Async::Task, Async::Barrier] parent for the spawned
-    #   task. Defaults to the current task. Routing strategies that own
-    #   loose pump tasks (Radio, Channel) pass their own +Async::Barrier+
-    #   so a single +barrier.stop+ tears the lot down at strategy
-    #   shutdown without per-task bookkeeping.
-    # @yield the pump loop body
-    # @return [Async::Task]
-    #
-    def spawn_pump_task(annotation:, parent: Async::Task.current, &block)
-      parent.async(transient: true, annotation: annotation) do
-        yield
-      rescue Async::Stop, Async::Cancel, Protocol::ZMTP::Error, *CONNECTION_LOST
-        # normal shutdown / expected disconnect
-      rescue => error
-        signal_fatal_error(error)
-      end
-    end
-
-
-    # Spawns a per-connection pump task on the connection's own
-    # lifecycle barrier. When any pump on the barrier exits (e.g. the
-    # send pump sees EPIPE and calls {#connection_lost}), {ConnectionLifecycle#tear_down!}
-    # calls `barrier.stop` which cancels every sibling pump for that
-    # connection — so a dead peer can no longer leave orphan send
-    # pumps blocked on `dequeue` waiting for messages that will never
-    # be written.
-    #
-    # @param conn [Protocol::ZMTP::Connection, Transport::Inproc::Pipe]
-    # @param annotation [String]
-    #
-    def spawn_conn_pump_task(conn, annotation:, &block)
-      lifecycle = @connections[conn]
-
-      unless lifecycle
-        return spawn_pump_task(annotation: annotation, &block)
-      end
-
-      lifecycle.barrier.async(transient: true, annotation: annotation) do
-        yield
-      rescue Async::Stop, Async::Cancel
-        # normal shutdown / sibling tore us down
-      rescue Protocol::ZMTP::Error, *CONNECTION_LOST => error
-        # expected disconnect — stash reason for the :disconnected
-        # monitor event, then let the lifecycle reconnect as usual
-        lifecycle.record_disconnect_reason(error)
-      rescue => error
-        signal_fatal_error(error)
-      end
-    end
-
-
-    # Wraps an unexpected pump error as {OMQ::SocketDeadError} and
-    # unblocks any callers waiting on the recv queue. The original
-    # error is preserved as +#cause+ so callers can surface the real
-    # reason.
-    #
-    # @param error [Exception]
-    #
-    def signal_fatal_error(error)
-      return unless @lifecycle.open?
-
-      @fatal_error = build_fatal_error(error)
-      routing.unblock_recv rescue nil
-      @lifecycle.peer_connected.resolve(nil) rescue nil
-    end
-
-
-    # Constructs a SocketDeadError whose +cause+ is +error+. Uses the
-    # raise-in-rescue idiom because Ruby only sets +cause+ on an
-    # exception when it is raised from inside a rescue block -- works
-    # regardless of the original caller's +$!+ state.
-    def build_fatal_error(error)
-      raise error
-    rescue
-      begin
-        raise SocketDeadError, "#{@socket_type} socket killed: #{error.message}"
-      rescue SocketDeadError => wrapped
-        wrapped
-      end
     end
 
 
@@ -533,92 +542,13 @@ module OMQ
     # @param parent [#async, nil] optional Async parent
     #
     def capture_parent_task(parent: nil)
+      raise_if_closed!
+
       task = @lifecycle.capture_parent_task(parent: parent, linger: @options.linger)
 
       return unless task
 
       Maintenance.start(@lifecycle.barrier, @options.mechanism)
-    end
-
-
-    # Emits a lifecycle event to the monitor queue, if one is attached.
-    #
-    # @param type [Symbol] event type (e.g. :listening, :connected, :disconnected)
-    # @param endpoint [String, nil] the endpoint involved
-    # @param detail [Hash, nil] extra context
-    # @return [void]
-    #
-    def emit_monitor_event(type, endpoint: nil, detail: nil)
-      return unless @monitor_queue
-
-      event = MonitorEvent.new type: type, endpoint: endpoint, detail: detail
-
-      @monitor_queue << event
-    rescue Async::Stop, ClosedQueueError
-    end
-
-
-    # Emits a verbose-only monitor event (e.g. message traces).
-    # Only emitted when {Socket#monitor} was called with +verbose: true+.
-    # Uses +**detail+ to avoid Hash allocation when verbose is off.
-    #
-    # @param type [Symbol] event type (e.g. :message_sent, :message_received)
-    # @param detail [Hash] extra context forwarded as keyword args
-    # @return [void]
-    #
-    def emit_verbose_monitor_event(type, **detail)
-      return unless @verbose_monitor
-      emit_monitor_event(type, detail: detail)
-    end
-
-
-    # Emits a :message_sent verbose event and enriches it with the
-    # on-wire (post-compression) byte size if +conn+ exposes
-    # +last_wire_size_out+ (installed by ZMTP-Zstd etc.).
-    def emit_verbose_msg_sent(conn, parts)
-      return unless @verbose_monitor
-
-      detail = { parts: parts }
-
-      if conn.respond_to? :last_wire_size_out
-        detail[:wire_size] = conn.last_wire_size_out
-      end
-
-      emit_monitor_event :message_sent, detail: detail
-    end
-
-
-    # Emits a :message_received verbose event and enriches it with the
-    # on-wire (pre-decompression) byte size if +conn+ exposes
-    # +last_wire_size_in+.
-    def emit_verbose_msg_received(conn, parts)
-      return unless @verbose_monitor
-
-      detail = { parts: parts }
-
-      if conn.respond_to? :last_wire_size_in
-        detail[:wire_size] = conn.last_wire_size_in
-      end
-
-      emit_monitor_event :message_received, detail: detail
-    end
-
-
-    # Looks up the transport module for an endpoint URI.
-    #
-    # @param endpoint [String] endpoint URI (e.g. "tcp://...", "ruby://...")
-    # @return [Module] the transport module
-    # @raise [ArgumentError] if the scheme is not registered
-    #
-    def transport_for(endpoint)
-      scheme    = scheme_for(endpoint)
-      transport = registered_transport(scheme)
-
-      unless transport
-        raise ArgumentError, "unsupported transport: #{endpoint}"
-      end
-
-      transport
     end
 
 
@@ -634,12 +564,15 @@ module OMQ
     # @param io [#read, #write, #close] accepted or dialed socket
     # @param as_server [Boolean] true for accepted connections
     # @param endpoint [String, nil] the endpoint URI, for monitor events
+    # @param parent [Async::Barrier, nil] owner of the connection task:
+    #   the dialer's barrier for dialed connections, so {#disconnect}
+    #   also stops a handshake in progress
     #
-    def spawn_connection(io, as_server:, endpoint: nil)
-      @lifecycle.barrier&.async(transient: true, annotation: "conn #{endpoint}") do
+    def spawn_connection(io, as_server:, endpoint: nil, parent: @lifecycle.barrier)
+      parent&.async(transient: true, annotation: "conn #{endpoint}") do
         done      = Async::Promise.new
         transport = endpoint ? transport_for(endpoint) : nil
-        lifecycle = ConnectionLifecycle.new(self, endpoint: endpoint, done: done, transport: transport)
+        lifecycle = ConnectionLifecycle.new(self, endpoint: endpoint, done: done, transport: transport, dialed: !as_server)
         lifecycle.handshake!(io, as_server: as_server)
         done.wait
       rescue Async::Stop, Async::Cancel
@@ -656,31 +589,35 @@ module OMQ
 
     # Blocks until the routing strategy reports all send queues drained
     # or +timeout+ seconds have elapsed. Called from the linger path on
-    # close so pending outgoing messages get a chance to flush.
+    # close so pending outgoing messages get a chance to flush. Sleeps
+    # until {#wake_drain} says something changed.
     #
     # @param timeout [Numeric, nil] max seconds to wait; nil = no limit
-    #
-    # TODO: replace the 1 ms busy-poll with a promise/condition that
-    # the send pump resolves when its queue hits empty. The loop exists
-    # because there is currently no signal for "send queue fully
-    # drained"; fixing it cleanly requires plumbing a notifier through
-    # every routing strategy, so it is flagged rather than fixed here.
     #
     def drain_send_queues(timeout)
       return unless @routing.respond_to?(:send_queues_drained?)
 
-      if timeout
-        deadline = Async::Clock.now + timeout
-      end
+      deadline      = timeout&.finite? ? Async::Clock.now + timeout : nil # nil, Infinity: no limit
+      @drain_signal = Async::Notification.new
 
-      until @routing.send_queues_drained?
-        break if deadline && (deadline - Async::Clock.now) <= 0
-        sleep 0.001
+      until @batches_sending.zero? && @routing.send_queues_drained?
+        if deadline
+          remaining = deadline - Async::Clock.now
+          break if remaining <= 0
+
+          Async::Task.current.with_timeout(remaining) { @drain_signal.wait }
+        else
+          @drain_signal.wait
+        end
       end
+    rescue Async::TimeoutError
+      # linger expired
     rescue Async::Stop
       # Parent task is being cancelled — stop draining and let close
       # proceed with the rest of teardown instead of propagating the
       # cancellation out of the ensure path.
+    ensure
+      @drain_signal = nil
     end
 
 
@@ -693,73 +630,37 @@ module OMQ
     #
     def schedule_reconnect(endpoint, delay: nil)
       dialer = @dialers[endpoint]
-      Reconnect.schedule(dialer, @options, @lifecycle.parent_task, self, delay: delay)
+      Reconnect.schedule(dialer, @options, dialer_barrier(endpoint), self, delay: delay)
     end
 
 
-    # Delegates endpoint validation to the transport if it defines one.
-    # Called from {#connect} so a bad URI fails fast instead of landing
-    # in a reconnect loop.
+    # Returns the barrier that owns +endpoint+'s reconnect loop and
+    # dialed connection tasks, nested in the socket barrier so
+    # {#close} stops them too.
     #
     # @param endpoint [String]
-    # @raise [ArgumentError] if the transport rejects the endpoint
+    # @return [Async::Barrier]
     #
-    def validate_endpoint!(endpoint, transport)
-      if transport.respond_to?(:validate_endpoint!)
-        transport.validate_endpoint!(endpoint)
-      end
+    def dialer_barrier(endpoint)
+      @dialer_barriers[endpoint] ||= Async::Barrier.new(parent: @lifecycle.barrier)
     end
 
 
-    # Resolves transport aliases before the endpoint is stored in
-    # listener, dialer, or connection maps.
+    # Ruby in-process connects are synchronous: link now, or wait up to
+    # one reconnect interval for a bind, then keep retrying in the
+    # background like any other dialer.
     #
     # @param endpoint [String]
-    # @return [Array(String, Module)]
+    # @param dialer [Transport::Inproc::Dialer]
     #
-    def resolve_endpoint(endpoint)
-      transport = transport_for(endpoint)
-      if transport.respond_to?(:canonical_endpoint)
-        endpoint = transport.canonical_endpoint(endpoint)
-      end
-
-      [endpoint, transport]
-    end
-
-
-    # Best-effort normalization for disconnect/unbind. Unknown schemes
-    # stay as-is so those calls remain no-ops instead of raising.
-    #
-    # @param endpoint [String]
-    # @return [String]
-    #
-    def canonical_endpoint(endpoint)
-      transport = registered_transport(scheme_for(endpoint))
-      return endpoint unless transport&.respond_to?(:canonical_endpoint)
-
-      transport.canonical_endpoint(endpoint)
-    end
-
-
-    # Looks up a registered transport. If no real inproc transport is
-    # registered, inproc:// falls back to the Ruby in-process transport.
-    #
-    # @param scheme [String, nil]
-    # @return [Module, nil]
-    #
-    def registered_transport(scheme)
-      self.class.transports[scheme] ||
-        (scheme == "inproc" ? self.class.transports["ruby"] : nil)
-    end
-
-
-    # Extracts the URI scheme from an endpoint.
-    #
-    # @param endpoint [String]
-    # @return [String, nil]
-    #
-    def scheme_for(endpoint)
-      endpoint[/\A([^:]+):\/\//, 1]
+    def connect_inproc(endpoint, dialer)
+      dialer.connect(wait: true)
+    rescue Errno::ECONNREFUSED
+      emit_monitor_event(:connect_delayed, endpoint: endpoint)
+      schedule_reconnect(endpoint)
+    rescue
+      @dialers.delete(endpoint)
+      raise
     end
 
 
@@ -784,6 +685,22 @@ module OMQ
     def stop_listeners
       @listeners.each_value(&:stop)
       @listeners.clear
+      @bind_aliases.clear
+    end
+
+
+    # Lets {#unbind} find a listener by the string the caller passed to
+    # {#bind}. Ephemeral-port requests (+:0+, +:*+) can bind many
+    # listeners, so they don't get an alias.
+    #
+    # @param requested [String] canonical endpoint passed to #bind
+    # @param bound [String] the listener's resolved endpoint
+    #
+    def remember_bind_alias(requested, bound)
+      return if requested == bound
+      return if requested.end_with?(":0", ":*")
+
+      @bind_aliases[requested] = bound
     end
 
 
@@ -800,21 +717,40 @@ module OMQ
     # Cascades teardown through the socket-level barrier. Stopping the
     # barrier cancels every tracked task: connection supervisors (whose
     # `ensure lost!` runs the ordered disconnect side effects), accept
-    # loops, heartbeat, maintenance. Reconnect loops live on the user's
-    # parent task and self-exit via `@engine.closed?`.
+    # loops, heartbeat, maintenance, and the per-endpoint dialer
+    # barriers with their reconnect loops.
     #
     def tear_down_barrier
       @lifecycle.barrier&.stop
     end
 
 
-    # Signals end-of-stream on the monitor queue (if any) by pushing a
-    # +nil+ sentinel, so consumers iterating with {Socket#each_event}
-    # can exit cleanly.
+    # @raise [SocketClosedError] once {#close} or {#stop} has started
     #
-    def close_monitor_queue
-      return unless @monitor_queue
-      @monitor_queue.push(nil)
+    def raise_if_closed!
+      return if @lifecycle.alive?
+
+      raise SocketClosedError, "#{@socket_type} socket is closed"
     end
+
+
+    # Closes a socket that never bound or connected: there are no tasks
+    # to stop, but later calls must see it closed.
+    #
+    def close_unopened
+      @lifecycle.finish_closing!
+      close_routing_queues
+      emit_monitor_event(:closed)
+      close_monitor_queue
+    end
+
+
+    # Wakes fibers blocked in a send (they raise {SocketClosedError}) or
+    # a receive (they get +nil+).
+    #
+    def close_routing_queues
+      @routing.close_queues if @routing.respond_to?(:close_queues)
+    end
+
   end
 end

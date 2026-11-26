@@ -49,6 +49,7 @@ module OMQ
         @recv_queue  = recv_queue
         @engine      = engine
         @count_bytes = conn.instance_of?(Protocol::ZMTP::Connection) || conn.respond_to?(:last_wire_size_in)
+        @pausable    = conn.respond_to?(:pause_reading) && recv_queue.respond_to?(:limited?)
       end
 
 
@@ -90,7 +91,7 @@ module OMQ
       # @return [Async::Task]
       #
       def start_with_transform(parent, transform)
-        conn, recv_queue, engine, count_bytes = @conn, @recv_queue, @engine, @count_bytes
+        conn, engine, count_bytes = @conn, @engine, @count_bytes
 
         parent.async(transient: true, annotation: "recv pump") do |task|
           loop do
@@ -125,7 +126,7 @@ module OMQ
               # async scheduler is FIFO on the ready list, so this
               # preserves log-before-stdout ordering for -vvv traces.
               engine.emit_verbose_msg_received(conn, transformed)
-              recv_queue.enqueue(transformed)
+              enqueue(transformed)
             end
 
             task.yield
@@ -141,13 +142,26 @@ module OMQ
       end
 
 
+      # Enqueues +msg+. When the queue is full, marks the connection's
+      # reading as paused while waiting, so the heartbeat doesn't take
+      # our own backpressure for a silent peer.
+      #
+      def enqueue(msg)
+        if @pausable && @recv_queue.limited?
+          @conn.pause_reading { @recv_queue.enqueue(msg) }
+        else
+          @recv_queue.enqueue(msg)
+        end
+      end
+
+
       # Recv loop without transform — the hot path for native OMQ use.
       #
       # @param parent [Async::Task, Async::Barrier]
       # @return [Async::Task]
       #
       def start_direct(parent)
-        conn, recv_queue, engine, count_bytes = @conn, @recv_queue, @engine, @count_bytes
+        conn, engine, count_bytes = @conn, @engine, @count_bytes
 
         parent.async(transient: true, annotation: "recv pump") do |task|
           loop do
@@ -159,7 +173,7 @@ module OMQ
               msg.each { |part| part.freeze }
               msg.freeze
               engine.emit_verbose_msg_received(conn, msg)
-              recv_queue.enqueue(msg)
+              enqueue(msg)
 
               count += 1
 

@@ -55,6 +55,35 @@ class OMQTransportInprocTest < Minitest::Spec
     end
 
 
+    it "reports an incompatible binder and links once a compatible one binds" do
+      Async do
+        events = Async::Queue.new
+        push   = OMQ::PUSH.new(linger: 0)
+        push.reconnect_interval = RECONNECT_INTERVAL
+        push.monitor { |event| events << event }
+        push.connect("inproc://inproc-refused")
+
+        bad = OMQ::PUB.bind("inproc://inproc-refused")
+
+        refused = nil
+        until refused
+          event   = events.dequeue
+          refused = event if event.type == :connect_retried && event.detail[:error].is_a?(Protocol::ZMTP::Error)
+        end
+        assert_match(/incompatible socket types/, refused.detail[:error].message)
+
+        bad.close
+        good = OMQ::PULL.bind("inproc://inproc-refused")
+        push << "linked"
+        assert_equal ["linked"], good.receive
+      ensure
+        push&.close
+        bad&.close
+        good&.close
+      end
+    end
+
+
     describe "Pipe" do
       it "transforms buffered messages and drops nil results before and after wiring" do
         Async do

@@ -48,6 +48,23 @@ module OMQ
     end
 
 
+    # Closes the queue. Blocked and later dequeues return +nil+ once it
+    # is empty; enqueues raise +ClosedQueueError+.
+    #
+    # @return [void]
+    #
+    def close
+      @queue.close
+    end
+
+
+    # @return [Boolean]
+    #
+    def closed?
+      @queue.closed?
+    end
+
+
     # @return [Boolean]
     #
     def empty?

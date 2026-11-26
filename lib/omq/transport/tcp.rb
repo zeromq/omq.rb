@@ -29,6 +29,8 @@ module OMQ
         # @return [Listener]
         #
         def listener(endpoint, engine, **)
+          # libzmq's wildcard port: any free port, like :0.
+          endpoint    = endpoint.sub(/:\*\z/, ":0")
           host, port  = self.parse_endpoint(endpoint)
           lookup_host = normalize_bind_host(host)
 
@@ -115,9 +117,7 @@ module OMQ
         # doesn't block the retry loop. Floor at 0.5s for real-network latency.
         #
         def connect_timeout(options)
-          ri = options.reconnect_interval
-          ri = ri.end if ri.is_a?(Range)
-          [ri, 0.5].max
+          options.attempt_timeout
         end
 
 
@@ -140,11 +140,11 @@ module OMQ
         #
         def apply_buffer_sizes(sock, options)
           if options.sndbuf
-            sock.setsockopt(Socket::SOL_SOCKET, Socket::SO_SNDBUF, options.sndbuf)
+            sock.setsockopt(::Socket::SOL_SOCKET, ::Socket::SO_SNDBUF, options.sndbuf)
           end
 
           if options.rcvbuf
-            sock.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVBUF, options.rcvbuf)
+            sock.setsockopt(::Socket::SOL_SOCKET, ::Socket::SO_RCVBUF, options.rcvbuf)
           end
         end
       end
@@ -234,6 +234,9 @@ module OMQ
                 Async::Task.current.defer_stop do
                   yield IO::Stream::Buffered.wrap(client)
                 end
+              rescue *AcceptLoop::RECOVERABLE_ERRORS => error
+                client&.close rescue nil
+                AcceptLoop.recover(error, @engine, @endpoint)
               end
             rescue Async::Stop
             rescue IOError

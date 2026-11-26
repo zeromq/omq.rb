@@ -8,6 +8,7 @@ module OMQ
     #
     class Client
       include RoundRobin
+      include ClosableQueues
 
 
       # @return [Async::LimitedQueue]
@@ -46,7 +47,8 @@ module OMQ
       #
       def connection_added(connection)
         @connections << connection
-        @engine.start_recv_pump(connection, @recv_queue)
+        # Single-frame socket: drop multipart input from a bad peer.
+        @engine.start_recv_pump(connection, @recv_queue) { |msg| msg if msg.size == 1 }
         add_round_robin_send_connection(connection)
       end
 

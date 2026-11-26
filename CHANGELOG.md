@@ -2,6 +2,166 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `max_message_parts` (default 1024, like omq.rs; `nil` = unlimited). A
+  peer that sends a message with more frames is disconnected. `max_message_size`
+  is per frame, so a peer could send hundreds of thousands of empty frames in
+  one message and cost about 20 bytes of heap per wire byte.
+- Added `max_peer_subscriptions` (default 65536, like omq.rs; `nil` =
+  unlimited): a peer that holds more subscription prefixes (PUB, XPUB) or groups
+  (RADIO) is disconnected. A peer could grow these sets without bound, and every
+  message is matched against them.
+- Accepted libzmq's wildcard port in TCP binds: `tcp://host:*`, `tcp://*:*` and
+  `tcp://[::1]:*` bind any free port, like `:0`.
+
+### Changed
+
+- In-process connects to an unbound endpoint retry through the regular reconnect
+  loop: they honor `reconnect_interval` backoff and emit `:connect_delayed` and
+  `:connect_retried`.
+- ROUTER without `router_mandatory` drops a message whose peer is at HWM, like
+  libzmq, instead of blocking the sender. With `router_mandatory` it still
+  blocks.
+- REQ accepts a new request once the peer holding the unanswered one
+  disconnects, so a lazy pirate retry works without recreating the socket.
+  libzmq needs `ZMQ_REQ_RELAXED` for this.
+- PINGs advertise no TTL unless `heartbeat_ttl` is set, like libzmq and omq.rs.
+  The TTL used to default to `heartbeat_interval`, which made TTL-honoring peers
+  drop the connection whenever a PING ran late.
+- `doc/DESIGN.md` is now `doc/ARCHITECTURE.md`, trimmed to the current
+  components, task tree and data flow.
+- ROUTER, SERVER and PEER keep a dialed peer's send queue and routing id across
+  reconnects, like libzmq's pipes. Sends while the peer is down queue up to
+  `send_hwm` and go out after the redial, and replies keep reaching a peer that
+  reconnects without an explicit identity. With `router_mandatory`, sending to a
+  dialed peer that is down no longer raises. `#disconnect` drops the queue;
+  `#close` waits up to `linger` for the redial. Accepted peers still lose their
+  queue with the connection.
+- `#close` no longer polls the send queues every millisecond while it lingers.
+  It sleeps until a send pump finishes a batch or a peer's queue goes away.
+
+### Fixed
+
+- Applied `sndbuf` and `rcvbuf` to TCP and IPC connections instead of killing
+  the socket with `NameError` (`Socket` resolved to `OMQ::Socket`).
+- Validated `reconnect_interval`. Zero, negative, non-finite and beginless
+  values raised later or busy-looped; an endless Range (`0.1..`) killed TCP
+  sockets with `ArgumentError` and now backs off without a cap.
+- Treated `heartbeat_interval = 0` as disabled, like libzmq. It sent PINGs in a
+  tight loop and closed every connection right after the handshake.
+- Iterated snapshots of peers and subscriptions in PUB, XPUB, XSUB, SUB, RADIO
+  and DISH. A peer joining while a send or subscribe was blocked raised
+  `RuntimeError` inside `#connection_added`, so the new peer never registered.
+- Kept a ROUTER identity routable after a second peer took it over and the first
+  one left. The departing connection deleted the route that now pointed at the
+  new peer.
+- Applied `max_message_size` to the plaintext of CURVE frames, so a message
+  exactly at the limit no longer drops the connection (protocol-zmtp).
+- Dropped multipart messages from peers of single-frame sockets (CLIENT, SERVER,
+  GATHER, CHANNEL, PEER) instead of delivering them.
+- Kept TCP and IPC listeners accepting after transient `accept(2)` errors. One
+  `EMFILE` ended the accept loop for good and left the endpoint bound but deaf.
+  Listeners now emit `:accept_failed`, back off on resource exhaustion and drop
+  clients that fail during setup.
+- Stopped reconnecting after `#disconnect`. TCP, IPC and in-process dialers kept
+  retrying and connected once a peer appeared; connect, disconnect, connect gave
+  two connections. `#disconnect` now also stops a handshake in progress, and
+  `#close` stops reconnect loops immediately.
+- Kept retrying an in-process connect after an incompatible socket bound the
+  endpoint first. The retry task died with an unhandled `Protocol::ZMTP::Error`,
+  so a compatible binder later never got the connection. `:connect_retried`
+  events now carry the `:error`.
+- Woke fibers blocked in `#receive` (they get `nil`) or `#send` (they raise the
+  new `OMQ::SocketClosedError`) when the socket closes. They stayed blocked
+  forever. Sending, binding or connecting after `#close` raises
+  `SocketClosedError`, and receiving returns `nil`, like a closed
+  `Thread::Queue`. `#close` on a socket that never bound or connected now closes
+  it.
+- Kept an in-process sender alive when its peer closes between two sends.
+  Writing into the closed peer now counts as a lost connection instead of
+  killing the socket, and the single-peer bypass re-queues the message for the
+  next peer.
+- Released senders blocked on the full queue of a peer that disconnects (ROUTER,
+  REP, SERVER, PEER, XSUB, and PUB/XPUB with `on_mute: :block`). The queue was
+  dropped but never closed, so the sender hung forever; the message is now
+  dropped.
+- Delivered in-process PAIR messages sent while there was no peer. They stayed
+  in the send queue because inproc PAIR links had no send pump.
+- Refused a second PAIR or CHANNEL peer cleanly. The refusal raised inside the
+  connection setup after the peer was half registered: inproc `#connect` raised
+  and left ghost connections behind, and a refused TCP endpoint was never
+  redialed. The extra peer is now disconnected and redialed if this side dialed,
+  so it takes over once the first peer leaves.
+- Let `#unbind` take the endpoint string passed to `#bind`.
+  `unbind("tcp://localhost:5555")` was a silent no-op because the listener is
+  stored under its resolved endpoint (`tcp://[::1]:5555`).
+- Made IPC bind replace only a stale socket file. It deleted whatever was at the
+  path, a regular file included, even when the bind then failed, and stole the
+  path from a live listener. Binding over a live socket or a non-socket file now
+  raises `Errno::EADDRINUSE`. Closing a listener removes its socket file only if
+  it is still the one it created, by absolute path, so a later `chdir` or a
+  newer listener on the path is safe.
+- Stopped a slow `#monitor` block from stalling the socket. Events went through
+  a 64-slot blocking queue, so accept loops, handshakes and teardown waited on
+  the monitor. Lifecycle events no longer block; verbose message events still
+  wait for the monitor to catch up.
+- Dropped RADIO messages too large for one UDP datagram instead of killing the
+  socket with `Errno::EMSGSIZE`. The UDP send buffer now fits a maximum-size
+  datagram (macOS defaults to 9216 bytes), or uses `sndbuf` when set.
+- Released the socket of a connection whose send was blocked on a peer that
+  stopped reading. A zero-linger `#close` returned, but the fd and its send pump
+  stayed alive forever (protocol-zmtp).
+- Measured heartbeat expiry from the oldest unanswered PING, like libzmq. The
+  check ran right after sending a PING and compared the last receive time with
+  the timeout, so an idle healthy connection with the default
+  `heartbeat_timeout` (the interval) flapped. A zero `heartbeat_timeout` now
+  means the interval.
+- Expired a silent peer while a send to it was blocked. The heartbeat queued its
+  PING behind the stuck write and never got to the expiry check, so a peer that
+  stopped reading stayed connected forever.
+- Kept a live peer connected while the application doesn't read. With a full
+  receive queue the receive pump stops reading, so PONGs went unread and the
+  heartbeat dropped the connection, losing buffered data; it reconnected and
+  repeated.
+- Honored the TTL a peer puts in its PINGs: the connection closes when nothing
+  arrives for that long, even without a local heartbeat. The TTL was parsed and
+  ignored.
+- Counted SUB subscriptions like libzmq: subscribing to a prefix twice and
+  unsubscribing once keeps the subscription, and peers get the CANCEL only when
+  the last one goes. `#subscribe` and `#unsubscribe` no longer raise when a peer
+  is disconnecting.
+- Recorded XSUB subscriptions and replayed them to every publisher that connects
+  or reconnects, like libzmq. Subscriptions sent before the first handshake were
+  dropped, and a restarted publisher never got them back. A cancel goes out only
+  when the last subscription to its prefix is gone.
+- Reported an XPUB cancel for each subscription of a subscriber that
+  disconnects, like libzmq, so forwarders drop it upstream instead of keeping it
+  forever.
+- Failed the handshake for a peer that sends a handshake frame over 64 KiB, more
+  than 256 properties, an identity over 255 bytes or an invalid as-server flag
+  (protocol-zmtp).
+- Reserved ROUTER identities that start with a zero byte, as libzmq does: a peer
+  that claims one gets a generated identity, and generated identities are a zero
+  byte plus a 32-bit counter, so they can no longer collide with peer-chosen
+  ones.
+- Rejected small-order CURVE keys from peers, which gave an all-zero shared
+  secret with the nuckle backend (protocol-zmtp).
+- Yielded to other fibers while a DISH skips malformed datagrams or datagrams
+  for groups it didn't join. A flood on its UDP port kept the receive loop
+  spinning without letting anything else run.
+- Stopped sending heartbeat PINGs to ZMTP 3.0 peers, which have no PING command.
+- Made `udp://` work over IPv6 (`udp://[::1]:5555`) and resolve the RADIO
+  destination once at connect instead of on every datagram. DISH on a multicast
+  address now joins the group, and several DISH sockets can bind the same group
+  and port.
+- PUB and XPUB match subscriptions with a radix trie instead of trying every
+  prefix. A subscriber at `max_peer_subscriptions` cost the publisher about 7 ms
+  per message; matching now takes well under a microsecond at any count.
+- A frozen UTF-8 topic no longer raises `Encoding::CompatibilityError` in the
+  fan-out send pump against a non-ASCII subscription prefix, so the subscriber
+  gets the message. Matching compares bytes.
+
 ## [0.29.1] - 2026-11-26
 
 ### Fixed

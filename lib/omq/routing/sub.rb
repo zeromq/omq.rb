@@ -7,6 +7,8 @@ module OMQ
     # Sends SUBSCRIBE/CANCEL commands to connected PUB peers.
     #
     class Sub
+      include ClosableQueues
+
 
       # @return [Async::LimitedQueue]
       #
@@ -19,7 +21,7 @@ module OMQ
         @engine        = engine
         @connections   = Set.new
         @recv_queue    = Routing.build_queue(engine.options.recv_hwm, :block)
-        @subscriptions = Set.new
+        @subscriptions = Hash.new(0) # prefix => times subscribed, like libzmq
       end
 
 
@@ -46,7 +48,7 @@ module OMQ
       def connection_added(connection)
         @connections << connection
 
-        @subscriptions.each do |prefix|
+        @subscriptions.keys.each do |prefix|
           send_subscribe(connection, prefix)
         end
 
@@ -68,23 +70,33 @@ module OMQ
       end
 
 
-      # Subscribes to a topic prefix.
+      # Subscribes to a topic prefix. Subscriptions are counted: each
+      # #subscribe needs its own #unsubscribe, as in libzmq.
       #
       # @param prefix [String]
       #
       def subscribe(prefix)
-        @subscriptions << prefix
-        @connections.each { |conn| send_subscribe(conn, prefix) }
+        @subscriptions[prefix] += 1
+        @connections.to_a.each { |conn| send_subscribe(conn, prefix) }
       end
 
 
-      # Unsubscribes from a topic prefix.
+      # Unsubscribes from a topic prefix. Peers are told only once the
+      # last subscription to +prefix+ is gone.
       #
       # @param prefix [String]
       #
       def unsubscribe(prefix)
+        count = @subscriptions[prefix]
+        return if count.zero?
+
+        if count > 1
+          @subscriptions[prefix] = count - 1
+          return
+        end
+
         @subscriptions.delete(prefix)
-        @connections.each { |conn| send_cancel(conn, prefix) }
+        @connections.to_a.each { |conn| send_cancel(conn, prefix) }
       end
 
 
@@ -94,12 +106,17 @@ module OMQ
       # Sends a SUBSCRIBE to +conn+ using the wire form the peer understands:
       # command-form for ZMTP 3.1+, legacy message-form for ZMTP 3.0.
       #
+      # A peer that is going away can't take the command; its lifecycle
+      # cleans up, and the caller of #subscribe must not see the error.
+      #
       def send_subscribe(conn, prefix)
         if conn.peer_minor >= 1
           conn.send_command(Protocol::ZMTP::Codec::Command.subscribe(prefix))
         else
           conn.send_message([Protocol::ZMTP::Codec::Subscription.body(prefix)])
         end
+      rescue *CONNECTION_LOST
+        # peer disconnecting
       end
 
 
@@ -109,6 +126,8 @@ module OMQ
         else
           conn.send_message([Protocol::ZMTP::Codec::Subscription.body(prefix, cancel: true)])
         end
+      rescue *CONNECTION_LOST
+        # peer disconnecting
       end
 
     end

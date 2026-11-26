@@ -8,6 +8,8 @@ module OMQ
     # Receives two-frame messages (group + body) from RADIO.
     #
     class Dish
+      include ClosableQueues
+
       # @return [Async::LimitedQueue]
       #
       attr_reader :recv_queue
@@ -45,7 +47,7 @@ module OMQ
       #
       def connection_added(connection)
         @connections << connection
-        @groups.each do |group|
+        @groups.to_a.each do |group|
           connection.send_command(Protocol::ZMTP::Codec::Command.join(group))
         end
         @engine.start_recv_pump(connection, @recv_queue)
@@ -72,7 +74,7 @@ module OMQ
       #
       def join(group)
         @groups << group
-        @connections.each do |conn|
+        @connections.dup.each do |conn|
           conn.send_command(Protocol::ZMTP::Codec::Command.join(group))
         end
       end
@@ -84,7 +86,7 @@ module OMQ
       #
       def leave(group)
         @groups.delete(group)
-        @connections.each do |conn|
+        @connections.dup.each do |conn|
           conn.send_command(Protocol::ZMTP::Codec::Command.leave(group))
         end
       end

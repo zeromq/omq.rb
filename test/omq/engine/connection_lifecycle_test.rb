@@ -43,6 +43,9 @@ class OMQEngineConnectionLifecycleTest < Minitest::Spec
     def transport_object_for(_endpoint)
       nil
     end
+
+    def wake_drain
+    end
   end
 
   class FakePromise

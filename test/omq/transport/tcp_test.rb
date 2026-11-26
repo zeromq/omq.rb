@@ -67,6 +67,85 @@ class OMQTransportTCPTest < Minitest::Spec
       end
     end
 
+    it "applies sndbuf and rcvbuf to dialed and accepted connections" do
+      Async do
+        pull = OMQ::PULL.new
+        pull.sndbuf = 65_536
+        pull.rcvbuf = 65_536
+        port = pull.bind("tcp://127.0.0.1:0").port
+
+        push = OMQ::PUSH.new
+        push.sndbuf = 65_536
+        push.rcvbuf = 65_536
+        push.connect("tcp://127.0.0.1:#{port}")
+
+        push.send("buffered")
+        assert_equal ["buffered"], pull.receive
+      ensure
+        push&.close
+        pull&.close
+      end
+    end
+
+
+    it "keeps accepting after a transient accept error" do
+      Async do
+        pull = OMQ::PULL.new
+        pull.reconnect_interval = RECONNECT_INTERVAL
+        events = []
+        pull.monitor { |event| events << event.type }
+        port   = pull.bind("tcp://127.0.0.1:0").port
+        server = pull.instance_variable_get(:@engine).listeners.values.first.servers.first
+
+        # The accept after the first client fails once with EMFILE.
+        original = server.method(:accept)
+        failed   = false
+        server.define_singleton_method(:accept) do |*args|
+          unless failed
+            failed = true
+            raise Errno::EMFILE
+          end
+
+          original.call(*args)
+        end
+
+        first = OMQ::PUSH.new(linger: 0)
+        first.connect("tcp://127.0.0.1:#{port}")
+        first << "first"
+        assert_equal ["first"], pull.receive
+
+        second = OMQ::PUSH.new(linger: 0)
+        second.connect("tcp://127.0.0.1:#{port}")
+        second << "second"
+        assert_equal ["second"], pull.receive
+        assert_includes events, :accept_failed
+      ensure
+        second&.close
+        first&.close
+        pull&.close
+      end
+    end
+
+
+    it "binds the wildcard port :* like :0" do
+      Async do
+        pull = OMQ::PULL.new
+        port = pull.bind("tcp://127.0.0.1:*").port
+        assert_operator port, :>, 0
+
+        push = OMQ::PUSH.connect("tcp://127.0.0.1:#{port}")
+        push << "wildcard"
+        assert_equal ["wildcard"], pull.receive
+
+        assert_operator pull.bind("tcp://*:*").port, :>, 0
+        assert_operator pull.bind("tcp://[::1]:*").port, :>, 0 if Socket.ip_address_list.any?(&:ipv6_loopback?)
+      ensure
+        push&.close
+        pull&.close
+      end
+    end
+
+
     describe "host normalization" do
       it "normalize_bind_host maps * to nil (dual-stack wildcard)" do
         assert_nil OMQ::Transport::TCP.normalize_bind_host("*")

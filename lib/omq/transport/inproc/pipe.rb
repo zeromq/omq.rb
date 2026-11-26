@@ -122,6 +122,9 @@ module OMQ
           else
             (@pending_direct ||= []) << parts
           end
+        rescue Async::Queue::ClosedError, ClosedQueueError
+          # The peer socket closed and with it the queue we write into.
+          raise IOError, "closed"
         end
 
 
@@ -186,6 +189,8 @@ module OMQ
         def send_command(command)
           raise IOError, "closed" if @closed
           @send_queue.enqueue([:command, command])
+        rescue Async::Queue::ClosedError, ClosedQueueError
+          raise IOError, "closed"
         end
 
 
@@ -215,6 +220,8 @@ module OMQ
           @closed = true
           @closed_signal.resolve(true)
           @send_queue&.enqueue(nil) # close sentinel
+        rescue Async::Queue::ClosedError, ClosedQueueError
+          # peer already closed its queues
         end
 
 

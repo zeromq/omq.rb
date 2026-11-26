@@ -105,7 +105,7 @@ module OMQ
 
         def connect_timeout(options)
           ri = options.reconnect_interval
-          ri = ri.end if ri.is_a?(Range)
+          ri = ri.end&.finite? ? ri.end : ri.begin if ri.is_a?(Range) # endless: no cap
           [ri, 0.5].max
         end
 

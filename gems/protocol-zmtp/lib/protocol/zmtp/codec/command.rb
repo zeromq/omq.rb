@@ -17,6 +17,10 @@ module Protocol
       #   N bytes: property value
       #
       class Command
+        # Most properties a peer may send in one property list.
+        MAX_PROPERTIES = 256
+
+
         # @return [String] command name (e.g. "READY", "SUBSCRIBE")
         attr_reader :name
 
@@ -236,6 +240,7 @@ module Protocol
             offset += value_len
 
             result[name] = value
+            raise Error, "more than #{MAX_PROPERTIES} properties" if result.size > MAX_PROPERTIES
           end
 
           result

@@ -71,12 +71,14 @@ module OMQ
       #   substitute their own ZMTP-shaped connection class. Falls back to
       #   {Protocol::ZMTP::Connection} when nil or when the transport
       #   doesn't define +connection_class+.
+      # @param dialed [Boolean] true if this socket dialed +endpoint+
       #
-      def initialize(engine, endpoint: nil, done: nil, transport: nil)
+      def initialize(engine, endpoint: nil, done: nil, transport: nil, dialed: false)
         @engine    = engine
         @endpoint  = endpoint
         @done      = done
         @transport = transport
+        @dialed    = dialed
         @state     = :new
         @conn      = nil
 
@@ -85,6 +87,13 @@ module OMQ
         # the socket barrier — {Engine#stop}/{Engine#close} cascade
         # through in one call.
         @barrier  = Async::Barrier.new(parent: engine.barrier)
+      end
+
+
+      # @return [Boolean] true if this socket dialed the connection
+      #
+      def dialed?
+        @dialed
       end
 
 
@@ -103,6 +112,10 @@ module OMQ
           as_server:        as_server,
           mechanism:        @engine.options.mechanism&.dup,
           max_message_size: @engine.options.max_message_size
+
+        if conn.respond_to?(:max_message_parts=)
+          conn.max_message_parts = @engine.options.max_message_parts
+        end
 
         Async::Task.current.with_timeout(handshake_timeout) do
           conn.handshake!
@@ -131,6 +144,7 @@ module OMQ
       # No handshake — inproc Pipe bypasses ZMTP entirely.
       #
       # @param pipe [Transport::Inproc::Pipe]
+      # @return [Boolean] false if the routing strategy refused the peer
       #
       def ready_direct!(pipe)
         if pipe.is_a?(Transport::Inproc::Pipe) && pipe.peer
@@ -186,7 +200,16 @@ module OMQ
         @conn = conn
         @engine.connections[@conn] = self
         @engine.emit_monitor_event(:handshake_succeeded, endpoint: @endpoint)
-        @engine.routing.connection_added(@conn)
+
+        begin
+          @engine.routing.connection_added(@conn)
+        rescue Routing::PeerRefusedError => error
+          # E.g. a second PAIR peer: drop it, and redial later if we
+          # dialed, so it can take over once the current peer leaves.
+          tear_down!(reconnect: true, reason: error)
+          return false
+        end
+
         @engine.peer_connected.resolve(@conn)
         transition!(:ready)
 
@@ -194,6 +217,7 @@ module OMQ
         # Waiting on an empty barrier returns immediately and would
         # tear the connection down right after registering.
         start_supervisor unless @barrier.empty?
+        true
       end
 
 
@@ -228,12 +252,18 @@ module OMQ
         transition!(:closed)
         @engine.connections.delete(@conn)
         @engine.routing.connection_removed(@conn) if @conn
+        @engine.wake_drain
         @conn&.close rescue nil
         detail = reason ? { error: reason, reason: reason.message } : nil
         @engine.emit_monitor_event(:disconnected, endpoint: @endpoint, detail: detail)
         @done&.resolve(true)
         @engine.maybe_resolve_all_peers_gone
-        @engine.maybe_reconnect(@endpoint) if reconnect
+
+        if reconnect
+          @engine.maybe_reconnect(@endpoint)
+        elsif @dialed
+          @engine.drop_route(@endpoint) # no redial will deliver its queue
+        end
 
         # Cancel every sibling pump of this connection. The caller is
         # the supervisor task, which is NOT in the barrier — so there
@@ -248,9 +278,7 @@ module OMQ
       # (e.g. a non-ZMQ service on the same port).
       #
       def handshake_timeout
-        ri = @engine.options.reconnect_interval
-        ri = ri.end if ri.is_a?(Range)
-        [ri, 0.5].max
+        @engine.options.attempt_timeout
       end
 
 

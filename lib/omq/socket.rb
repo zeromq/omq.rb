@@ -61,6 +61,8 @@ module OMQ
       :heartbeat_ttl,         :heartbeat_ttl=,
       :heartbeat_timeout,     :heartbeat_timeout=,
       :max_message_size,      :max_message_size=,
+      :max_message_parts,     :max_message_parts=,
+      :max_peer_subscriptions, :max_peer_subscriptions=,
       :sndbuf,                :sndbuf=,
       :rcvbuf,                :rcvbuf=,
       :on_mute,               :on_mute=,
@@ -208,7 +210,7 @@ module OMQ
 
       ensure_parent_task
 
-      queue                   = Async::LimitedQueue.new(64)
+      queue                   = MonitorQueue.new
       @engine.monitor_queue   = queue
       @engine.verbose_monitor = verbose
 
@@ -220,6 +222,7 @@ module OMQ
         rescue Async::Stop
         ensure
           @engine.monitor_queue = nil
+          queue.close
           block.call(MonitorEvent.new(type: :monitor_stopped))
         end
       end

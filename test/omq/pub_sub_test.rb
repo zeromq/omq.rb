@@ -220,6 +220,46 @@ class OMQPubSubTest < Minitest::Spec
         pub&.close
       end
     end
+
+
+    it "counts subscriptions like libzmq" do
+      Async do
+        xpub = OMQ::XPUB.bind("inproc://pubsub-counted")
+        sub  = OMQ::SUB.connect("inproc://pubsub-counted")
+
+        sub.subscribe("a")
+        sub.subscribe("a")
+        sub.unsubscribe("a")
+        sub.subscribe("b") # marks where a premature cancel would show up
+
+        assert_equal ["\x01a".b], xpub.receive
+        assert_equal ["\x01a".b], xpub.receive
+        assert_equal ["\x01b".b], xpub.receive
+
+        sub.unsubscribe("a")
+        assert_equal ["\x00a".b], xpub.receive
+      ensure
+        sub&.close
+        xpub&.close
+      end
+    end
+
+    it "matches a non-ASCII prefix against a UTF-8 topic" do
+      Async do
+        pub  = OMQ::PUB.new.tap { |s| s.linger = 0 }
+        port = pub.bind("tcp://127.0.0.1:0").port
+        sub  = OMQ::SUB.new.tap { |s| s.linger = 0 }
+        sub.connect("tcp://127.0.0.1:#{port}")
+        sub.subscribe("über")
+        pub.subscriber_joined.wait
+
+        pub << ["über.news", "x"] # frozen UTF-8 literal, sent as is
+        assert_equal ["über.news".b, "x"], sub.receive
+      ensure
+        sub&.close
+        pub&.close
+      end
+    end
   end
 
   describe "XPUB/XSUB" do
@@ -351,6 +391,132 @@ class OMQPubSubTest < Minitest::Spec
       ensure
         sub&.close
         xpub&.close
+      end
+    end
+
+
+    it "reports XPUB cancels for a subscriber that disconnects" do
+      Async do
+        xpub = OMQ::XPUB.bind("inproc://xpub-lost-subscriber")
+        sub  = OMQ::SUB.connect("inproc://xpub-lost-subscriber")
+        sub.subscribe("x")
+        assert_equal ["\x01x".b], xpub.receive
+
+        sub.close
+        assert_equal ["\x00x".b], xpub.receive
+      ensure
+        xpub&.close
+      end
+    end
+
+    it "sends XSUB subscriptions made before the publisher connected" do
+      Async do
+        port = TCPServer.open("127.0.0.1", 0) { |s| s.addr[1] }
+
+        xsub = OMQ::XSUB.new.tap { |s| s.linger = 0 }
+        xsub.reconnect_interval = RECONNECT_INTERVAL
+        xsub.connect("tcp://127.0.0.1:#{port}")
+        xsub << "\x01news".b
+
+        pub = OMQ::PUB.new.tap { |s| s.linger = 0 }
+        pub.bind("tcp://127.0.0.1:#{port}")
+        pub.subscriber_joined.wait
+        pub << "news 1"
+        assert_equal ["news 1"], xsub.receive
+
+        # A restarted publisher gets the subscription again.
+        pub.close
+        pub = OMQ::PUB.new.tap { |s| s.linger = 0 }
+        pub.bind("tcp://127.0.0.1:#{port}")
+        pub.subscriber_joined.wait
+        pub << "news 2"
+        assert_equal ["news 2"], xsub.receive
+      ensure
+        xsub&.close
+        pub&.close
+      end
+    end
+  end
+
+
+  describe "PUB with on_mute: :block" do
+    it "admits a new subscriber while a send is blocked on a full one" do
+      Async do |task|
+        pub = OMQ::PUB.new(on_mute: :block)
+        pub.send_hwm = 1
+        pub.linger   = 0
+        pub.bind("inproc://pubsub-block-join")
+
+        stalled = OMQ::SUB.new
+        stalled.recv_hwm = 1
+        stalled.subscribe("")
+        stalled.connect("inproc://pubsub-block-join")
+
+        sent  = 0
+        flood = task.async do
+          loop do
+            pub << "x"
+            sent += 1
+          end
+        end
+
+        # Run the flood until it stops making progress: it is now
+        # blocked inside the fan-out on the stalled subscriber's queue.
+        last = -1
+        until sent == last
+          last = sent
+          10.times { task.yield }
+        end
+
+        late = OMQ::SUB.new
+        late.subscribe("")
+        late.connect("inproc://pubsub-block-join")
+
+        assert_equal 2, pub.connection_count
+      ensure
+        flood&.stop
+        late&.close
+        stalled&.close
+        pub&.close
+      end
+    end
+
+    it "unblocks the fan-out when a full subscriber leaves" do
+      Async do |task|
+        pub = OMQ::PUB.new(on_mute: :block)
+        pub.send_hwm = 1
+        pub.bind("inproc://pubsub-block-leave")
+
+        stalled = OMQ::SUB.new
+        stalled.linger = 0
+        stalled.recv_hwm = 1
+        stalled.subscribe("")
+        stalled.connect("inproc://pubsub-block-leave")
+
+        sent  = 0
+        flood = task.async do
+          100.times do
+            pub << "x"
+            sent += 1
+          end
+        end
+
+        # Run the flood until it stops making progress: it is now
+        # blocked at HWM on the stalled peer's queue.
+        last = -1
+        until sent == last
+          last = sent
+          10.times { task.yield }
+        end
+
+        assert_operator sent, :<, 100
+        stalled.close
+
+        flood.wait
+        assert_equal 100, sent
+      ensure
+        flood&.stop
+        pub&.close
       end
     end
   end

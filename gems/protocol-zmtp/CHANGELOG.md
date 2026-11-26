@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+### Added
+
+- Added `Connection#pause_reading` and `#reading_paused?` so a reader blocked on
+  local backpressure can keep heartbeat expiry from treating the peer as silent.
+- Recorded the TTL a peer sends in its PINGs as `Connection#peer_ttl`, with an
+  `#on_peer_ttl` callback for the first one.
+- Added `Connection#max_message_parts`: a received message with more frames
+  raises `Protocol::ZMTP::Error`.
+
+### Fixed
+
+- Checked `max_message_size` against the decrypted frame. CURVE frames were
+  checked with their 33-byte MESSAGE envelope, so a message at the limit dropped
+  the connection. Encrypted mechanisms can report `#wire_overhead`; others get
+  64 bytes of slack before decryption.
+- Closed the socket under a write that is blocked on a peer that stopped
+  reading. `#close` flushed first and waited behind the stuck writer forever.
+  Added `#writing?`.
+- Bounded what an unauthenticated peer can send during the handshake: frames
+  over 64 KiB (`Codec::Frame::HANDSHAKE_MAX_SIZE`), more than 256 properties, an
+  identity over 255 bytes, or an as-server flag other than 0 or 1 now fail the
+  handshake. A peer could declare a huge READY or HELLO frame and have it read
+  before authentication.
+- Rejected small-order CURVE public keys: a peer's short-term or permanent key,
+  or a configured server key, that is one of the X25519 low-order points (with
+  or without the top bit) now fails the handshake or raises `ArgumentError`.
+  With such a key the shared secret is all zero; the pure Ruby nuckle backend
+  did not refuse it. Added `Curve.low_order_key?`.
+
 ## [0.10.5] - 2026-10-15
 
 ### Added

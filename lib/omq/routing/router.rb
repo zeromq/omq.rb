@@ -8,9 +8,13 @@ module OMQ
     # ROUTER socket routing: identity-based routing.
     #
     # Prepends peer identity frame on receive. Uses first frame as
-    # routing identity on send.
+    # routing identity on send. A dialed peer keeps its identity and
+    # queue across reconnects ({IdentityRouting}).
     #
     class Router
+      include ClosableQueues
+      include IdentityRouting
+
       # @return [Async::LimitedQueue]
       #
       attr_reader :recv_queue
@@ -19,11 +23,10 @@ module OMQ
       # @param engine [Engine]
       #
       def initialize(engine)
-        @engine                  = engine
-        @recv_queue              = Routing.build_queue(engine.options.recv_hwm, :block)
-        @connections_by_identity = {}
-        @identity_by_connection  = {}
-        @conn_queues             = {}
+        @engine          = engine
+        @recv_queue      = Routing.build_queue(engine.options.recv_hwm, :block)
+        @next_routing_id = SecureRandom.random_number(1 << 32)
+        init_identity_routing(engine)
       end
 
 
@@ -48,49 +51,64 @@ module OMQ
       # @param connection [Protocol::ZMTP::Connection]
       #
       def connection_added(connection)
-        identity = connection.peer_identity
-        identity = SecureRandom.bytes(5) if identity.nil? || identity.empty?
-        @connections_by_identity[identity] = connection
-        @identity_by_connection[connection] = identity
+        identity = attach_route(connection, requested_identity(connection)).id
 
         @engine.start_recv_pump(connection, @recv_queue) { |msg| [identity, *msg] }
-
-        q = Routing.build_queue(@engine.options.send_hwm, :block)
-        @conn_queues[connection] = q
-        ConnSendPump.start(@engine, connection, q)
       end
 
 
       # @param connection [Protocol::ZMTP::Connection]
       #
       def connection_removed(connection)
-        identity = @identity_by_connection.delete(connection)
-        @connections_by_identity.delete(identity) if identity
-        @conn_queues.delete(connection)
+        detach_route(connection)
       end
 
 
       # Enqueues a message for sending. The first frame is the routing identity.
       #
+      # Like libzmq, a ROUTER without +router_mandatory+ drops a message
+      # whose peer is unknown or at HWM. With +router_mandatory+ it
+      # raises for an unknown peer and blocks at HWM. A dialed peer that
+      # is down is still known: its sends queue up.
+      #
       # @param parts [Array<String>]
       #
       def enqueue(parts)
-        identity = parts.first
-        if @engine.options.router_mandatory?
-          unless @connections_by_identity[identity]
-            raise SocketError, "no route to identity #{identity.inspect}"
-          end
+        identity  = parts.first
+        mandatory = @engine.options.router_mandatory?
+        route     = route_to(identity)
+
+        unless route
+          raise SocketError, "no route to identity #{identity.inspect}" if mandatory
+          return
         end
-        conn = @connections_by_identity[identity]
-        return unless conn  # silently drop if peer disconnected
-        @conn_queues[conn]&.enqueue(parts[1..])
+
+        queue = route.queue
+        return if !mandatory && queue.is_a?(Async::LimitedQueue) && queue.limited?
+
+        Routing.enqueue_to_peer(queue, parts[1..])
       end
 
 
-      # @return [Boolean] true when all per-connection send queues are empty
+      private
+
+
+      # The identity the peer set, unless empty or zero-prefixed (those
+      # are reserved for generated ids).
       #
-      def send_queues_drained?
-        @conn_queues.values.all?(&:empty?)
+      def requested_identity(connection)
+        identity = connection.peer_identity
+        identity if identity && !identity.empty? && !identity.getbyte(0).zero?
+      end
+
+
+      # Routing id for a peer without a usable identity: a zero byte and
+      # a 32-bit counter, as in libzmq. Peers can't claim identities
+      # starting with a zero byte, so these never collide with theirs.
+      #
+      def generate_routing_id
+        @next_routing_id = (@next_routing_id + 1) & 0xFFFF_FFFF
+        [0, @next_routing_id].pack("CN")
       end
 
     end

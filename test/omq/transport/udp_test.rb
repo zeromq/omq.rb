@@ -20,6 +20,86 @@ class OMQTransportUDPTest < Minitest::Spec
       end
     end
 
+    it "drops a message too large for one datagram and keeps sending" do
+      Async do
+        dish  = OMQ::DISH.bind("udp://127.0.0.1:15559")
+        radio = OMQ::RADIO.connect("udp://127.0.0.1:15559")
+        dish.join("weather")
+        Async::Task.current.yield
+
+        radio.publish("weather", "x" * 70_000)
+        radio.publish("weather", "y" * 20_000)
+        assert_equal ["weather", "y" * 20_000], dish.receive
+      ensure
+        radio&.close
+        dish&.close
+      end
+    end
+
+
+    it "yields while skipping a flood of datagrams for other groups" do
+      Async do |task|
+        socket = Object.new
+        def socket.recvfrom_nonblock(_size)
+          [OMQ::Transport::UDP.encode_datagram("noise", "x")]
+        end
+
+        conn   = OMQ::Transport::UDP::DishConnection.new(socket)
+        reader = task.async { conn.receive_message }
+
+        # Only reached if the reader yields while it skips datagrams.
+        pass
+      ensure
+        reader&.stop
+      end
+    end
+
+
+    it "delivers over IPv6" do
+      skip "no IPv6 loopback" unless Socket.ip_address_list.any?(&:ipv6_loopback?)
+
+      Async do
+        dish  = OMQ::DISH.bind("udp://[::1]:15561")
+        radio = OMQ::RADIO.connect("udp://[::1]:15561")
+        dish.join("weather")
+        Async::Task.current.yield
+
+        radio.publish("weather", "v6")
+        assert_equal ["weather", "v6"], dish.receive
+      ensure
+        radio&.close
+        dish&.close
+      end
+    end
+
+
+    it "joins the group when DISH binds a multicast address" do
+      Async do
+        group = "udp://239.255.77.7:15562"
+
+        begin
+          first = OMQ::DISH.bind(group)
+        rescue SystemCallError => e
+          skip "no multicast here: #{e.message}"
+        end
+
+        second = OMQ::DISH.bind(group) # same group and port
+
+        radio = OMQ::RADIO.connect(group)
+        [first, second].each { |dish| dish.join("weather") }
+        Async::Task.current.yield
+
+        radio.publish("weather", "everyone")
+        assert_equal ["weather", "everyone"], first.receive
+        assert_equal ["weather", "everyone"], second.receive
+      ensure
+        radio&.close
+        second&.close
+        first&.close
+      end
+    end
+
+
     it "filters messages to un-joined groups" do
       Sync do
         dish  = OMQ::DISH.bind("udp://127.0.0.1:15551")

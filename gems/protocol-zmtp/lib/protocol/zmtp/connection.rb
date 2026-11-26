@@ -47,9 +47,31 @@ module Protocol
       # @return [Float, nil] monotonic timestamp of last received frame
       attr_reader :last_received_at
 
-      # Transport wrappers may need room for bounded wire envelopes in
-      # addition to the application message limit they enforce after decoding.
-      attr_writer :max_message_size
+
+      # @return [Float, nil] TTL in seconds the peer put in its last PING,
+      #   nil if it never sent a non-zero one. The connection should be
+      #   closed when nothing arrives for that long.
+      attr_reader :peer_ttl
+
+
+      # @return [#call, nil] called once, when the peer first sends a PING
+      #   with a non-zero TTL, so a caller without its own heartbeat can
+      #   start watching {#peer_ttl}
+      attr_accessor :on_peer_ttl
+
+      # @return [Integer, nil] largest frame body accepted after decryption,
+      #   nil = unlimited
+      attr_reader :max_message_size
+
+
+      # @return [Integer, nil] most frames one received message may have,
+      #   nil = unlimited
+      attr_accessor :max_message_parts
+
+
+      # Encrypted mechanisms that don't report their per-frame overhead
+      # get this much room on the wire before decryption.
+      ENCRYPTED_WIRE_SLACK = 64
 
 
       # @param io [#peek, #read_exactly, #write, #flush, #close] transport IO
@@ -77,14 +99,32 @@ module Protocol
         @peer_minor       = nil
         @metadata         = opts.empty? ? nil : opts.transform_keys(&:to_s)
         @mutex            = Mutex.new
-        @max_message_size = max_message_size
         @last_received_at = nil
+        @reading_paused   = false
+        @peer_ttl         = nil
+        @max_message_parts = nil
+        @on_peer_ttl      = nil
+
+        self.max_message_size = max_message_size
 
         # Reusable scratch buffer for frame headers. Array#pack(buffer:)
         # writes in place so the per-message 2-or-9 byte String allocation
         # in write_frames disappears on the hot send path.
         @header_buf = String.new(capacity: 9, encoding: Encoding::BINARY)
         @frame_buf  = String.new(capacity: 257, encoding: Encoding::BINARY)
+      end
+
+
+      # Sets the frame size limit. Transport wrappers may need room for
+      # bounded wire envelopes in addition to the application message
+      # limit they enforce after decoding. Encrypted frames are allowed
+      # the mechanism's overhead on the wire and checked against +size+
+      # after decryption.
+      #
+      # @param size [Integer, nil] max frame body in bytes, nil = unlimited
+      def max_message_size=(size)
+        @max_message_size = size
+        @max_wire_size    = size && size + wire_overhead
       end
 
 
@@ -105,6 +145,10 @@ module Protocol
         @peer_properties  = result[:peer_properties]
         @peer_major       = result[:peer_major]
         @peer_minor       = result[:peer_minor]
+
+        if @peer_identity && @peer_identity.bytesize > 255
+          raise Error, "peer identity exceeds 255 bytes"
+        end
 
         unless @peer_socket_type
           raise Error, "peer READY missing Socket-Type"
@@ -249,6 +293,10 @@ module Protocol
 
           frames << frame.body
           break unless frame.more?
+
+          if @max_message_parts && frames.size >= @max_message_parts
+            raise Error, "message exceeds max_message_parts #{@max_message_parts}"
+          end
         end
 
         frames
@@ -282,17 +330,21 @@ module Protocol
       # @raise [EOFError] if connection is closed
       def read_frame
         loop do
-          frame = Codec::Frame.read_from(@io, max_message_size: @max_message_size)
+          frame = Codec::Frame.read_from(@io, max_message_size: @max_wire_size)
 
           touch_heartbeat
 
-          frame = @mechanism.decrypt(frame) if @mechanism.encrypted?
+          if @mechanism.encrypted?
+            frame = @mechanism.decrypt(frame)
+            check_decrypted_size!(frame) if @max_message_size
+          end
 
           if frame.command?
             cmd = Codec::Command.from_body(frame.body)
             case cmd.name
             when "PING"
-              _, context = cmd.ping_ttl_and_context
+              ttl, context = cmd.ping_ttl_and_context
+              note_peer_ttl(ttl)
               send_command(Codec::Command.pong(context: context))
               next
             when "PONG"
@@ -306,6 +358,27 @@ module Protocol
       rescue Error
         close
         raise
+      end
+
+
+      # Marks a stretch where the reader stopped on purpose, e.g. while
+      # it waits for room in a full receive queue. Frames may be sitting
+      # unread, so silence from the peer means nothing then: heartbeat
+      # expiry ignores it, and the clock restarts when reading resumes.
+      #
+      # @yield the blocking step
+      def pause_reading
+        @reading_paused = true
+        yield
+      ensure
+        @reading_paused = false
+        touch_heartbeat
+      end
+
+
+      # @return [Boolean] whether the reader is paused by local backpressure
+      def reading_paused?
+        @reading_paused
       end
 
 
@@ -331,12 +404,65 @@ module Protocol
       #
       # @return [void]
       def close
-        @io.close
-      rescue IOError
+        raw = @io.respond_to?(:io) ? @io.io : @io
+
+        if writing? && stalled?(raw)
+          # A writer is blocked on a peer that stopped reading. A
+          # buffered close would flush behind it and never return. Shut
+          # the socket down under it, which fails the blocked write,
+          # then close it.
+          raw.shutdown if raw.respond_to?(:shutdown)
+          raw.close
+        else
+          # Idle, or a write still making progress: flush and close.
+          @io.close
+        end
+      rescue IOError, SystemCallError
         # already closed
       end
 
+
+      # @return [Boolean] whether a frame write is in progress
+      def writing?
+        @mutex.locked?
+      end
+
       private
+
+
+      # @return [Boolean] true if +raw+ can't take more bytes right now
+      def stalled?(raw)
+        return false unless raw.respond_to?(:wait_writable)
+
+        !raw.wait_writable(0)
+      end
+
+
+      def note_peer_ttl(ttl)
+        return unless ttl.positive?
+
+        first     = @peer_ttl.nil?
+        @peer_ttl = ttl
+        @on_peer_ttl&.call if first
+      end
+
+
+      # Per-frame wire overhead of the mechanism (0 for plaintext).
+      def wire_overhead
+        return 0 unless @mechanism.encrypted?
+        return @mechanism.wire_overhead if @mechanism.respond_to?(:wire_overhead)
+
+        ENCRYPTED_WIRE_SLACK
+      end
+
+
+      def check_decrypted_size!(frame)
+        size = frame.body.bytesize
+        return if size <= @max_message_size
+
+        raise Error, "frame size #{size} exceeds max_message_size #{@max_message_size}"
+      end
+
 
       # Defers task cancellation around a block of wire writes so the
       # peer never sees a half-written frame or partial multipart

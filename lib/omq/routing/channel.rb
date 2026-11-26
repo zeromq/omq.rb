@@ -5,6 +5,8 @@ module OMQ
     # CHANNEL socket routing: exclusive 1-to-1 bidirectional.
     #
     class Channel
+      include ClosableQueues
+
       # @return [Async::LimitedQueue]
       #
       attr_reader :recv_queue
@@ -43,10 +45,11 @@ module OMQ
       # @raise [RuntimeError] if a connection already exists
       #
       def connection_added(connection)
-        raise "CHANNEL allows only one peer" if @connection
+        raise PeerRefusedError, "CHANNEL allows only one peer" if @connection
         @connection = connection
 
-        @engine.start_recv_pump(connection, @recv_queue)
+        # Single-frame socket: drop multipart input from a bad peer.
+        @engine.start_recv_pump(connection, @recv_queue) { |msg| msg if msg.size == 1 }
 
         unless connection.is_a?(Transport::Inproc::Pipe)
           @send_queue = Routing.build_queue(@engine.options.send_hwm, :block)
@@ -97,9 +100,12 @@ module OMQ
           batch = []
 
           loop do
-            Routing.dequeue_batch(@send_queue, batch)
-            batch.each { |parts| conn.write_message(parts) }
-            conn.flush
+            Routing.dequeue_batch(@send_queue, batch) or break
+            @engine.sending_batch do
+              batch.each { |parts| conn.write_message(parts) }
+              conn.flush
+            end
+
             batch.clear
           end
         end

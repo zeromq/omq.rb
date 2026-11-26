@@ -12,8 +12,7 @@ module OMQ
     # which is strictly better than libzmq's strict per-pipe round-robin
     # for PUSH-style patterns.
     #
-    # See doc/DESIGN.md "Per-socket HWM (not per-connection)" for the
-    # full reasoning.
+    # See doc/ARCHITECTURE.md "Send queues and HWM".
     #
     # Including classes must call `init_round_robin(engine)` from
     # their #initialize.
@@ -22,11 +21,12 @@ module OMQ
       BATCH_MSG_CAP  = 256
       BATCH_BYTE_CAP = 512 * 1024
 
-      # @return [Boolean] true when the shared send queue is empty
-      #   and no pump fiber is mid-write with a dequeued batch.
+      # @return [Boolean] true when the shared send queue is empty.
+      #   Batches a pump is still writing are counted by
+      #   {Engine#sending_batch}.
       #
       def send_queues_drained?
-        @send_queue.empty? && @in_flight == 0
+        @send_queue.empty?
       end
 
 
@@ -41,7 +41,6 @@ module OMQ
         @connections = []
         @send_queue  = Routing.build_queue(engine.options.send_hwm, :block)
         @direct_pipe = nil
-        @in_flight   = 0   # messages dequeued but not yet written
       end
 
 
@@ -85,11 +84,18 @@ module OMQ
       # and writes directly to the peer's recv queue. Otherwise blocks
       # on the shared bounded send queue (backpressure when full).
       #
+      # If the peer closed before this socket noticed, the message goes
+      # to the send queue and waits for the next peer.
+      #
       def enqueue_round_robin(parts)
         pipe = @direct_pipe
 
         if pipe&.direct_recv_queue
-          pipe.send_message(transform_send(parts))
+          begin
+            pipe.send_message(transform_send(parts))
+          rescue IOError
+            @send_queue.enqueue(parts)
+          end
         else
           @send_queue.enqueue(parts)
         end
@@ -135,14 +141,8 @@ module OMQ
           batch = []
 
           loop do
-            dequeue_batch_capped(batch)
-            @in_flight += batch.size
-
-            begin
-              write_batch(conn, batch)
-            ensure
-              @in_flight -= batch.size
-            end
+            dequeue_batch_capped(batch) or break
+            @engine.sending_batch { write_batch(conn, batch) }
 
             batch.each do |parts|
               @engine.emit_verbose_msg_sent(conn, parts)
@@ -155,9 +155,12 @@ module OMQ
       end
 
 
+      # @return [Array, nil] +batch+, or nil once the send queue is closed
+      #
       def dequeue_batch_capped(batch = [])
-        batch << @send_queue.dequeue
-        bytes = batch_bytes(batch.first)
+        first = @send_queue.dequeue or return
+        batch << first
+        bytes = batch_bytes(first)
 
         while batch.size < BATCH_MSG_CAP && bytes < BATCH_BYTE_CAP
           msg = @send_queue.dequeue(timeout: 0)
@@ -165,6 +168,8 @@ module OMQ
           batch << msg
           bytes += batch_bytes(msg)
         end
+
+        batch
       end
 
 

@@ -89,12 +89,21 @@ module OMQ
         #
         # @param endpoint [String] e.g. "ruby://my-endpoint"
         # @param engine [Engine] the connecting engine
+        # @param wait [Boolean] wait up to one reconnect interval for a bind
         # @return [void]
+        # @raise [Errno::ECONNREFUSED] if nothing is bound. It is in
+        #   {CONNECTION_FAILED}, so {Engine::Reconnect} retries.
         #
-        def connect(endpoint, engine, **)
+        def connect(endpoint, engine, wait: false, **)
           endpoint     = canonical_endpoint(endpoint)
           bound_engine = @mutex.synchronize { @registry[endpoint] }
-          bound_engine ||= await_bind(endpoint, engine) or return
+
+          if bound_engine.nil? && wait
+            bound_engine = await_bind(endpoint, engine)
+          end
+
+          raise Errno::ECONNREFUSED, endpoint unless bound_engine
+
           establish_link(engine, bound_engine, endpoint)
         end
 
@@ -145,7 +154,8 @@ module OMQ
           client_pipe, server_pipe = make_pipe_pair client_engine, server_engine,
                                                     client_type, server_type, needs_cmds
 
-          client_engine.connection_ready(client_pipe, endpoint: endpoint)
+          # A refused client closes its pipe; don't hand the server a dead peer.
+          client_engine.connection_ready(client_pipe, endpoint: endpoint, dialed: true) or return
           server_engine.connection_ready(server_pipe, endpoint: endpoint)
         end
 
@@ -187,9 +197,13 @@ module OMQ
         end
 
 
+        # Waits up to one reconnect interval for +endpoint+ to be bound.
+        # Matches ZMQ 4.x: connect to unbound inproc succeeds silently,
+        # and the caller retries in the background.
+        #
+        # @return [Engine, nil] the bound engine, or nil on timeout
+        #
         def await_bind(endpoint, engine)
-          # Endpoint not bound yet — wait briefly then start background retry.
-          # Matches ZMQ 4.x: connect to unbound inproc succeeds silently.
           ri      = engine.options.reconnect_interval
           timeout = ri.is_a?(Range) ? ri.begin : ri
           promise = Async::Promise.new
@@ -207,29 +221,7 @@ module OMQ
               @waiters[endpoint].delete(promise)
             end
 
-            start_connect_retry(endpoint, engine)
             nil
-          end
-        end
-
-
-        # Spawns a background task that periodically retries
-        # #establish_link until the endpoint appears in the registry.
-        #
-        # @param endpoint [String] the inproc endpoint name
-        # @param engine [Engine] the connecting engine
-        #
-        def start_connect_retry(endpoint, engine)
-          engine.spawn_inproc_retry(endpoint) do |ivl|
-            loop do
-              sleep ivl
-              bound_engine = @mutex.synchronize { @registry[endpoint] }
-
-              if bound_engine
-                establish_link(engine, bound_engine, endpoint)
-                break
-              end
-            end
           end
         end
       end
@@ -238,8 +230,9 @@ module OMQ
       # An inproc dialer: stateful factory for outgoing connections.
       #
       # Created once per {Engine#connect}, stored in +@dialers[endpoint]+.
-      # {Engine#connect} calls {#connect} synchronously; {Engine::Reconnect}
-      # calls it again after the bound peer goes away.
+      # {Engine#connect} calls {#connect} synchronously with +wait: true+;
+      # {Engine::Reconnect} calls it while nothing is bound, and again
+      # after the bound peer goes away.
       #
       class Dialer
         # @return [String] the endpoint this dialer connects to
@@ -256,13 +249,14 @@ module OMQ
         end
 
 
-        # Links to the bound endpoint, or starts a background retry
-        # if nothing is bound yet.
+        # Links to the bound endpoint.
         #
+        # @param wait [Boolean] wait up to one reconnect interval for a bind
         # @return [void]
+        # @raise [Errno::ECONNREFUSED] if nothing is bound
         #
-        def connect
-          Inproc.connect(@endpoint, @engine)
+        def connect(wait: false)
+          Inproc.connect(@endpoint, @engine, wait: wait)
         end
 
       end

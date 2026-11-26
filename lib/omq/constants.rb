@@ -16,6 +16,14 @@ module OMQ
   end
 
 
+  # Raised when sending on, binding or connecting a closed socket, and
+  # in fibers blocked in a send when the socket closes. Receiving on a
+  # closed socket returns +nil+ instead, like +Thread::Queue#pop+.
+  #
+  class SocketClosedError < IOError
+  end
+
+
   # Lifecycle event emitted by {Socket#monitor}.
   #
   # @!attribute [r] type
@@ -43,7 +51,7 @@ module OMQ
     IO::Stream::ConnectionResetError,
   ]
 
-  RESOLUTION_ERROR = defined?(Socket::ResolutionError) ? Socket::ResolutionError : SocketError
+  RESOLUTION_ERROR = defined?(::Socket::ResolutionError) ? ::Socket::ResolutionError : ::SocketError
 
   # Errors raised when a peer cannot be reached.
   CONNECTION_FAILED = [

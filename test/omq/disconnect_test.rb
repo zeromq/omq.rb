@@ -6,6 +6,104 @@ class OMQDisconnectTest < Minitest::Spec
   describe "disconnect / unbind" do
     before { OMQ::Transport::Inproc.reset! }
 
+    # Long enough for several reconnect attempts at RECONNECT_INTERVAL.
+    RETRY_WINDOW = RECONNECT_INTERVAL * 5
+
+
+    {
+      "tcp"    => -> { "tcp://127.0.0.1:#{TCPServer.open("127.0.0.1", 0) { |s| s.addr[1] }}" },
+      "ipc"    => -> { "ipc://@omq-test-disconnect-#{$$}-#{rand(1 << 30)}" },
+      "inproc" => -> { "inproc://disconnect-retry-#{rand(1 << 30)}" },
+    }.each do |name, make_endpoint|
+      it "#disconnect stops a pending connect (#{name})" do
+        Async do
+          endpoint = make_endpoint.call
+
+          push = OMQ::PUSH.new(linger: 0)
+          push.reconnect_interval = RECONNECT_INTERVAL
+          push.connect(endpoint)
+          push.disconnect(endpoint)
+
+          pull = OMQ::PULL.bind(endpoint)
+          sleep RETRY_WINDOW
+
+          assert_equal 0, push.connection_count
+          assert_equal 0, pull.connection_count
+        ensure
+          push&.close
+          pull&.close
+        end
+      end
+
+
+      it "#disconnect stops a reconnect after the peer left (#{name})" do
+        Async do
+          endpoint = make_endpoint.call
+          pull     = OMQ::PULL.bind(endpoint)
+
+          push = OMQ::PUSH.new(linger: 0)
+          push.reconnect_interval = RECONNECT_INTERVAL
+          push.connect(endpoint)
+          push.peer_connected.wait
+
+          pull.close
+          push.all_peers_gone.wait
+          push.disconnect(endpoint)
+
+          pull = OMQ::PULL.bind(endpoint)
+          sleep RETRY_WINDOW
+
+          assert_equal 0, push.connection_count
+          assert_equal 0, pull.connection_count
+        ensure
+          push&.close
+          pull&.close
+        end
+      end
+
+
+      it "connect, #disconnect, connect leaves one connection (#{name})" do
+        Async do
+          endpoint = make_endpoint.call
+
+          push = OMQ::PUSH.new(linger: 0)
+          push.reconnect_interval = RECONNECT_INTERVAL
+          push.connect(endpoint)
+          push.disconnect(endpoint)
+          push.connect(endpoint)
+
+          pull = OMQ::PULL.bind(endpoint)
+          push.peer_connected.wait
+          sleep RETRY_WINDOW
+
+          assert_equal 1, push.connection_count
+          assert_equal 1, pull.connection_count
+        ensure
+          push&.close
+          pull&.close
+        end
+      end
+    end
+
+
+    it "#unbind accepts the endpoint string passed to #bind" do
+      Async do
+        port = TCPServer.open("127.0.0.1", 0) { |s| s.addr[1] }
+        pull = OMQ::PULL.new
+        uri  = pull.bind("tcp://localhost:#{port}")
+        refute_equal "tcp://localhost:#{port}", uri.to_s
+
+        pull.unbind("tcp://localhost:#{port}")
+        assert_empty pull.engine.listeners
+
+        # The port is free again.
+        TCPServer.open(uri.host.delete("[]"), port).close
+      ensure
+        pull&.close
+      end
+    end
+
+
     it "#disconnect closes only connections to that endpoint" do
       Async do
         pull1 = OMQ::PULL.bind("ruby://ep1")

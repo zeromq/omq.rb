@@ -38,9 +38,9 @@ module OMQ
 
       def init_fan_out(engine)
         @connections        = Set.new
-        @subscriptions      = {} # connection => Set of prefixes
-        @subscribe_all      = Set.new # connections subscribed to "" (match-all fast path)
+        @subscriptions      = {} # connection => PrefixSet
         @conn_queues        = {} # connection => per-connection send queue
+        @fan_out_queues     = [].freeze # snapshot of @conn_queues values
         @conflate           = engine.options.conflate
         @subscriber_joined  = Async::Promise.new
         @latest             = {} if @conflate
@@ -50,10 +50,8 @@ module OMQ
       # @return [Boolean] whether the connection is subscribed to the topic
       #
       def subscribed?(conn, topic)
-        return true if @subscribe_all.include?(conn)
         subs = @subscriptions[conn]
-        return false unless subs
-        subs.any? { |prefix| topic.start_with?(prefix) }
+        subs ? subs.match?(topic) : false
       end
 
 
@@ -65,8 +63,9 @@ module OMQ
       # @param prefix [String]
       #
       def on_subscribe(conn, prefix)
-        @subscriptions[conn] << prefix.b.freeze
-        @subscribe_all.add(conn) if prefix.empty?
+        Routing.check_peer_subscriptions!(@subscriptions[conn], prefix, @engine.options.max_peer_subscriptions)
+
+        @subscriptions[conn] << prefix
         @subscriber_joined.resolve(conn) unless @subscriber_joined.resolved?
       end
 
@@ -79,7 +78,6 @@ module OMQ
       #
       def on_cancel(conn, prefix)
         @subscriptions[conn]&.delete(prefix)
-        @subscribe_all.delete(conn) if prefix.empty?
       end
 
 
@@ -91,6 +89,7 @@ module OMQ
       def add_fan_out_send_connection(conn)
         q = Routing.build_queue(@engine.options.send_hwm, @engine.options.on_mute)
         @conn_queues[conn] = q
+        @fan_out_queues    = @conn_queues.values.freeze
         start_conn_send_pump(conn, q)
       end
 
@@ -102,8 +101,8 @@ module OMQ
       # @param conn [Protocol::ZMTP::Connection]
       #
       def remove_fan_out_send_connection(conn)
-        @subscribe_all.delete(conn)
-        @conn_queues.delete(conn)
+        @conn_queues.delete(conn)&.close
+        @fan_out_queues = @conn_queues.values.freeze
       end
 
 
@@ -119,11 +118,14 @@ module OMQ
       # or other subscribers. Applications can opt in to :block for
       # strict backpressure.
       #
+      # Iterates a frozen snapshot: a :block enqueue can yield, and peers
+      # that join or leave meanwhile must not break the iteration.
+      #
       # @param parts [Array<String>]
       #
       def fan_out_enqueue(parts)
-        @connections.each do |conn|
-          @conn_queues[conn].enqueue(parts)
+        @fan_out_queues.each do |q|
+          Routing.enqueue_to_peer(q, parts)
         end
       end
 
@@ -181,12 +183,15 @@ module OMQ
           aux_batch = []
 
           loop do
-            Routing.dequeue_batch(q, batch)
+            Routing.dequeue_batch(q, batch) or break
 
-            if write_matching_batch(conn, batch, use_wire, aux_batch)
-              conn.flush
-              batch.each { |parts| @engine.emit_verbose_msg_sent(conn, parts) }
+            @engine.sending_batch do
+              if write_matching_batch(conn, batch, use_wire, aux_batch)
+                conn.flush
+                batch.each { |parts| @engine.emit_verbose_msg_sent(conn, parts) }
+              end
             end
+
             batch.clear
           end
         end
@@ -257,7 +262,7 @@ module OMQ
           batch = []
 
           loop do
-            Routing.dequeue_batch(q, batch)
+            Routing.dequeue_batch(q, batch) or break
 
             # Keep only the latest message that matches the subscription.
             latest = batch.reverse.find do |parts|
@@ -265,11 +270,14 @@ module OMQ
             end
 
             batch.clear
-            next unless latest
 
-            conn.write_message(latest)
-            conn.flush
-            @engine.emit_verbose_msg_sent(conn, latest)
+            @engine.sending_batch do
+              if latest
+                conn.write_message(latest)
+                conn.flush
+                @engine.emit_verbose_msg_sent(conn, latest)
+              end
+            end
           end
         end
       end

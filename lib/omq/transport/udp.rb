@@ -3,6 +3,7 @@
 require "socket"
 require "uri"
 require "set"
+require "ipaddr"
 
 module OMQ
   module Transport
@@ -27,12 +28,47 @@ module OMQ
         # @param engine [Engine]
         # @return [Listener]
         #
+        # A multicast address joins its group, and several DISH sockets
+        # may bind the same group and port.
+        #
         def listener(endpoint, engine, **)
           host, port = parse_endpoint(endpoint)
-          host = "0.0.0.0" if host == "*"
-          socket = UDPSocket.new
-          socket.bind(host, port)
+          addr       = Addrinfo.udp(host == "*" ? "0.0.0.0" : host, port)
+          socket     = UDPSocket.new(addr.afamily)
+
+          if multicast?(addr)
+            socket.setsockopt(::Socket::SOL_SOCKET, ::Socket::SO_REUSEADDR, true)
+            socket.bind(addr.ip_address, port)
+            join_group(socket, addr)
+          else
+            socket.bind(addr.ip_address, port)
+          end
+
           Listener.new(endpoint, socket, engine)
+        end
+
+
+        # @param addr [Addrinfo]
+        # @return [Boolean]
+        #
+        def multicast?(addr)
+          addr.ipv4_multicast? || addr.ipv6_multicast?
+        end
+
+
+        # Joins the multicast group +addr+ on the default interface.
+        #
+        # @param socket [UDPSocket]
+        # @param addr [Addrinfo]
+        #
+        def join_group(socket, addr)
+          group = IPAddr.new(addr.ip_address)
+
+          if addr.ipv6?
+            socket.setsockopt(::Socket::IPPROTO_IPV6, ::Socket::IPV6_JOIN_GROUP, group.hton + [0].pack("I"))
+          else
+            socket.setsockopt(::Socket::IPPROTO_IP, ::Socket::IP_ADD_MEMBERSHIP, group.hton + IPAddr.new("0.0.0.0").hton)
+          end
         end
 
 
@@ -66,6 +102,22 @@ module OMQ
           g = group.b
           b = body.b
           [0x01, g.bytesize].pack("CC") + g + b
+        end
+
+
+        # Sizes the send buffer of a RADIO socket. Uses +sndbuf+ if set;
+        # otherwise makes sure a maximum-size datagram fits (macOS
+        # defaults to 9216 bytes and refuses larger sends).
+        #
+        # @param socket [UDPSocket]
+        # @param options [Options]
+        #
+        def apply_send_buffer(socket, options)
+          size = options.sndbuf
+          size ||= MAX_DATAGRAM_SIZE unless socket.getsockopt(::Socket::SOL_SOCKET, ::Socket::SO_SNDBUF).int >= MAX_DATAGRAM_SIZE
+          socket.setsockopt(::Socket::SOL_SOCKET, ::Socket::SO_SNDBUF, size) if size
+        rescue SystemCallError
+          # keep the OS default
         end
 
 
@@ -110,10 +162,15 @@ module OMQ
         #
         # @return [void]
         #
+        # Resolves the host once, so sends don't hit DNS, and picks the
+        # socket family to match (IPv4 or IPv6).
+        #
         def connect
           host, port = UDP.parse_endpoint(@endpoint)
-          socket     = UDPSocket.new
-          conn       = RadioConnection.new(socket, host, port)
+          addr       = Addrinfo.udp(host, port)
+          socket     = UDPSocket.new(addr.afamily)
+          UDP.apply_send_buffer(socket, @engine.options)
+          conn       = RadioConnection.new(socket, addr)
           @engine.connection_ready(conn, endpoint: @endpoint)
         end
 
@@ -127,13 +184,11 @@ module OMQ
       #
       class RadioConnection
         # @param socket [UDPSocket]
-        # @param host [String]
-        # @param port [Integer]
+        # @param addr [Addrinfo] resolved destination
         #
-        def initialize(socket, host, port)
-          @socket = socket
-          @host   = host
-          @port   = port
+        def initialize(socket, addr)
+          @socket   = socket
+          @sockaddr = addr.to_sockaddr
         end
 
 
@@ -141,11 +196,16 @@ module OMQ
         #
         # @param parts [Array<String>] [group, body]
         #
+        # Drops what UDP can't carry: a datagram over
+        # {MAX_DATAGRAM_SIZE}, or one the OS refuses as too large.
+        #
         def write_message(parts)
           group, body = parts
           datagram = UDP.encode_datagram(group.to_s, body.to_s)
-          @socket.send(datagram, 0, @host, @port)
-        rescue Errno::ECONNREFUSED, Errno::ENETUNREACH
+          return if datagram.bytesize > MAX_DATAGRAM_SIZE
+
+          @socket.send(datagram, 0, @sockaddr)
+        rescue Errno::ECONNREFUSED, Errno::ENETUNREACH, Errno::EMSGSIZE
           # UDP fire-and-forget — drop silently
         end
 
@@ -178,6 +238,10 @@ module OMQ
       # never transmitted on the wire.
       #
       class DishConnection
+        # Datagrams skipped in a row before yielding to other fibers.
+        SKIP_BUDGET = 64
+
+
         # @param socket [UDPSocket] bound socket
         #
         def initialize(socket)
@@ -194,13 +258,24 @@ module OMQ
         # @return [Array<String>] [group, body], both binary-frozen
         #
         def receive_message
+          skipped = 0
+
           loop do
             data, = @socket.recvfrom_nonblock(MAX_DATAGRAM_SIZE)
             parts = UDP.decode_datagram(data)
-            next unless parts
-            group, body = parts
-            next unless @groups.include?(group.b)
-            return [group, body]
+
+            if parts && @groups.include?(parts[0].b)
+              return parts
+            end
+
+            # Malformed or for a group we didn't join. A flood of these
+            # must not keep the reactor from running other fibers.
+            skipped += 1
+
+            if skipped >= SKIP_BUDGET
+              skipped = 0
+              Async::Task.current.yield
+            end
           rescue IO::WaitReadable
             @socket.wait_readable
             retry

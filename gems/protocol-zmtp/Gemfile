@@ -12,8 +12,8 @@ gem "io-stream"
 SIBLINGS = File.expand_path("../../..", __dir__)
 
 if ENV["OMQ_DEV"]
-  gem "nuckle", path: File.join(SIBLINGS, "nuckle")
+  gem "nuckle", "~> 0.4.0", path: File.join(SIBLINGS, "nuckle")
   gem "rbnacl", "~> 7.0"
 else
-  gem "nuckle"
+  gem "nuckle", "~> 0.4.0"
 end

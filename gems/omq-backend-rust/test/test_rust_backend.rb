@@ -66,9 +66,11 @@ class OMQBackendRustRustBackendTest < Minitest::Spec
 
         invalid_cases.each do |name, value|
           dealer = OMQ::DEALER.new(backend: BACKEND)
-          dealer.public_send("#{name}=", value)
 
+          # Options may reject the value in the setter (reconnect_interval)
+          # or the backend at bind time.
           assert_raises(ArgumentError, "#{name}=#{value.inspect}") do
+            dealer.public_send("#{name}=", value)
             dealer.bind("tcp://127.0.0.1:0")
           end
         ensure

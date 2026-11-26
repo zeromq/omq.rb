@@ -207,6 +207,53 @@ class OMQMonitorTest < Minitest::Spec
 
     # -- MonitorEvent is pattern-matchable ------------------------------------
 
+    it "doesn't stall the socket while the monitor block is stuck" do
+      Async do
+        stuck = Async::Promise.new
+        pull  = OMQ::PULL.bind("inproc://monitor-stuck")
+        pull.monitor { stuck.wait }
+
+        # Far more lifecycle events than the old 64-slot queue held.
+        50.times do
+          push = OMQ::PUSH.connect("inproc://monitor-stuck")
+          push.close
+        end
+
+        push = OMQ::PUSH.connect("inproc://monitor-stuck")
+        push << "still accepting"
+        assert_equal ["still accepting"], pull.receive
+      ensure
+        stuck&.resolve(true)
+        push&.close
+        pull&.close
+      end
+    end
+
+
+    it "makes verbose events wait for a slow monitor" do
+      Async do |task|
+        queue = OMQ::MonitorQueue.new
+        OMQ::MonitorQueue::VERBOSE_BACKLOG.times { queue.push(:lifecycle) }
+
+        pushed = false
+        writer = task.async do
+          queue.push_verbose(:verbose)
+          pushed = true
+        end
+
+        task.yield
+        refute pushed
+        queue.push(:lifecycle) # lifecycle events never wait
+
+        2.times { queue.dequeue }
+        writer.wait
+        assert pushed
+      ensure
+        writer&.stop
+      end
+    end
+
+
     it "supports pattern matching" do
       event = OMQ::MonitorEvent.new(type: :connected, endpoint: "tcp://127.0.0.1:5555")
 
